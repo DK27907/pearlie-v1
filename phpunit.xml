@@ -32,5 +32,10 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="OPENAI_API_KEY" value="dummy-openai-key"/>
+        <env name="ANTHROPIC_API_KEY" value="dummy-anthropic-key"/>
+        <env name="GROQ_API_KEY" value="dummy-groq-key"/>
+        <env name="OLLAMA_HOST" value="http://127.0.0.1:11434"/>
+        <env name="OLLAMA_MODEL" value="llama3.2:3b"/>
     </php>
 </phpunit>
