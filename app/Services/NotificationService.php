@@ -71,8 +71,15 @@ class NotificationService
 
                 // Metrics / reporting
                 if (config('pearlie.report_failures', true)) {
+                    $ex = new \Exception('AfricaTalking SMS not successful after retries for ' . $smsTo);
                     try {
-                        report(new \Exception('AfricaTalking SMS not successful after retries for ' . $smsTo));
+                        if (function_exists('Sentry\\captureException')) {
+                            \Sentry\captureException($ex);
+                        } elseif (app()->bound('sentry')) {
+                            app('sentry')->captureException($ex);
+                        } else {
+                            report($ex);
+                        }
                     } catch (\Throwable $_e) {
                         Log::error('Failed to report AfricaTalking failure: ' . $_e->getMessage());
                     }
@@ -131,8 +138,15 @@ class NotificationService
                 Log::warning('Twilio SMS not successful after retries.');
 
                 if (config('pearlie.report_failures', true)) {
+                    $ex = new \Exception('Twilio SMS not successful after retries for ' . $smsTo);
                     try {
-                        report(new \Exception('Twilio SMS not successful after retries for ' . $smsTo));
+                        if (function_exists('Sentry\\captureException')) {
+                            \Sentry\captureException($ex);
+                        } elseif (app()->bound('sentry')) {
+                            app('sentry')->captureException($ex);
+                        } else {
+                            report($ex);
+                        }
                     } catch (\Throwable $_e) {
                         Log::error('Failed to report Twilio failure: ' . $_e->getMessage());
                     }
@@ -199,8 +213,15 @@ class NotificationService
                 Log::warning('WhatsApp not successful after retries.');
 
                 if (config('pearlie.report_failures', true)) {
+                    $ex = new \Exception('WhatsApp not successful after retries for ' . $smsTo);
                     try {
-                        report(new \Exception('WhatsApp not successful after retries for ' . $smsTo));
+                        if (function_exists('Sentry\\captureException')) {
+                            \Sentry\captureException($ex);
+                        } elseif (app()->bound('sentry')) {
+                            app('sentry')->captureException($ex);
+                        } else {
+                            report($ex);
+                        }
                     } catch (\Throwable $_e) {
                         Log::error('Failed to report WhatsApp failure: ' . $_e->getMessage());
                     }
