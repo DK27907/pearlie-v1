@@ -1,0 +1,26 @@
+<?php
+
+namespace App\AiAgents;
+
+use LarAgent\Agent;
+
+class PearlieAgent extends Agent
+{
+    protected $model = 'gpt-4.1-nano';
+
+    protected $history = 'in_memory';
+
+    protected $provider = 'default';
+
+    protected $tools = [];
+
+    public function instructions()
+    {
+        return "Define your agent's instructions here.";
+    }
+
+    public function prompt($message)
+    {
+        return $message;
+    }
+}
