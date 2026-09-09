@@ -50,4 +50,29 @@ class NotificationServiceTest extends TestCase
         putenv('TWILIO_TOKEN');
         putenv('TWILIO_FROM');
     }
+
+    public function test_twilio_api_key_credentials_are_supported(): void
+    {
+        Http::fake();
+
+        putenv('AFRICASTALKING_USERNAME');
+        putenv('AFRICASTALKING_API_KEY');
+        putenv('TWILIO_ACCOUNT_SID=ACtest');
+        putenv('TWILIO_API_KEY=SKtest');
+        putenv('TWILIO_API_SECRET=secret');
+        putenv('TWILIO_FROM_NUMBER=+15005550006');
+
+        app(NotificationService::class)->sendSms('+254700000000', 'Confirmed');
+
+        Http::assertSent(function ($request) {
+            return str_contains($request->url(), 'api.twilio.com/2010-04-01/Accounts/ACtest/Messages.json')
+                && $request->method() === 'POST'
+                && $request->hasHeader('Authorization');
+        });
+
+        putenv('TWILIO_ACCOUNT_SID');
+        putenv('TWILIO_API_KEY');
+        putenv('TWILIO_API_SECRET');
+        putenv('TWILIO_FROM_NUMBER');
+    }
 }

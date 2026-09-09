@@ -25,13 +25,13 @@ class PearlieServiceV2
         $this->baseUrl = 'https://api.groq.com/openai/v1';
     }
 
-    public function processMessage(string $message, string $sessionId): array
+    public function processMessage(string $message, string $sessionId, string $channel = 'web'): array
     {
         // Capture booking requests before knowledge-base matching so they always
         // create an actionable appointment record.
         $appointmentData = $this->detectAppointment($message);
         if ($appointmentData !== false) {
-            return $this->recordAppointment($appointmentData, $message, $sessionId);
+            return $this->recordAppointment($appointmentData, $message, $sessionId, $channel);
         }
 
         // 1) Knowledge base lookup
@@ -50,7 +50,7 @@ class PearlieServiceV2
                 'user_message' => $message,
                 'ai_response' => $localAnswer,
                 'confidence_score' => $confidence,
-                'channel' => 'web',
+                'channel' => $channel,
             ]);
 
             return [
@@ -70,7 +70,7 @@ class PearlieServiceV2
                 'user_message' => $message,
                 'ai_response' => $responseText,
                 'confidence_score' => 0.9,
-                'channel' => 'web',
+                'channel' => $channel,
             ]);
 
             return [
@@ -152,7 +152,7 @@ class PearlieServiceV2
                 'user_message' => $message,
                 'ai_response' => $reply,
                 'confidence_score' => $confidence,
-                'channel' => 'web',
+                'channel' => $channel,
                 'escalated' => $escalated,
             ]);
 
@@ -182,7 +182,7 @@ class PearlieServiceV2
                 'user_message' => $message,
                 'ai_response' => $fallback,
                 'confidence_score' => 0.3,
-                'channel' => 'web',
+                'channel' => $channel,
                 'escalated' => $escalated,
             ]);
 
@@ -247,7 +247,7 @@ class PearlieServiceV2
         ];
     }
 
-    protected function recordAppointment(array $appointmentData, string $message, string $sessionId): array
+    protected function recordAppointment(array $appointmentData, string $message, string $sessionId, string $channel = 'web'): array
     {
         try {
             $appointment = AppointmentRequest::create([
@@ -283,7 +283,7 @@ class PearlieServiceV2
             'user_message' => $message,
             'ai_response' => $responseText,
             'confidence_score' => 0.98,
-            'channel' => 'web',
+            'channel' => $channel,
         ]);
 
         return [

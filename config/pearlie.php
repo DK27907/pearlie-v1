@@ -33,4 +33,6 @@ return [
     // Metrics and error reporting
     // If set, report() will be invoked on persistent failures; integrate Sentry or your error handler to capture.
     'report_failures' => env('PEARLIE_REPORT_NOTIFICATION_FAILURES', true),
+
+    'booking_fee' => (int) env('PEARLIE_BOOKING_FEE', 500),
 ];
