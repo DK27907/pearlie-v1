@@ -337,110 +337,12 @@
         <!-- ─── Footer ─── -->
         <div class="chat-footer">
             ⚕️ Always consult a doctor for medical decisions &bull;
-            <a href="#" onclick="resetChat(); return false;">New Chat</a>
+            <a href="#" id="resetChat">New Chat</a>
         </div>
 
     </div>
 
-    <script>
-        // ─── DOM Elements ───
-        const messagesEl = document.getElementById('messages');
-        const inputEl = document.getElementById('userInput');
-        const sendBtn = document.getElementById('sendBtn');
-        const typingEl = document.getElementById('typingIndicator');
-
-        // ─── CSRF Token ───
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
-
-        // ─── Helpers ───
-        function appendMessage(text, type) {
-            const div = document.createElement('div');
-            div.className = `message ${type}`;
-            div.innerText = text;
-            messagesEl.appendChild(div);
-            messagesEl.scrollTop = messagesEl.scrollHeight;
-        }
-
-        function showTyping() {
-            typingEl.style.display = 'flex';
-            messagesEl.scrollTop = messagesEl.scrollHeight;
-        }
-
-        function hideTyping() {
-            typingEl.style.display = 'none';
-        }
-
-        function resetChat() {
-            messagesEl.innerHTML = `
-                <div class="message ai">
-                    👋 Hello! I'm Pearlie, your healthcare assistant at Pearl Hospital. How can I help you today?
-                </div>
-            `;
-            inputEl.value = '';
-            inputEl.focus();
-        }
-
-        // ─── Send Message ───
-        async function sendMessage() {
-            const message = inputEl.value.trim();
-            if (!message) return;
-
-            // Disable input & show user message
-            inputEl.disabled = true;
-            sendBtn.disabled = true;
-            appendMessage(message, 'user');
-            inputEl.value = '';
-            showTyping();
-
-            try {
-                const res = await fetch('/pearlie/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': csrfToken,
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify({ message })
-                });
-
-                const data = await res.json().catch(() => ({}));
-
-                hideTyping();
-
-                if (!res.ok) {
-                    appendMessage(data.message || data.error || '⚠️ The assistant could not process your request. Please try again.', 'ai');
-                } else if (data.response) {
-                    appendMessage(data.response, 'ai');
-                } else {
-                    appendMessage('⚠️ I’m sorry, I could not process that. Please try again.', 'ai');
-                }
-
-            } catch (error) {
-                hideTyping();
-                appendMessage('⚠️ Connection error. Please check your internet and try again.', 'ai');
-                console.error('Chat Error:', error);
-            } finally {
-                inputEl.disabled = false;
-                sendBtn.disabled = false;
-                inputEl.focus();
-            }
-        }
-
-        // ─── Event Listeners ───
-        sendBtn.addEventListener('click', sendMessage);
-        inputEl.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-
-        // ─── Auto-focus on load ───
-        inputEl.focus();
-
-        // ─── Expose reset globally for footer link ───
-        window.resetChat = resetChat;
-    </script>
+    @vite('resources/js/pearlie.js')
 
 </body>
 </html>
