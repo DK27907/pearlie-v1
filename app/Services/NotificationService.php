@@ -12,9 +12,9 @@ class NotificationService
         $smsTo = $to;
 
         // Africa's Talking
-        $atUser = env('AFRICASTALKING_USERNAME');
-        $atKey = env('AFRICASTALKING_API_KEY');
-        $atFrom = env('AFRICASTALKING_SENDER_ID', null);
+        $atUser = $this->environment('AFRICASTALKING_USERNAME');
+        $atKey = $this->environment('AFRICASTALKING_API_KEY');
+        $atFrom = $this->environment('AFRICASTALKING_SENDER_ID');
 
         if ($atUser && $atKey) {
             try {
@@ -92,11 +92,12 @@ class NotificationService
         }
 
         // Twilio fallback
-        if (env('TWILIO_SID') && env('TWILIO_TOKEN') && env('TWILIO_FROM')) {
+        $sid = $this->environment('TWILIO_SID');
+        $token = $this->environment('TWILIO_TOKEN');
+        $from = $this->environment('TWILIO_FROM');
+
+        if ($sid && $token && $from) {
             try {
-                $sid = env('TWILIO_SID');
-                $token = env('TWILIO_TOKEN');
-                $from = env('TWILIO_FROM');
                 $url = sprintf('https://api.twilio.com/2010-04-01/Accounts/%s/Messages.json', $sid);
 
                 $maxAttempts = config('pearlie.notification_retry_attempts', 3);
@@ -163,8 +164,8 @@ class NotificationService
 
     public function sendWhatsApp(string $to, string $message): void
     {
-        $waId = env('WHATSAPP_PHONE_NUMBER_ID');
-        $waToken = env('WHATSAPP_ACCESS_TOKEN');
+        $waId = $this->environment('WHATSAPP_PHONE_NUMBER_ID');
+        $waToken = $this->environment('WHATSAPP_ACCESS_TOKEN');
         $smsTo = $to;
 
         if ($waId && $waToken) {
@@ -234,5 +235,26 @@ class NotificationService
         }
 
         Log::info('No WhatsApp credentials configured; skipping WhatsApp to ' . $smsTo);
+    }
+
+    private function environment(string $key): ?string
+    {
+        if (! empty($_ENV[$key])) {
+            return $_ENV[$key];
+        }
+
+        if (! empty($_SERVER[$key])) {
+            return $_SERVER[$key];
+        }
+
+        $value = getenv($key);
+
+        if ($value !== false && $value !== '') {
+            return $value;
+        }
+
+        $value = env($key);
+
+        return $value === null ? null : (string) $value;
     }
 }

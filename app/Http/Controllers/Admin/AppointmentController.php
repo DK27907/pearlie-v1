@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\AppointmentRequest;
 use Illuminate\Support\Facades\Response;
+use Illuminate\Validation\Rule;
 
 class AppointmentController extends Controller
 {
@@ -26,7 +27,9 @@ class AppointmentController extends Controller
         }
 
         $sort = $request->input('sort', 'created_at');
+        $sort = in_array($sort, ['id', 'status', 'created_at', 'preferred_date'], true) ? $sort : 'created_at';
         $dir = $request->input('dir', 'desc');
+        $dir = in_array($dir, ['asc', 'desc'], true) ? $dir : 'desc';
 
         $appointments = $query->orderBy($sort, $dir)->paginate(20)->appends($request->except('page'));
         return view('admin.appointments.index', compact('appointments'));
@@ -35,10 +38,14 @@ class AppointmentController extends Controller
     public function exportCsv()
     {
         $items = AppointmentRequest::orderBy('created_at','desc')->get();
-        $csv = "id,session_id,name,phone,preferred_date,reason,status,created_at\n";
+        $handle = fopen('php://temp', 'r+');
+        fputcsv($handle, ['id', 'session_id', 'name', 'phone', 'preferred_date', 'reason', 'status', 'created_at']);
         foreach ($items as $i) {
-            $csv .= sprintf('%d,%s,%s,%s,%s,%s,%s,%s\n', $i->id, $i->session_id, str_replace(',', ' ', $i->name), str_replace(',', ' ', $i->phone), $i->preferred_date, str_replace(',', ' ', $i->reason), $i->status, $i->created_at);
+            fputcsv($handle, [$i->id, $i->session_id, $i->name, $i->phone, $i->preferred_date, $i->reason, $i->status, $i->created_at]);
         }
+        rewind($handle);
+        $csv = stream_get_contents($handle);
+        fclose($handle);
 
         return response($csv, 200, [
             'Content-Type' => 'text/csv',
@@ -87,8 +94,9 @@ class AppointmentController extends Controller
     {
         $request->validate([
             'action' => 'required|string|in:update_status,delete,export',
-            'ids' => 'required|array',
-            'status' => 'nullable|string',
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:appointment_requests,id'],
+            'status' => ['required_if:action,update_status', Rule::in(AppointmentRequest::statuses())],
         ]);
 
         $ids = $request->input('ids');
@@ -107,10 +115,14 @@ class AppointmentController extends Controller
 
         if ($action === 'export') {
             $items = AppointmentRequest::whereIn('id', $ids)->get();
-            $csv = "id,session_id,name,phone,preferred_date,reason,status,created_at\n";
+            $handle = fopen('php://temp', 'r+');
+            fputcsv($handle, ['id', 'session_id', 'name', 'phone', 'preferred_date', 'reason', 'status', 'created_at']);
             foreach ($items as $i) {
-                $csv .= sprintf('%d,%s,%s,%s,%s,%s,%s,%s\n', $i->id, $i->session_id, str_replace(',', ' ', $i->name), str_replace(',', ' ', $i->phone), $i->preferred_date, str_replace(',', ' ', $i->reason), $i->status, $i->created_at);
+                fputcsv($handle, [$i->id, $i->session_id, $i->name, $i->phone, $i->preferred_date, $i->reason, $i->status, $i->created_at]);
             }
+            rewind($handle);
+            $csv = stream_get_contents($handle);
+            fclose($handle);
 
             return response($csv, 200, [
                 'Content-Type' => 'text/csv',

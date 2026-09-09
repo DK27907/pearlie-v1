@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Escalation;
 use App\Models\Conversation;
+use Illuminate\Validation\Rule;
 use App\Services\EscalationService;
 
 class EscalationController extends Controller
@@ -30,7 +31,9 @@ class EscalationController extends Controller
         }
 
         $sort = $request->input('sort', 'created_at');
+        $sort = in_array($sort, ['id', 'status', 'created_at'], true) ? $sort : 'created_at';
         $direction = $request->input('dir', 'desc');
+        $direction = in_array($direction, ['asc', 'desc'], true) ? $direction : 'desc';
 
         $escalations = $query->orderBy($sort, $direction)->paginate(20)->appends($request->except('page'));
 
@@ -40,10 +43,14 @@ class EscalationController extends Controller
     public function exportCsv()
     {
         $items = Escalation::orderBy('created_at','desc')->get();
-        $csv = "id,session_id,user_message,ai_response,status,created_at\n";
+        $handle = fopen('php://temp', 'r+');
+        fputcsv($handle, ['id', 'session_id', 'user_message', 'ai_response', 'status', 'created_at']);
         foreach ($items as $i) {
-            $csv .= sprintf('%d,%s,%s,%s,%s,%s\n', $i->id, $i->session_id, str_replace(',', ' ', $i->user_message), str_replace(',', ' ', $i->ai_response), $i->status, $i->created_at);
+            fputcsv($handle, [$i->id, $i->session_id, $i->user_message, $i->ai_response, $i->status, $i->created_at]);
         }
+        rewind($handle);
+        $csv = stream_get_contents($handle);
+        fclose($handle);
 
         return response($csv, 200, [
             'Content-Type' => 'text/csv',
@@ -94,8 +101,9 @@ class EscalationController extends Controller
     {
         $request->validate([
             'action' => 'required|string|in:update_status,delete,export',
-            'ids' => 'required|array',
-            'status' => 'nullable|string',
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:escalations,id'],
+            'status' => ['required_if:action,update_status', Rule::in(Escalation::statuses())],
         ]);
 
         $ids = $request->input('ids');
@@ -103,7 +111,7 @@ class EscalationController extends Controller
 
         if ($action === 'update_status') {
             $status = $request->input('status');
-            \App\Models\Escalation::whereIn('id', $ids)->update(['status' => $status]);
+            Escalation::whereIn('id', $ids)->update(['status' => $status]);
             return redirect()->back()->with('status', 'Statuses updated.');
         }
 
@@ -114,10 +122,14 @@ class EscalationController extends Controller
 
         if ($action === 'export') {
             $items = \App\Models\Escalation::whereIn('id', $ids)->get();
-            $csv = "id,session_id,user_message,ai_response,status,created_at\n";
+            $handle = fopen('php://temp', 'r+');
+            fputcsv($handle, ['id', 'session_id', 'user_message', 'ai_response', 'status', 'created_at']);
             foreach ($items as $i) {
-                $csv .= sprintf('%d,%s,%s,%s,%s,%s\n', $i->id, $i->session_id, str_replace(',', ' ', $i->user_message), str_replace(',', ' ', $i->ai_response), $i->status, $i->created_at);
+                fputcsv($handle, [$i->id, $i->session_id, $i->user_message, $i->ai_response, $i->status, $i->created_at]);
             }
+            rewind($handle);
+            $csv = stream_get_contents($handle);
+            fclose($handle);
 
             return response($csv, 200, [
                 'Content-Type' => 'text/csv',

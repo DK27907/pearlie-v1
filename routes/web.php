@@ -1,11 +1,15 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PearlieController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+Route::get('/', [PearlieController::class, 'index'])->name('pearlie.index');
+
+Route::get('/pearlie', [PearlieController::class, 'index'])->name('pearlie.index');
+Route::post('/pearlie/chat', [PearlieController::class, 'chat'])
+    ->middleware('throttle:30,1')
+    ->name('pearlie.chat');
 
 Route::get('/dashboard', function () {
     return view('dashboard');

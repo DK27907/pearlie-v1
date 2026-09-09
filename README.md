@@ -1,4 +1,40 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Pearlie AI Assistant V1
+
+Pearlie is a Laravel-based healthcare assistant for Pearl Hospital. It provides a public chat experience, knowledge-base answers, appointment request capture, low-confidence escalation, and an authenticated admin console.
+
+## Requirements
+
+- PHP 8.3 or newer
+- Composer
+- Node.js and npm (for frontend assets)
+- SQLite for local development, or MySQL/PostgreSQL in production
+
+## Local setup
+
+```bash
+composer install
+copy .env.example .env # Windows
+# cp .env.example .env # macOS/Linux
+php artisan key:generate
+php artisan migrate
+npm install
+npm run build
+php artisan serve
+```
+
+Set `GROQ_API_KEY` and the notification provider variables in `.env` before using live AI or SMS/WhatsApp integrations. Never commit `.env` or provider credentials.
+
+The public assistant is available at `/` and `/pearlie`. Admin routes are under `/admin` and require authentication plus the `is_admin` flag (or the `admin` role). Configure `APP_DEBUG=false`, HTTPS, secure cookies, and a queue worker before production deployment; see [DEPLOYMENT.md](DEPLOYMENT.md).
+
+## Verification
+
+```bash
+php artisan test
+php artisan route:list -v --path=admin
+composer install --no-interaction --prefer-dist --no-progress
+```
+
+The CI workflow runs the same test suite against SQLite with the synchronous queue driver.
 
 <p align="center">
 <a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>

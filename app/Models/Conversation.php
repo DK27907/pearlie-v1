@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Conversation extends Model
 {
@@ -19,4 +20,14 @@ class Conversation extends Model
         'confidence_score' => 'float',
         'escalated' => 'boolean',
     ];
+
+    public function escalations(): HasMany
+    {
+        return $this->hasMany(Escalation::class, 'session_id', 'session_id');
+    }
+
+    public function appointmentRequests(): HasMany
+    {
+        return $this->hasMany(AppointmentRequest::class, 'session_id', 'session_id');
+    }
 }
