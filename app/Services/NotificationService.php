@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Log;
 
 class NotificationService
 {
-    public function sendSms(string $to, string $message): void
+    public function sendSms(string $to, string $message): bool
     {
         $smsTo = $to;
 
@@ -64,7 +64,7 @@ class NotificationService
                 }
 
                 if ($sent) {
-                    return;
+                    return true;
                 }
 
                 Log::warning('AfricaTalking SMS not successful after retries; falling back to Twilio');
@@ -92,11 +92,13 @@ class NotificationService
         }
 
         // Twilio fallback
-        $sid = $this->environment('TWILIO_SID');
+        $sid = $this->environment('TWILIO_ACCOUNT_SID') ?: $this->environment('TWILIO_SID');
         $token = $this->environment('TWILIO_TOKEN');
-        $from = $this->environment('TWILIO_FROM');
+        $apiKey = $this->environment('TWILIO_API_KEY');
+        $apiSecret = $this->environment('TWILIO_API_SECRET');
+        $from = $this->environment('TWILIO_FROM_NUMBER') ?: $this->environment('TWILIO_FROM');
 
-        if ($sid && $token && $from) {
+        if ($sid && (($apiKey && $apiSecret) || $token) && $from) {
             try {
                 $url = sprintf('https://api.twilio.com/2010-04-01/Accounts/%s/Messages.json', $sid);
 
@@ -105,7 +107,10 @@ class NotificationService
 
                 for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
                     try {
-                        $resp = Http::withBasicAuth($sid, $token)
+                        $request = $apiKey && $apiSecret
+                            ? Http::withBasicAuth($apiKey, $apiSecret)
+                            : Http::withBasicAuth($sid, $token);
+                        $resp = $request
                             ->asForm()
                             ->post($url, [
                                 'From' => $from,
@@ -116,7 +121,7 @@ class NotificationService
                         Log::info('Twilio SMS attempt', ['status' => $resp->status(), 'body' => $resp->body(), 'attempt' => $attempt]);
 
                         if ($resp->successful()) {
-                            return;
+                            return true;
                         }
 
                         if ($attempt < $maxAttempts) {
@@ -160,17 +165,18 @@ class NotificationService
         }
 
         Log::warning('No SMS provider configured; unable to send SMS to ' . $smsTo);
+        return false;
     }
 
-    public function sendWhatsApp(string $to, string $message): void
+    public function sendWhatsApp(string $to, string $message): bool
     {
-        $waId = $this->environment('WHATSAPP_PHONE_NUMBER_ID');
-        $waToken = $this->environment('WHATSAPP_ACCESS_TOKEN');
+        $waId = config('services.whatsapp.phone_number_id') ?: $this->environment('WHATSAPP_PHONE_NUMBER_ID');
+        $waToken = config('services.whatsapp.access_token') ?: $this->environment('WHATSAPP_ACCESS_TOKEN');
         $smsTo = $to;
 
         if ($waId && $waToken) {
             try {
-                $waUrl = sprintf('https://graph.facebook.com/v16.0/%s/messages', $waId);
+                $waUrl = sprintf('https://graph.facebook.com/%s/%s/messages', config('services.whatsapp.api_version', 'v20.0'), $waId);
                 $waPayload = [
                     'messaging_product' => 'whatsapp',
                     'to' => preg_replace('/[^0-9+]/', '', $smsTo),
@@ -191,7 +197,7 @@ class NotificationService
                         Log::info('WhatsApp attempt', ['status' => $waResp->status(), 'body' => $waResp->body(), 'attempt' => $attempt]);
 
                         if ($waResp->successful()) {
-                            return;
+                            return true;
                         }
 
                         if ($attempt < $maxAttempts) {
@@ -235,22 +241,23 @@ class NotificationService
         }
 
         Log::info('No WhatsApp credentials configured; skipping WhatsApp to ' . $smsTo);
+        return false;
     }
 
     private function environment(string $key): ?string
     {
+        $value = getenv($key);
+
+        if ($value !== false && $value !== '') {
+            return $value;
+        }
+
         if (! empty($_ENV[$key])) {
             return $_ENV[$key];
         }
 
         if (! empty($_SERVER[$key])) {
             return $_SERVER[$key];
-        }
-
-        $value = getenv($key);
-
-        if ($value !== false && $value !== '') {
-            return $value;
         }
 
         $value = env($key);

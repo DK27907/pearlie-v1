@@ -7,6 +7,9 @@
     @if(session('status'))
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
+    @if(session('error'))
+        <div class="alert alert-danger">{{ session('error') }}</div>
+    @endif
 
     <div class="card mb-3">
         <div class="card-body">
@@ -32,7 +35,7 @@
 
             <form method="POST" action="{{ route('admin.appointments.confirm', $appt->id) }}" style="display:inline">
                 @csrf
-                <button class="btn btn-success mt-2">Confirm Appointment & Notify</button>
+                <button type="submit" class="btn btn-success mt-2">Confirm Appointment & Notify</button>
             </form>
         </div>
     </div>

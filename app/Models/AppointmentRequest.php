@@ -22,11 +22,28 @@ class AppointmentRequest extends Model
         'reason',
         'raw_message',
         'status',
+        'booking_fee',
+        'payment_status',
+        'mpesa_phone',
+        'mpesa_checkout_request_id',
+        'mpesa_merchant_request_id',
+        'mpesa_result_code',
+        'mpesa_result_description',
+        'mpesa_receipt',
+        'paid_at',
     ];
 
     protected $casts = [
         'preferred_date' => 'date',
+        'booking_fee' => 'integer',
+        'mpesa_result_code' => 'integer',
+        'paid_at' => 'datetime',
     ];
+
+    public function mpesaPayment()
+    {
+        return $this->hasOne(MpesaPayment::class);
+    }
 
     public static function statuses(): array
     {

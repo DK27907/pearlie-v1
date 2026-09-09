@@ -25,6 +25,14 @@ require __DIR__.'/auth.php';
 
 use App\Http\Controllers\Admin\EscalationController;
 use App\Http\Controllers\Admin\AppointmentController;
+use App\Http\Controllers\MpesaCallbackController;
+use App\Http\Controllers\WhatsAppWebhookController;
+
+// Provider callbacks are also available without the /api prefix for deployments
+// that expose web routes directly to external providers.
+Route::get('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify']);
+Route::post('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'receive']);
+Route::post('/mpesa/callback', MpesaCallbackController::class);
 
 // Admin routes - protected by auth and is_admin middleware
 Route::middleware(['auth', 'is_admin'])

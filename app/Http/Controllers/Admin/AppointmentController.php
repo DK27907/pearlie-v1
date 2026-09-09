@@ -55,20 +55,16 @@ class AppointmentController extends Controller
     public function confirm(int $id)
     {
         $appt = AppointmentRequest::findOrFail($id);
-        $appt->status = 'confirmed';
+        $wasConfirmed = $appt->status === AppointmentRequest::STATUS_CONFIRMED;
+        $appt->status = AppointmentRequest::STATUS_CONFIRMED;
         $appt->save();
 
-        // Notify patient via SMS (if phone present)
-        try {
-            if ($appt->phone) {
-                $message = sprintf('Hello %s, your appointment request (ID %d) has been confirmed. We will contact you with details.', $appt->name ?? 'Patient', $appt->id);
-                app(\App\Services\NotificationService::class)->sendSms($appt->phone, $message);
-            }
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('Failed to notify patient after confirm: ' . $e->getMessage());
-        }
+        $notified = $wasConfirmed || $this->notifyPatientOfConfirmation($appt);
 
-        return redirect()->route('admin.appointments.show', $appt->id)->with('status', 'Appointment confirmed and patient notified.');
+        return redirect()->route('admin.appointments.show', $appt->id)->with(
+            $notified ? 'status' : 'error',
+            $notified ? 'Appointment confirmed and patient notified.' : 'Appointment confirmed, but the patient notification could not be sent.'
+        );
     }
 
     public function show(int $id)
@@ -84,10 +80,43 @@ class AppointmentController extends Controller
         ]);
 
         $appt = AppointmentRequest::findOrFail($id);
+        $wasConfirmed = $appt->status === AppointmentRequest::STATUS_CONFIRMED;
         $appt->status = $request->input('status');
         $appt->save();
 
-        return redirect()->route('admin.appointments.show', $appt->id)->with('status', 'Appointment status updated.');
+        $statusMessage = 'Appointment status updated.';
+        $flashType = 'status';
+        if ($appt->status === AppointmentRequest::STATUS_CONFIRMED && ! $wasConfirmed) {
+            $flashType = $this->notifyPatientOfConfirmation($appt) ? 'status' : 'error';
+            $statusMessage = $flashType === 'status'
+                ? 'Appointment confirmed and patient notified.'
+                : 'Appointment confirmed, but the patient notification could not be sent.';
+        }
+
+        return redirect()->route('admin.appointments.show', $appt->id)->with($flashType, $statusMessage);
+    }
+
+    private function notifyPatientOfConfirmation(AppointmentRequest $appointment): bool
+    {
+        if (! $appointment->phone) {
+            \Illuminate\Support\Facades\Log::warning('Appointment confirmed without a patient phone number.', ['appointment_id' => $appointment->id]);
+            return false;
+        }
+
+        try {
+            $message = sprintf(
+                'Hello %s, your Pearl Hospital appointment request (ID %d) has been confirmed. Our team will contact you with the final details.',
+                $appointment->name ?: 'Patient',
+                $appointment->id,
+            );
+            return app(\App\Services\NotificationService::class)->sendSms($appointment->phone, $message);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to notify patient after appointment confirmation.', [
+                'appointment_id' => $appointment->id,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
     }
 
     public function bulkAction(Request $request)
@@ -104,8 +133,27 @@ class AppointmentController extends Controller
 
         if ($action === 'update_status') {
             $status = $request->input('status');
-            AppointmentRequest::whereIn('id', $ids)->update(['status' => $status]);
-            return redirect()->back()->with('status', 'Statuses updated.');
+            $appointments = AppointmentRequest::whereIn('id', $ids)->get();
+            $notificationFailures = 0;
+
+            foreach ($appointments as $appointment) {
+                $wasConfirmed = $appointment->status === AppointmentRequest::STATUS_CONFIRMED;
+                $appointment->status = $status;
+                $appointment->save();
+
+                if ($status === AppointmentRequest::STATUS_CONFIRMED && ! $wasConfirmed && ! $this->notifyPatientOfConfirmation($appointment)) {
+                    $notificationFailures++;
+                }
+            }
+
+            return redirect()->back()->with(
+                $notificationFailures > 0 ? 'error' : 'status',
+                $notificationFailures > 0
+                    ? "Statuses updated, but {$notificationFailures} patient notification(s) could not be sent."
+                    : ($status === AppointmentRequest::STATUS_CONFIRMED
+                        ? 'Statuses updated and confirmed patients notified.'
+                        : 'Statuses updated.')
+            );
         }
 
         if ($action === 'delete') {
