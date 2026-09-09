@@ -55,6 +55,26 @@ class PearlieServiceV2
             ];
         }
 
+        if ($this->isWeatherQuestion($message)) {
+            $responseText = 'I do not have live weather data right now. For today’s weather in Nyahururu, please check your preferred weather app or website. I can still help with Pearl Hospital information, services, or appointments.';
+
+            Conversation::create([
+                'session_id' => $sessionId,
+                'user_message' => $message,
+                'ai_response' => $responseText,
+                'confidence_score' => 0.9,
+                'channel' => 'web',
+            ]);
+
+            return [
+                'response' => $responseText,
+                'confidence' => 0.9,
+                'source' => 'service_notice',
+                'escalated' => false,
+                'appointment_id' => null,
+            ];
+        }
+
         // 2) Appointment detection
         $appointmentData = $this->detectAppointment($message);
         if ($appointmentData !== false) {
@@ -209,6 +229,7 @@ class PearlieServiceV2
                 $found = true;
                 break;
             }
+
         }
 
         if (!$found) return false;
@@ -244,6 +265,11 @@ class PearlieServiceV2
         ];
     }
 
+    protected function isWeatherQuestion(string $message): bool
+    {
+        return (bool) preg_match('/\b(weather|temperature|forecast|rain(?:ing)?|sunny|cloudy)\b/i', $message);
+    }
+
     /**
      * Estimate confidence from reply text and response meta. This is heuristic — replace with provider-provided scores if available.
      */
@@ -272,10 +298,14 @@ Your personality:
 - You speak in clear, simple English
 - You are helpful and patient
 - You never give medical diagnoses — always advise patients to see a doctor
+- Keep answers concise: normally 2-5 short sentences.
+- Do not describe your reasoning or how you arrived at an answer.
+- Do not invent live information such as current weather, traffic, prices, or opening status. Say clearly when live data is unavailable.
+- Use simple Markdown only when it improves readability; do not over-format short answers.
 
 About Pearl Hospital:
 - Location: " . config('pearlie.hospital.address') . "\n- Phone: " . config('pearlie.hospital.phone') . "\n- Email: " . config('pearlie.hospital.email') . "\n- Services: Oncology, Cardiology, Emergency Medicine, Radiology, Outpatient, Inpatient\n- Hours: Emergency 24/7, Outpatient 8:00 AM - 6:00 PM Mon-Sat\n- Payment: M-Pesa, Cash, NHIF, AAR, CIC, Jubilee\n
-Rules:\n1. Greet users warmly\n2. Answer questions about Pearl Hospital using the information above\n3. Never give medical diagnoses\n4. If unsure, suggest calling " . config('pearlie.hospital.phone') . "\n5. Keep responses conversational and helpful\n
+Rules:\n1. Greet users warmly\n2. Answer questions about Pearl Hospital using the information above\n3. Never give medical diagnoses\n4. If unsure, suggest calling " . config('pearlie.hospital.phone') . "\n5. Keep responses conversational, direct, and helpful\n
 Always be caring and professional.";
     }
 }
