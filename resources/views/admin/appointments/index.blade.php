@@ -3,6 +3,7 @@
 @section('content')
 <div class="container">
     <h1>Appointment Requests</h1>
+    <p class="text-muted">Review new requests, confirm details, and notify patients.</p>
 
     <form method="GET" class="form-inline mb-3">
         <input type="text" name="q" class="form-control mr-2" placeholder="Search" value="{{ request('q') }}" />
@@ -47,7 +48,7 @@
             </tr>
         </thead>
         <tbody>
-            @foreach($appointments as $a)
+            @forelse($appointments as $a)
             <tr>
                             <td><input type="checkbox" name="ids[]" value="{{ $a->id }}"/></td>
                             <td>{{ $a->id }}</td>
@@ -61,7 +62,9 @@
                                 <a href="{{ route('admin.appointments.show', $a->id) }}" class="btn btn-sm btn-primary">Open</a>
                             </td>
                         </tr>
-                        @endforeach
+            @empty
+            <tr><td colspan="8">No appointment requests found.</td></tr>
+            @endforelse
         </tbody>
     </table>
 

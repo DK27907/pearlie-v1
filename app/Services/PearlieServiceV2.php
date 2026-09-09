@@ -27,6 +27,13 @@ class PearlieServiceV2
 
     public function processMessage(string $message, string $sessionId): array
     {
+        // Capture booking requests before knowledge-base matching so they always
+        // create an actionable appointment record.
+        $appointmentData = $this->detectAppointment($message);
+        if ($appointmentData !== false) {
+            return $this->recordAppointment($appointmentData, $message, $sessionId);
+        }
+
         // 1) Knowledge base lookup
         try {
             $localAnswer = $this->knowledgeBase->search($message);
@@ -75,45 +82,7 @@ class PearlieServiceV2
             ];
         }
 
-        // 2) Appointment detection
-        $appointmentData = $this->detectAppointment($message);
-        if ($appointmentData !== false) {
-            try {
-                $appt = AppointmentRequest::create([
-                    'session_id' => $sessionId,
-                    'name' => $appointmentData['name'] ?? null,
-                    'phone' => $appointmentData['phone'] ?? null,
-                    'preferred_date' => $appointmentData['preferred_date'] ?? null,
-                    'reason' => $appointmentData['reason'] ?? null,
-                    'raw_message' => $message,
-                    'status' => 'pending',
-                ]);
-
-                $responseText = 'Thanks — I have recorded your appointment request. Our team will contact you to confirm details. If you can, please provide your full name, phone number, preferred date and reason for visit.';
-
-                Conversation::create([
-                    'session_id' => $sessionId,
-                    'user_message' => $message,
-                    'ai_response' => $responseText,
-                    'confidence_score' => 0.98,
-                    'channel' => 'web',
-                ]);
-
-                return [
-                    'response' => $responseText,
-                    'confidence' => 0.98,
-                    'source' => 'appointment',
-                    'escalated' => false,
-                    'appointment_id' => $appt->id,
-                ];
-
-            } catch (Exception $e) {
-                Log::error('Failed to create appointment: ' . $e->getMessage());
-                // continue to try AI fallback
-            }
-        }
-
-        // 3) Build conversation history
+        // 2) Build conversation history
         $maxHistory = (int) config('pearlie.max_history', 10);
         $history = Conversation::where('session_id', $sessionId)
             ->orderBy('id', 'desc')
@@ -133,7 +102,7 @@ class PearlieServiceV2
             ->flatten(1)
             ->toArray();
 
-        // 4) Call Groq
+        // 3) Call Groq
         try {
             $messages = array_merge([
                 ['role' => 'system', 'content' => $this->getSystemPrompt()],
@@ -163,16 +132,8 @@ class PearlieServiceV2
                 throw new Exception('Empty reply from AI');
             }
 
-            // 5) Compute a simple confidence heuristic
+            // 4) Compute a simple confidence heuristic
             $confidence = $this->estimateConfidence($reply, $responseData);
-
-            Conversation::create([
-                'session_id' => $sessionId,
-                'user_message' => $message,
-                'ai_response' => $reply,
-                'confidence_score' => $confidence,
-                'channel' => 'web',
-            ]);
 
             $escalated = false;
             $threshold = (float) config('pearlie.escalation_threshold', 0.7);
@@ -180,10 +141,20 @@ class PearlieServiceV2
                 try {
                     $this->escalationService->createEscalation($sessionId, $message, $reply);
                     $escalated = true;
+                    $reply .= "\n\nI’ve sent this to our care team for follow-up. You can also call " . config('pearlie.hospital.phone') . ".";
                 } catch (Exception $e) {
                     Log::error('Escalation failed: ' . $e->getMessage());
                 }
             }
+
+            Conversation::create([
+                'session_id' => $sessionId,
+                'user_message' => $message,
+                'ai_response' => $reply,
+                'confidence_score' => $confidence,
+                'channel' => 'web',
+                'escalated' => $escalated,
+            ]);
 
             return [
                 'response' => $reply,
@@ -198,19 +169,28 @@ class PearlieServiceV2
 
             $fallback = sprintf("I'm sorry, I'm having trouble connecting to my AI system. Please contact %s at %s.", config('pearlie.hospital.name'), config('pearlie.hospital.phone'));
 
+            $escalated = false;
+            try {
+                $this->escalationService->createEscalation($sessionId, $message, $fallback);
+                $escalated = true;
+            } catch (Exception $escalationException) {
+                Log::error('Fallback escalation failed: ' . $escalationException->getMessage());
+            }
+
             Conversation::create([
                 'session_id' => $sessionId,
                 'user_message' => $message,
                 'ai_response' => $fallback,
                 'confidence_score' => 0.3,
                 'channel' => 'web',
+                'escalated' => $escalated,
             ]);
 
             return [
                 'response' => $fallback,
                 'confidence' => 0.3,
                 'source' => 'fallback',
-                'escalated' => false,
+                'escalated' => $escalated,
                 'appointment_id' => null,
             ];
         }
@@ -232,7 +212,9 @@ class PearlieServiceV2
 
         }
 
-        if (!$found) return false;
+        if (!$found) {
+            return false;
+        }
 
         // Parse basic pieces: phone, date, name, reason
         $phone = null;
@@ -262,6 +244,54 @@ class PearlieServiceV2
             'preferred_date' => $preferred_date,
             'name' => $name,
             'reason' => $reason,
+        ];
+    }
+
+    protected function recordAppointment(array $appointmentData, string $message, string $sessionId): array
+    {
+        try {
+            $appointment = AppointmentRequest::create([
+                'session_id' => $sessionId,
+                'name' => $appointmentData['name'],
+                'phone' => $appointmentData['phone'],
+                'preferred_date' => $appointmentData['preferred_date'],
+                'reason' => $appointmentData['reason'],
+                'raw_message' => $message,
+                'status' => AppointmentRequest::STATUS_PENDING,
+            ]);
+        } catch (Exception $e) {
+            Log::error('Failed to create appointment: ' . $e->getMessage());
+
+            throw $e;
+        }
+
+        $missing = [];
+        if (! $appointment->name) $missing[] = 'full name';
+        if (! $appointment->phone) $missing[] = 'phone number';
+        if (! $appointment->preferred_date) $missing[] = 'preferred date';
+        if (! $appointment->reason) $missing[] = 'reason for visit';
+
+        $responseText = 'Appointment request #' . $appointment->id . ' has been recorded as pending.';
+        if ($missing) {
+            $responseText .= ' Please reply with your ' . implode(', ', $missing) . ' so our team can confirm it.';
+        } else {
+            $responseText .= ' Our team will contact you to confirm the details.';
+        }
+
+        Conversation::create([
+            'session_id' => $sessionId,
+            'user_message' => $message,
+            'ai_response' => $responseText,
+            'confidence_score' => 0.98,
+            'channel' => 'web',
+        ]);
+
+        return [
+            'response' => $responseText,
+            'confidence' => 0.98,
+            'source' => 'appointment',
+            'escalated' => false,
+            'appointment_id' => $appointment->id,
         ];
     }
 

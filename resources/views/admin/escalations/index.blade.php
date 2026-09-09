@@ -3,6 +3,7 @@
 @section('content')
 <div class="container">
     <h1>Escalations</h1>
+    <p class="text-muted">Review conversations that need human follow-up and update their status.</p>
 
     @if(session('status'))
         <div class="alert alert-success">{{ session('status') }}</div>
@@ -49,7 +50,7 @@
             </tr>
         </thead>
         <tbody>
-            @foreach($escalations as $esc)
+            @forelse($escalations as $esc)
             <tr>
                             <td><input type="checkbox" name="ids[]" value="{{ $esc->id }}"/></td>
                             <td>{{ $esc->id }}</td>
@@ -61,11 +62,11 @@
                                 <a href="{{ route('admin.escalations.show', $esc->id) }}" class="btn btn-sm btn-primary">Open</a>
                             </td>
                         </tr>
-                        @endforeach
+            @empty
+            <tr><td colspan="6">No escalations found.</td></tr>
+            @endforelse
         </tbody>
     </table>
-
-        </table>
 </form>
 
     {{ $escalations->links() }}
