@@ -121,7 +121,7 @@ class PearlieServiceV2
                 ['role' => 'user', 'content' => $message],
             ]);
 
-            $response = Http::withHeaders([
+            $response = Http::timeout(30)->withHeaders([
                 'Authorization' => 'Bearer ' . $this->apiKey,
                 'Content-Type' => 'application/json',
             ])->post($this->baseUrl . '/chat/completions', [
@@ -131,6 +131,7 @@ class PearlieServiceV2
                 'max_tokens' => 1024,
             ]);
 
+            $response->throw();
             $responseData = $response->json();
 
             if (isset($responseData['error'])) {

@@ -403,11 +403,13 @@
                     body: JSON.stringify({ message })
                 });
 
-                const data = await res.json();
+                const data = await res.json().catch(() => ({}));
 
                 hideTyping();
 
-                if (data.response) {
+                if (!res.ok) {
+                    appendMessage(data.message || data.error || '⚠️ The assistant could not process your request. Please try again.', 'ai');
+                } else if (data.response) {
                     appendMessage(data.response, 'ai');
                 } else {
                     appendMessage('⚠️ I’m sorry, I could not process that. Please try again.', 'ai');
