@@ -12,7 +12,7 @@ class PearlieServiceV2
 {
     protected KnowledgeBaseService $knowledgeBase;
     protected EscalationService $escalationService;
-    protected string $apiKey;
+    protected ?string $apiKey;
     protected string $model;
     protected string $baseUrl;
 
