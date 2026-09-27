@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class KnowledgeBase extends Model
 {
-    use HasFactory;
+    use \App\Traits\BelongsToHospital, HasFactory;
 
     /**
      * The attributes that are mass assignable.

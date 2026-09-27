@@ -43,13 +43,13 @@ class EscalationServiceTest extends TestCase
 
         // Mock NotificationService to assert SMS and WhatsApp calls
         $mock = \Mockery::mock(\App\Services\NotificationService::class);
-        $mock->shouldReceive('sendSms')->once()->withArgs(function ($to, $message) use ($sessionId) {
+        $mock->shouldReceive('sendSms')->once()->withArgs(function ($to, $message) {
             // basic assertions
-            return is_string($to) && str_contains($message, 'New escalation');
-        });
+            return is_string($to) && str_contains($message, 'ESCALATION #');
+        })->andReturn(true);
         $mock->shouldReceive('sendWhatsApp')->once()->withArgs(function ($to, $message) {
-            return is_string($to) && str_contains($message, 'New escalation');
-        });
+            return is_string($to) && str_contains($message, 'ESCALATION #');
+        })->andReturn(true);
 
         $this->app->instance(\App\Services\NotificationService::class, $mock);
 
@@ -59,6 +59,7 @@ class EscalationServiceTest extends TestCase
 
         // Assert escalation persisted
         $this->assertDatabaseHas('escalations', ['id' => $esc->id, 'user_message' => 'I need help']);
+        Bus::assertDispatched(SendEscalationNotification::class, fn (SendEscalationNotification $job): bool => $job->recipient === 'frontdesk@example.com');
 
         // Clean up Mockery
         \Mockery::close();

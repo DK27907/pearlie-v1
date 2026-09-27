@@ -2,35 +2,38 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use Illuminate\Support\Facades\Http;
 use App\Services\NotificationService;
+use Illuminate\Support\Facades\Http;
+use Tests\TestCase;
 
 class NotificationServiceRetryTest extends TestCase
 {
     public function test_africastalking_retries_then_succeeds_and_skips_twilio()
     {
-        // Configure env for AT and Twilio
-        $_ENV['AFRICASTALKING_USERNAME'] = 'testuser';
-        $_ENV['AFRICASTALKING_API_KEY'] = 'testkey';
-        $_ENV['TWILIO_SID'] = 'twiliosid';
-        $_ENV['TWILIO_TOKEN'] = 'twiliotoken';
-        $_ENV['TWILIO_FROM'] = '+15550000000';
+        config([
+            'services.africastalking.username' => 'testuser',
+            'services.africastalking.api_key' => 'testkey',
+            'services.twilio.account_sid' => 'twiliosid',
+            'services.twilio.auth_token' => 'twiliotoken',
+            'services.twilio.from_number' => '+15550000000',
+        ]);
 
         $atCount = 0;
 
+        Http::preventStrayRequests();
         Http::fake([
             'https://api.africastalking.com/version1/messaging' => function ($request) use (&$atCount) {
                 $atCount++;
                 if ($atCount < 3) {
                     return Http::response('error', 500);
                 }
+
                 return Http::response('ok', 200);
             },
             'https://api.twilio.com/2010-04-01/Accounts/*/Messages.json' => Http::response('twilio', 201),
         ]);
 
-        $svc = new NotificationService();
+        $svc = new NotificationService;
         $svc->sendSms('+254700000000', 'retry test');
 
         // AT should have been called 3 times (two failures then success)
@@ -45,26 +48,29 @@ class NotificationServiceRetryTest extends TestCase
 
     public function test_twilio_retries_when_africastalking_missing_or_fails_completely()
     {
-        // Remove AT env
-        unset($_ENV['AFRICASTALKING_USERNAME'], $_ENV['AFRICASTALKING_API_KEY']);
-
-        $_ENV['TWILIO_SID'] = 'twiliosid2';
-        $_ENV['TWILIO_TOKEN'] = 'twiliotoken2';
-        $_ENV['TWILIO_FROM'] = '+15551112222';
+        config([
+            'services.africastalking.username' => null,
+            'services.africastalking.api_key' => null,
+            'services.twilio.account_sid' => 'twiliosid2',
+            'services.twilio.auth_token' => 'twiliotoken2',
+            'services.twilio.from_number' => '+15551112222',
+        ]);
 
         $twCount = 0;
 
+        Http::preventStrayRequests();
         Http::fake([
             'https://api.twilio.com/2010-04-01/Accounts/*/Messages.json' => function ($request) use (&$twCount) {
                 $twCount++;
                 if ($twCount < 2) {
                     return Http::response('error', 500);
                 }
+
                 return Http::response(['sid' => 'SMOK'], 201);
             },
         ]);
 
-        $svc = new NotificationService();
+        $svc = new NotificationService;
         $svc->sendSms('+254700000001', 'twilio retry test');
 
         $this->assertGreaterThanOrEqual(2, $twCount, 'Twilio should have been attempted at least twice');

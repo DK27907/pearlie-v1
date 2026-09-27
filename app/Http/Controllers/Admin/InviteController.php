@@ -34,7 +34,9 @@ class InviteController extends Controller
 
         // Send invite email and do not expose token in the UI
         try {
-            \Illuminate\Support\Facades\Mail::to($invite->email)->queue(new \App\Mail\InviteMail($token));
+            \Illuminate\Support\Facades\Mail::to($invite->email)->queue(
+                new \App\Mail\InviteMail($token, hospital()?->slug),
+            );
             return redirect()->back()->with('status', 'Invite created and emailed.');
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('Failed to send invite email: ' . $e->getMessage());

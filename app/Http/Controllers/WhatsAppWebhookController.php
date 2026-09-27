@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\WhatsAppBookingService;
+use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
@@ -11,7 +12,7 @@ class WhatsAppWebhookController extends Controller
 {
     public function verify(Request $request): Response
     {
-        $token = (string) config('services.whatsapp.verify_token');
+        $token = (string) $this->whatsappCredential('whatsapp_verify_token', 'verify_token');
         $providedToken = (string) ($request->query('hub.verify_token') ?: $request->query('hub_verify_token'));
         $mode = (string) ($request->query('hub.mode') ?: $request->query('hub_mode'));
         if ($token === '' || ! hash_equals($token, $providedToken)) {
@@ -25,15 +26,22 @@ class WhatsAppWebhookController extends Controller
         return response((string) $request->query('hub_challenge'), 200);
     }
 
-    public function receive(Request $request, WhatsAppBookingService $booking): Response
-    {
-        $secret = (string) config('services.whatsapp.app_secret');
-        if ($secret !== '') {
-            $signature = (string) $request->header('X-Hub-Signature-256');
-            $expected = 'sha256='.hash_hmac('sha256', $request->getContent(), $secret);
-            if ($signature === '' || ! hash_equals($expected, $signature)) {
-                return response('Invalid signature', 401);
-            }
+    public function receive(
+        Request $request,
+        WhatsAppBookingService $booking,
+        WhatsAppService $whatsApp,
+    ): Response {
+        $secret = (string) $this->whatsappCredential('whatsapp_app_secret', 'app_secret');
+        if ($secret === '') {
+            Log::error('WhatsApp webhook rejected because signature verification is not configured.');
+
+            return response('Webhook signature verification is not configured.', 503);
+        }
+
+        $signature = (string) $request->header('X-Hub-Signature-256');
+        $expected = 'sha256='.hash_hmac('sha256', $request->getContent(), $secret);
+        if ($signature === '' || ! hash_equals($expected, $signature)) {
+            return response('Invalid signature', 401);
         }
 
         $payload = $request->json()->all();
@@ -49,8 +57,8 @@ class WhatsAppWebhookController extends Controller
                     }
 
                     try {
-                        $result = $booking->handle((string) $message['from'], (string) $message['text']['body']);
-                        app(\App\Services\NotificationService::class)->sendWhatsApp(
+                        $result = $booking->handleMessage((string) $message['from'], (string) $message['text']['body']);
+                        $whatsApp->sendMessage(
                             (string) $message['from'],
                             (string) ($result['response'] ?? ''),
                         );
@@ -65,5 +73,30 @@ class WhatsAppWebhookController extends Controller
         }
 
         return response('EVENT_RECEIVED', 200);
+    }
+
+    public function handle(
+        Request $request,
+        WhatsAppBookingService $booking,
+        WhatsAppService $whatsApp,
+    ): Response {
+        return $this->receive($request, $booking, $whatsApp);
+    }
+
+    private function whatsappCredential(string $tenantAttribute, string $globalKey): ?string
+    {
+        $tenant = hospital();
+        if (! $tenant) {
+            return null;
+        }
+
+        $credential = $tenant->getAttribute($tenantAttribute);
+        if (filled($credential)) {
+            return (string) $credential;
+        }
+
+        return $tenant->slug === 'pearl'
+            ? (string) config('services.whatsapp.'.$globalKey)
+            : null;
     }
 }

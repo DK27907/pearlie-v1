@@ -16,6 +16,16 @@ class RegistrationTest extends TestCase
         $response->assertStatus(200);
     }
 
+    public function test_registration_screen_is_available_when_registration_requires_an_invite(): void
+    {
+        config(['app.allow_registration' => false]);
+        $this->app->detectEnvironment(fn () => 'production');
+
+        $this->get('/register')
+            ->assertOk()
+            ->assertSee('Invite Token');
+    }
+
     public function test_new_users_can_register(): void
     {
         $response = $this->post('/register', [

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\Invite;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
@@ -22,7 +23,8 @@ class RegisteredUserController extends Controller
     {
         // If registration is disabled, require an invite token parameter
         // Allow registration automatically in testing environment to support automated tests
-        $allow = env('ALLOW_REGISTRATION', false) || app()->environment('testing');
+        $allow = config('app.allow_registration') || app()->environment('testing');
+
         return view('auth.register', ['allow_registration' => $allow]);
     }
 
@@ -33,7 +35,7 @@ class RegisteredUserController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
-        $allow = env('ALLOW_REGISTRATION', false) || app()->environment('testing');
+        $allow = config('app.allow_registration') || app()->environment('testing');
 
         $rules = [
             'name' => ['required', 'string', 'max:255'],
@@ -49,7 +51,7 @@ class RegisteredUserController extends Controller
 
         // If invite token present, validate it and mark used
         if (! $allow) {
-            $invite = \App\Models\Invite::where('token', $data['invite_token'])->first();
+            $invite = Invite::where('token', $data['invite_token'])->first();
             if (! $invite || $invite->used_at || $invite->isExpired()) {
                 throw ValidationException::withMessages(['invite_token' => 'Invalid, already used, or expired invite token']);
             }

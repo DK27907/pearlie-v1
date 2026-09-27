@@ -12,14 +12,10 @@ use App\Http\Controllers\Auth\VerifyEmailController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
-    // Registration can be enabled by setting ALLOW_REGISTRATION=true in .env
-    // Allow registration during automated testing to avoid disabling tests
-    if (env('ALLOW_REGISTRATION', false) || app()->environment('testing')) {
-        Route::get('register', [RegisteredUserController::class, 'create'])
-            ->name('register');
+    Route::get('register', [RegisteredUserController::class, 'create'])
+        ->name('register');
 
-        Route::post('register', [RegisteredUserController::class, 'store']);
-    }
+    Route::post('register', [RegisteredUserController::class, 'store']);
 
     Route::get('login', [AuthenticatedSessionController::class, 'create'])
         ->name('login');
@@ -40,6 +36,9 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+    Route::get('password/edit', [PasswordController::class, 'edit'])
+        ->name('password.edit');
+
     Route::get('verify-email', EmailVerificationPromptController::class)
         ->name('verification.notice');
 

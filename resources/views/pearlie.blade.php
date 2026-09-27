@@ -1,26 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="csrf-token" content="{{ csrf_token() }}" />
-    <title>Pearlie AI Assistant</title>
+@extends('layouts.master')
 
-    <style>
-        /* ── Reset & Base ── */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+@section('title', 'Chat with Pearlie | '.pearlie_config('hospital.name'))
 
-        body {
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            background: #f4f7fc;
+@push('styles')
+<style>
+        .chat-page {
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
+            min-height: calc(100dvh - 5rem);
             padding: 16px;
         }
 
@@ -82,12 +70,12 @@
         /* ── Messages Area ── */
         .chat-messages {
             flex: 1;
-            padding: 20px 24px;
+            padding: 24px;
             overflow-y: auto;
             background: #f9fbfd;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 14px;
         }
 
         .message {
@@ -97,6 +85,8 @@
             line-height: 1.6;
             font-size: 0.95rem;
             word-wrap: break-word;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
             animation: fadeIn 0.25s ease;
         }
 
@@ -127,7 +117,8 @@
             display: none;
             align-self: flex-start;
             background: #e9edf4;
-            padding: 12px 20px;
+            margin: 0 24px 12px;
+            padding: 12px 18px;
             border-radius: 30px;
             font-size: 0.9rem;
             color: #555;
@@ -172,6 +163,46 @@
             background: #ffffff;
             border-top: 1px solid #edf1f7;
             flex-shrink: 0;
+        }
+
+        .quick-replies {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 0 20px 14px;
+            background: #f9fbfd;
+        }
+
+        .quick-reply {
+            border: 1px solid #d5e1ea;
+            border-radius: 999px;
+            background: #fff;
+            padding: 8px 12px;
+            color: #0a2f44;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+
+        .quick-reply:hover {
+            border-color: #1a5276;
+            background: #eff8fc;
+        }
+
+        .language-select {
+            margin-left: auto;
+            max-width: 140px;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+            padding: 7px 10px;
+            color: #fff;
+            font-size: 0.8rem;
+        }
+
+        .language-select option {
+            color: #0a2f44;
         }
 
         .chat-input input {
@@ -264,11 +295,18 @@
 
         /* ── Responsive ── */
         @media (max-width: 600px) {
+            .chat-page {
+                min-height: calc(100dvh - 5rem);
+                padding: 0;
+            }
             .chat-container {
-                height: 95vh;
-                max-height: 95vh;
-                border-radius: 16px;
+                height: calc(100dvh - 5rem);
+                max-height: none;
+                border-radius: 0;
                 margin: 0;
+            }
+            .chat-messages {
+                padding: 16px;
             }
             .chat-header .title {
                 font-size: 1.1rem;
@@ -281,6 +319,11 @@
             .chat-input {
                 padding: 10px 16px 16px;
                 gap: 8px;
+                position: sticky;
+                bottom: 0;
+            }
+            .quick-replies {
+                padding: 0 16px 12px;
             }
             .chat-input input {
                 padding: 10px 14px;
@@ -292,8 +335,10 @@
             }
         }
     </style>
-</head>
-<body>
+@endpush
+
+@section('page')
+<section class="chat-page">
 
     <div class="chat-container">
 
@@ -302,20 +347,32 @@
             <span class="logo">🏥</span>
             <div>
                 <div class="title">Pearlie AI Assistant</div>
-                <div class="subtitle">Pearl Hospital &bull; Nyahururu</div>
+                <div class="subtitle">{{ pearlie_config('hospital.name') }} &bull; {{ pearlie_config('hospital.location') }}</div>
             </div>
+            <label class="sr-only" for="languageToggle">Chat language</label>
+            <select id="languageToggle" class="language-select" aria-label="Chat language">
+                <option value="en" @selected(pearlie_config('ai.default_language', 'en') === 'en')>English</option>
+                <option value="sw" @selected(pearlie_config('ai.default_language', 'en') === 'sw')>Kiswahili</option>
+            </select>
             <span class="badge">AI</span>
         </div>
 
         <!-- ─── Messages ─── -->
-        <div class="chat-messages" id="messages">
-            <div class="message ai">
-                👋 Hello! I'm Pearlie, your healthcare assistant at Pearl Hospital. How can I help you today?
-            </div>
+        <div class="chat-messages" id="messages" data-chat-url="{{ request()->routeIs('tenant.chat.page') ? route('tenant.chat.short', request()->route('slug')) : (request()->routeIs('tenant.home') ? route('tenant.chat', request()->route('slug')) : route('pearlie.chat')) }}">
+            <div class="message ai"
+                data-welcome-en="👋 Hello! I'm Pearlie, your healthcare assistant at {{ pearlie_config('hospital.name') }}. How can I help you today?"
+                data-welcome-sw="👋 Habari! Mimi ni Pearlie, msaidizi wako wa afya katika Hospitali ya {{ pearlie_config('hospital.name') }}. Naweza kukusaidia vipi leo?"></div>
+        </div>
+
+        <div class="quick-replies" aria-label="Suggested questions">
+            <button type="button" class="quick-reply" data-message-en="I want to book an appointment" data-message-sw="Ninataka kuweka miadi" data-label-en="Book Appointment" data-label-sw="Weka Miadi"></button>
+            <button type="button" class="quick-reply" data-message-en="What services do you offer?" data-message-sw="Huduma zenu ni zipi?" data-label-en="Our Services" data-label-sw="Huduma"></button>
+            <button type="button" class="quick-reply" data-message-en="I need emergency help" data-message-sw="Nina dharura" data-label-en="Emergency" data-label-sw="Dharura"></button>
+            <button type="button" class="quick-reply" data-message-en="Where are you located?" data-message-sw="Mko wapi?" data-label-en="Location" data-label-sw="Mahali"></button>
         </div>
 
         <!-- ─── Typing Indicator ─── -->
-        <div class="typing-indicator" id="typingIndicator">
+        <div class="typing-indicator" id="typingIndicator" role="status" aria-live="polite">
             <span>Pearlie is thinking</span>
             <span class="dot"></span>
             <span class="dot"></span>
@@ -327,22 +384,28 @@
             <input
                 type="text"
                 id="userInput"
-                placeholder="Ask me anything about Pearl Hospital..."
+                placeholder="Ask me anything about {{ pearlie_config('hospital.name') }}..."
+                data-placeholder-en="Ask me anything about {{ pearlie_config('hospital.name') }}..."
+                data-placeholder-sw="Uliza chochote kuhusu {{ pearlie_config('hospital.name') }}..."
                 autocomplete="off"
                 autofocus
             />
-            <button id="sendBtn">Send</button>
+            <button id="sendBtn" aria-label="Send message">Send</button>
         </div>
 
         <!-- ─── Footer ─── -->
         <div class="chat-footer">
             ⚕️ Always consult a doctor for medical decisions &bull;
             <a href="#" id="resetChat">New Chat</a>
+            <span class="mx-1" aria-hidden="true">·</span>
+            <span>Powered by AxiomForge</span>
         </div>
 
     </div>
 
-    @vite('resources/js/pearlie.js')
+    </section>
+@endsection
 
-</body>
-</html>
+@push('scripts')
+    @vite('resources/js/pearlie.js')
+@endpush

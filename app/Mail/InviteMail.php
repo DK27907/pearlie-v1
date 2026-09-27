@@ -12,12 +12,18 @@ class InviteMail extends Mailable
 
     public string $token;
 
+    public string $registrationUrl;
+
+    public string $hospitalName;
+
     /**
      * Create a new message instance.
      */
-    public function __construct(string $token)
+    public function __construct(string $token, ?string $hospitalSlug = null)
     {
         $this->token = $token;
+        $this->registrationUrl = route('register', array_filter(['hospital' => $hospitalSlug]));
+        $this->hospitalName = (string) pearlie_config('hospital.name');
     }
 
     /**
@@ -25,8 +31,12 @@ class InviteMail extends Mailable
      */
     public function build(): self
     {
-        return $this->subject('You are invited to Pearlie Admin')
+        return $this->subject('You are invited to MediDesk AI')
             ->view('emails.invite')
-            ->with(['token' => $this->token]);
+            ->with([
+                'token' => $this->token,
+                'registrationUrl' => $this->registrationUrl,
+                'hospitalName' => $this->hospitalName,
+            ]);
     }
 }

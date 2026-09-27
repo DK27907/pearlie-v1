@@ -2,54 +2,61 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Config;
 use App\Services\NotificationService;
+use Illuminate\Support\Facades\Http;
+use Tests\TestCase;
 
 class NotificationServiceIntegrationTest extends TestCase
 {
     public function test_send_whatsapp_when_credentials_present()
     {
-        Http::fake();
+        config([
+            'services.whatsapp.phone_number_id' => '12345',
+            'services.whatsapp.access_token' => 'test-access-token',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'message-test']]]),
+        ]);
 
-        putenv('WHATSAPP_PHONE_NUMBER_ID=12345');
-        putenv('WHATSAPP_ACCESS_TOKEN=secrettoken');
-
-        $svc = new NotificationService();
+        $svc = new NotificationService;
         $svc->sendWhatsApp('+254700000000', 'Hello via WhatsApp');
 
         Http::assertSent(function ($request) {
             return str_contains($request->url(), 'graph.facebook.com') && $request->method() === 'POST';
         });
 
-        putenv('WHATSAPP_PHONE_NUMBER_ID');
-        putenv('WHATSAPP_ACCESS_TOKEN');
     }
 
     public function test_africastalking_then_twilio_fallback_behavior()
     {
-        Http::fake();
+        config([
+            'services.africastalking.username' => 'testuser',
+            'services.africastalking.api_key' => 'testkey',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://api.africastalking.com/version1/messaging' => Http::response('ok', 200),
+        ]);
 
-        // Case 1: Africa's Talking set
-        putenv('AFRICASTALKING_USERNAME=testuser');
-        putenv('AFRICASTALKING_API_KEY=testkey');
-
-        $svc = new NotificationService();
+        $svc = new NotificationService;
         $svc->sendSms('+254700000000', 'Message AT');
 
         Http::assertSent(function ($request) {
             return str_contains($request->url(), 'api.africastalking.com');
         });
 
-        // Clean AT
-        putenv('AFRICASTALKING_USERNAME');
-        putenv('AFRICASTALKING_API_KEY');
-
-        // Case 2: Twilio fallback
-        putenv('TWILIO_SID=abc');
-        putenv('TWILIO_TOKEN=def');
-        putenv('TWILIO_FROM=+15005550006');
+        config([
+            'services.africastalking.username' => null,
+            'services.africastalking.api_key' => null,
+            'services.twilio.account_sid' => 'abc',
+            'services.twilio.auth_token' => 'def',
+            'services.twilio.from_number' => '+15005550006',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://api.twilio.com/2010-04-01/Accounts/*/Messages.json' => Http::response(['sid' => 'SM123'], 201),
+        ]);
 
         $svc->sendSms('+15005550006', 'Message Twilio');
 
@@ -57,8 +64,5 @@ class NotificationServiceIntegrationTest extends TestCase
             return str_contains($request->url(), 'api.twilio.com');
         });
 
-        putenv('TWILIO_SID');
-        putenv('TWILIO_TOKEN');
-        putenv('TWILIO_FROM');
     }
 }

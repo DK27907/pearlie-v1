@@ -3,94 +3,110 @@
 namespace App\Services;
 
 use App\Models\KnowledgeBase;
+use Illuminate\Support\Str;
 
 class KnowledgeBaseService
 {
     public function search(string $query): ?string
     {
-        $query = strtolower(trim($query));
-        $queryWords = array_map('trim', explode(' ', $query));
-        
-        // Remove short words
-        $queryWords = array_filter($queryWords, function($word) {
-            return strlen($word) >= 4;
-        });
-        
-        $entries = KnowledgeBase::all();
-        $bestMatch = null;
-        $bestMatchCount = 0;
-        
-        foreach ($entries as $entry) {
-            $keywords = is_array($entry->keywords) 
-                ? $entry->keywords 
-                : json_decode($entry->keywords, true) ?? [];
-            
-            $keywords = array_map('strtolower', $keywords);
-            $keywords = array_filter($keywords, function($w) {
-                return strlen($w) >= 4;
-            });
-            
-            $matchCount = 0;
-            foreach ($queryWords as $queryWord) {
-                foreach ($keywords as $keyword) {
-                    if ($queryWord === $keyword) {
-                        $matchCount += 2;
-                        break;
-                    }
-                    if (str_contains($queryWord, $keyword) || str_contains($keyword, $queryWord)) {
-                        $matchCount += 1;
-                        break;
-                    }
-                }
-            }
-            
-            if (str_contains($query, strtolower($entry->question))) {
-                $matchCount += 1;
-            }
-            
-            if ($matchCount > $bestMatchCount) {
-                $bestMatchCount = $matchCount;
-                $bestMatch = $entry;
+        $normalizedQuery = $this->normalize($query);
+        if ($normalizedQuery === '') {
+            return null;
+        }
+
+        $queryWords = preg_split('/[^\pL\pN]+/u', $normalizedQuery, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $matches = [];
+
+        foreach (KnowledgeBase::query()->get() as $entry) {
+            $score = $this->score($normalizedQuery, $queryWords, $entry);
+            if ($score > 0) {
+                $matches[] = ['score' => $score, 'entry' => $entry];
             }
         }
-        
-        return ($bestMatchCount > 0) ? $bestMatch->answer : null;
+
+        usort($matches, static fn (array $left, array $right): int => $right['score'] <=> $left['score']);
+
+        return $matches[0]['entry']->answer ?? null;
     }
 
     public function getRelevantContext(string $query): string
     {
-        $entries = KnowledgeBase::all();
-        $context = [];
-        $queryWords = array_filter(array_map('trim', explode(' ', strtolower($query))), function($w) {
-            return strlen($w) >= 4;
-        });
-        
-        foreach ($entries as $entry) {
-            $keywords = is_array($entry->keywords) 
-                ? $entry->keywords 
-                : json_decode($entry->keywords, true) ?? [];
-            
-            $keywords = array_map('strtolower', $keywords);
-            $keywords = array_filter($keywords, function($w) {
-                return strlen($w) >= 4;
-            });
-            
+        $normalizedQuery = $this->normalize($query);
+        $queryWords = preg_split('/[^\pL\pN]+/u', $normalizedQuery, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $matches = [];
+
+        foreach (KnowledgeBase::query()->get() as $entry) {
+            $score = $this->score($normalizedQuery, $queryWords, $entry);
+            if ($score > 0) {
+                $matches[] = ['score' => $score, 'context' => $entry->category.': '.$entry->answer];
+            }
+        }
+
+        usort($matches, static fn (array $left, array $right): int => $right['score'] <=> $left['score']);
+
+        if ($matches === []) {
+            return sprintf(
+                '%s is located at %s. For help, call %s.',
+                pearlie_config('hospital.name'),
+                pearlie_config('hospital.location'),
+                pearlie_config('hospital.appointment_phone'),
+            );
+        }
+
+        return implode("\n\n", array_column(array_slice($matches, 0, 5), 'context'));
+    }
+
+    private function score(string $query, array $queryWords, KnowledgeBase $entry): int
+    {
+        $keywords = is_array($entry->keywords)
+            ? $entry->keywords
+            : (json_decode((string) $entry->keywords, true) ?: []);
+        $score = 0;
+
+        foreach ($keywords as $keyword) {
+            $keyword = $this->normalize((string) $keyword);
+            if ($keyword === '') {
+                continue;
+            }
+
+            if ($this->containsPhrase($query, $keyword)) {
+                $score += 10 + mb_strlen($keyword);
+                continue;
+            }
+
             foreach ($queryWords as $queryWord) {
-                foreach ($keywords as $keyword) {
-                    if ($queryWord === $keyword || 
-                        str_contains($queryWord, $keyword) || 
-                        str_contains($keyword, $queryWord)) {
-                        $context[] = $entry->category . ': ' . $entry->answer;
-                        break 3;
-                    }
+                if ($queryWord === $keyword) {
+                    $score += 5;
+                } elseif (mb_strlen($keyword) >= 5
+                    && (str_contains($queryWord, $keyword) || str_contains($keyword, $queryWord))
+                ) {
+                    $score += 2;
                 }
             }
         }
-        
-        if (empty($context)) {
-            return "Pearl Hospital is located at Vin Plaza, Nyahururu. They offer emergency, outpatient, inpatient, and specialist services. They can be reached at 0700000000.";
+
+        $question = $this->normalize((string) $entry->question);
+        if ($question !== '' && $this->containsPhrase($query, $question)) {
+            $score += 8;
         }
-        
-        return implode("\n\n", $context);
+
+        return $score;
+    }
+
+    private function containsPhrase(string $text, string $phrase): bool
+    {
+        return (bool) preg_match(
+            '/(?<![\pL\pN])'.preg_quote($phrase, '/').'(?![\pL\pN])/u',
+            $text,
+        );
+    }
+
+    private function normalize(string $value): string
+    {
+        return trim((string) preg_replace(
+            '/\s+/u',
+            ' ',
+            Str::ascii(Str::lower($value)),
+        ));
     }
 }

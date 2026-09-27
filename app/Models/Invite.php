@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Invite extends Model
 {
-    use HasFactory;
+    use \App\Traits\BelongsToHospital, HasFactory;
 
     protected $fillable = ['email', 'token', 'created_by', 'used_at', 'expires_at', 'used_by'];
 
@@ -15,6 +16,11 @@ class Invite extends Model
         'used_at' => 'datetime',
         'expires_at' => 'datetime',
     ];
+
+    public function hospital(): BelongsTo
+    {
+        return $this->belongsTo(Hospital::class);
+    }
 
     public function scopeValid($query)
     {

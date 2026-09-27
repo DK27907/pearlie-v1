@@ -15,11 +15,24 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        $this->call(HospitalSeeder::class);
+        $pearl = \App\Models\Hospital::query()->where('slug', 'pearl')->firstOrFail();
+        app()->instance('currentHospital', $pearl);
+        $this->call(RoleSeeder::class);
+
+        if (app()->isProduction()) {
+            return;
+        }
+
+        $this->call(SuperAdminSeeder::class);
+        $this->call(AdminUserSeeder::class);
 
         User::factory()->create([
             'name' => 'Test User',
             'email' => 'test@example.com',
         ]);
+
+        $this->call(DoctorUserSeeder::class);
+        $this->call(KnowledgeBaseSeeder::class);
     }
 }

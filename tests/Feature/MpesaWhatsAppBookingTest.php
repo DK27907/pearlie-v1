@@ -37,7 +37,7 @@ class MpesaWhatsAppBookingTest extends TestCase
 
         $result = app(WhatsAppBookingService::class)->handle(
             '254712345678',
-            'Book an appointment. My name is Jane Doe, tomorrow, for a consultation.',
+            'Book an appointment. My name is Jane Doe, tomorrow, for a consultation. jane@example.com',
         );
 
         $this->assertSame('whatsapp_booking', $result['source']);
@@ -45,6 +45,7 @@ class MpesaWhatsAppBookingTest extends TestCase
             'id' => $result['appointment_id'],
             'name' => 'Jane Doe',
             'phone' => '254712345678',
+            'email' => 'jane@example.com',
             'booking_fee' => 500,
             'payment_status' => 'pending',
             'mpesa_checkout_request_id' => 'checkout-1',
@@ -57,6 +58,12 @@ class MpesaWhatsAppBookingTest extends TestCase
         config([
             'services.whatsapp.phone_number_id' => 'phone-id',
             'services.whatsapp.access_token' => 'token',
+            'services.whatsapp.app_secret' => 'test-app-secret',
+            'mpesa.environment' => 'sandbox',
+            'mpesa.consumer_key' => 'test-consumer',
+            'mpesa.consumer_secret' => 'test-secret',
+            'mpesa.passkey' => 'test-passkey',
+            'mpesa.shortcode' => '174379',
             'mpesa.callback_url' => 'https://example.test/api/mpesa/callback',
         ]);
 
@@ -74,7 +81,6 @@ class MpesaWhatsAppBookingTest extends TestCase
             'mpesa_checkout_request_id' => 'checkout-1',
         ]);
 
-        Http::fake();
         $payload = [
             'Body' => [
                 'stkCallback' => [
@@ -92,6 +98,18 @@ class MpesaWhatsAppBookingTest extends TestCase
                 ],
             ],
         ];
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://sandbox.safaricom.co.ke/oauth/v1/generate*' => Http::response([
+                'access_token' => 'test-access-token',
+            ]),
+            'https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query' => fn ($request) => Http::response([
+                'ResponseCode' => '0',
+                'CheckoutRequestID' => $request['CheckoutRequestID'],
+                'ResultCode' => '0',
+            ]),
+            'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'message-test']]]),
+        ]);
 
         $this->postJson('/api/mpesa/callback', $payload)->assertOk();
         $this->postJson('/api/mpesa/callback', $payload)->assertOk();
@@ -105,7 +123,7 @@ class MpesaWhatsAppBookingTest extends TestCase
         $this->assertDatabaseCount('mpesa_payments', 1);
         $this->assertDatabaseHas('mpesa_payments', [
             'checkout_request_id' => 'checkout-1',
-            'status' => 'paid',
+            'status' => MpesaPayment::STATUS_COMPLETED,
         ]);
         Http::assertSent(fn ($request) => str_contains($request->url(), 'graph.facebook.com'));
     }

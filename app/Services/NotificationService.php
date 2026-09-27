@@ -12,9 +12,9 @@ class NotificationService
         $smsTo = $to;
 
         // Africa's Talking
-        $atUser = $this->environment('AFRICASTALKING_USERNAME');
-        $atKey = $this->environment('AFRICASTALKING_API_KEY');
-        $atFrom = $this->environment('AFRICASTALKING_SENDER_ID');
+        $atUser = config('services.africastalking.username');
+        $atKey = config('services.africastalking.api_key');
+        $atFrom = config('services.africastalking.sender_id');
 
         if ($atUser && $atKey) {
             try {
@@ -24,7 +24,9 @@ class NotificationService
                     'to' => $smsTo,
                     'message' => $message,
                 ];
-                if ($atFrom) $payload['from'] = $atFrom;
+                if ($atFrom) {
+                    $payload['from'] = $atFrom;
+                }
 
                 // Retry configuration
                 $maxAttempts = config('pearlie.notification_retry_attempts', 3);
@@ -36,9 +38,9 @@ class NotificationService
                         $resp = Http::withHeaders([
                             'apiKey' => $atKey,
                             'Content-Type' => 'application/x-www-form-urlencoded',
-                        ])->asForm()->post($url, $payload);
+                        ])->connectTimeout(3)->timeout(10)->asForm()->post($url, $payload);
 
-                        Log::info('AfricaTalking SMS attempt', ['status' => $resp->status(), 'body' => $resp->body(), 'attempt' => $attempt]);
+                        Log::info('AfricaTalking SMS attempt', ['status' => $resp->status(), 'attempt' => $attempt]);
 
                         if ($resp->successful()) {
                             $sent = true;
@@ -50,14 +52,16 @@ class NotificationService
                             $sleepMs = $baseBackoffMs * (2 ** ($attempt - 1));
                             Log::warning('AfricaTalking non-success response; will retry after backoff', ['attempt' => $attempt, 'sleep_ms' => $sleepMs]);
                             usleep($sleepMs * 1000);
+
                             continue;
                         }
 
                     } catch (\Throwable $e) {
-                        Log::error('AfricaTalking SMS attempt exception: ' . $e->getMessage(), ['attempt' => $attempt]);
+                        Log::error('AfricaTalking SMS attempt exception: '.$e->getMessage(), ['attempt' => $attempt]);
                         if ($attempt < $maxAttempts) {
                             $sleepMs = $baseBackoffMs * (2 ** ($attempt - 1));
                             usleep($sleepMs * 1000);
+
                             continue;
                         }
                     }
@@ -71,7 +75,7 @@ class NotificationService
 
                 // Metrics / reporting
                 if (config('pearlie.report_failures', true)) {
-                    $ex = new \Exception('AfricaTalking SMS not successful after retries for ' . $smsTo);
+                    $ex = new \Exception('AfricaTalking SMS not successful after retries.');
                     try {
                         if (function_exists('Sentry\\captureException')) {
                             \Sentry\captureException($ex);
@@ -81,22 +85,22 @@ class NotificationService
                             report($ex);
                         }
                     } catch (\Throwable $_e) {
-                        Log::error('Failed to report AfricaTalking failure: ' . $_e->getMessage());
+                        Log::error('Failed to report AfricaTalking failure: '.$_e->getMessage());
                     }
                 }
-                Log::info('metric.notification_failure', ['provider' => 'africastalking', 'to' => $smsTo]);
+                Log::info('metric.notification_failure', ['provider' => 'africastalking']);
 
             } catch (\Throwable $e) {
-                Log::error('AfricaTalking SMS failed: ' . $e->getMessage());
+                Log::error('AfricaTalking SMS failed: '.$e->getMessage());
             }
         }
 
         // Twilio fallback
-        $sid = $this->environment('TWILIO_ACCOUNT_SID') ?: $this->environment('TWILIO_SID');
-        $token = $this->environment('TWILIO_TOKEN');
-        $apiKey = $this->environment('TWILIO_API_KEY');
-        $apiSecret = $this->environment('TWILIO_API_SECRET');
-        $from = $this->environment('TWILIO_FROM_NUMBER') ?: $this->environment('TWILIO_FROM');
+        $sid = config('services.twilio.account_sid');
+        $token = config('services.twilio.auth_token');
+        $apiKey = config('services.twilio.api_key');
+        $apiSecret = config('services.twilio.api_secret');
+        $from = config('services.twilio.from_number');
 
         if ($sid && (($apiKey && $apiSecret) || $token) && $from) {
             try {
@@ -111,6 +115,8 @@ class NotificationService
                             ? Http::withBasicAuth($apiKey, $apiSecret)
                             : Http::withBasicAuth($sid, $token);
                         $resp = $request
+                            ->connectTimeout(3)
+                            ->timeout(10)
                             ->asForm()
                             ->post($url, [
                                 'From' => $from,
@@ -118,7 +124,7 @@ class NotificationService
                                 'Body' => $message,
                             ]);
 
-                        Log::info('Twilio SMS attempt', ['status' => $resp->status(), 'body' => $resp->body(), 'attempt' => $attempt]);
+                        Log::info('Twilio SMS attempt', ['status' => $resp->status(), 'attempt' => $attempt]);
 
                         if ($resp->successful()) {
                             return true;
@@ -128,14 +134,16 @@ class NotificationService
                             $sleepMs = $baseBackoffMs * (2 ** ($attempt - 1));
                             Log::warning('Twilio non-success response; will retry after backoff', ['attempt' => $attempt, 'sleep_ms' => $sleepMs]);
                             usleep($sleepMs * 1000);
+
                             continue;
                         }
 
                     } catch (\Throwable $e) {
-                        Log::error('Twilio SMS attempt exception: ' . $e->getMessage(), ['attempt' => $attempt]);
+                        Log::error('Twilio SMS attempt exception: '.$e->getMessage(), ['attempt' => $attempt]);
                         if ($attempt < $maxAttempts) {
                             $sleepMs = $baseBackoffMs * (2 ** ($attempt - 1));
                             usleep($sleepMs * 1000);
+
                             continue;
                         }
                     }
@@ -144,7 +152,7 @@ class NotificationService
                 Log::warning('Twilio SMS not successful after retries.');
 
                 if (config('pearlie.report_failures', true)) {
-                    $ex = new \Exception('Twilio SMS not successful after retries for ' . $smsTo);
+                    $ex = new \Exception('Twilio SMS not successful after retries.');
                     try {
                         if (function_exists('Sentry\\captureException')) {
                             \Sentry\captureException($ex);
@@ -154,34 +162,42 @@ class NotificationService
                             report($ex);
                         }
                     } catch (\Throwable $_e) {
-                        Log::error('Failed to report Twilio failure: ' . $_e->getMessage());
+                        Log::error('Failed to report Twilio failure: '.$_e->getMessage());
                     }
                 }
-                Log::info('metric.notification_failure', ['provider' => 'twilio', 'to' => $smsTo]);
+                Log::info('metric.notification_failure', ['provider' => 'twilio']);
 
             } catch (\Throwable $e) {
-                Log::error('Twilio SMS failed: ' . $e->getMessage());
+                Log::error('Twilio SMS failed: '.$e->getMessage());
             }
         }
 
-        Log::warning('No SMS provider configured; unable to send SMS to ' . $smsTo);
+        Log::warning('No SMS provider configured; unable to send the message.');
+
         return false;
     }
 
     public function sendWhatsApp(string $to, string $message): bool
     {
-        $waId = config('services.whatsapp.phone_number_id') ?: $this->environment('WHATSAPP_PHONE_NUMBER_ID');
-        $waToken = config('services.whatsapp.access_token') ?: $this->environment('WHATSAPP_ACCESS_TOKEN');
+        $tenant = hospital();
+        $usePearlFallback = ! $tenant || $tenant->slug === 'pearl';
+        $waId = $tenant?->whatsapp_phone_number_id
+            ?: ($usePearlFallback ? config('services.whatsapp.phone_number_id') : null);
+        $waToken = $tenant?->whatsapp_access_token
+            ?: ($usePearlFallback ? config('services.whatsapp.access_token') : null);
         $smsTo = $to;
 
         if ($waId && $waToken) {
             try {
-                $waUrl = sprintf('https://graph.facebook.com/%s/%s/messages', config('services.whatsapp.api_version', 'v20.0'), $waId);
+                $apiVersion = $tenant && $tenant->slug !== 'pearl'
+                    ? $tenant->whatsapp_api_version
+                    : config('services.whatsapp.api_version', 'v20.0');
+                $waUrl = sprintf('https://graph.facebook.com/%s/%s/messages', $apiVersion, $waId);
                 $waPayload = [
                     'messaging_product' => 'whatsapp',
                     'to' => preg_replace('/[^0-9+]/', '', $smsTo),
                     'type' => 'text',
-                    'text' => [ 'body' => $message ],
+                    'text' => ['body' => $message],
                 ];
 
                 $maxAttempts = config('pearlie.notification_retry_attempts', 3);
@@ -190,11 +206,11 @@ class NotificationService
                 for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
                     try {
                         $waResp = Http::withHeaders([
-                            'Authorization' => 'Bearer ' . $waToken,
+                            'Authorization' => 'Bearer '.$waToken,
                             'Content-Type' => 'application/json',
-                        ])->post($waUrl, $waPayload);
+                        ])->connectTimeout(3)->timeout(10)->post($waUrl, $waPayload);
 
-                        Log::info('WhatsApp attempt', ['status' => $waResp->status(), 'body' => $waResp->body(), 'attempt' => $attempt]);
+                        Log::info('WhatsApp attempt', ['status' => $waResp->status(), 'attempt' => $attempt]);
 
                         if ($waResp->successful()) {
                             return true;
@@ -204,14 +220,16 @@ class NotificationService
                             $sleepMs = $baseBackoffMs * (2 ** ($attempt - 1));
                             Log::warning('WhatsApp non-success response; will retry after backoff', ['attempt' => $attempt, 'sleep_ms' => $sleepMs]);
                             usleep($sleepMs * 1000);
+
                             continue;
                         }
 
                     } catch (\Throwable $e) {
-                        Log::error('WhatsApp attempt exception: ' . $e->getMessage(), ['attempt' => $attempt]);
+                        Log::error('WhatsApp attempt exception: '.$e->getMessage(), ['attempt' => $attempt]);
                         if ($attempt < $maxAttempts) {
                             $sleepMs = $baseBackoffMs * (2 ** ($attempt - 1));
                             usleep($sleepMs * 1000);
+
                             continue;
                         }
                     }
@@ -220,7 +238,7 @@ class NotificationService
                 Log::warning('WhatsApp not successful after retries.');
 
                 if (config('pearlie.report_failures', true)) {
-                    $ex = new \Exception('WhatsApp not successful after retries for ' . $smsTo);
+                    $ex = new \Exception('WhatsApp not successful after retries.');
                     try {
                         if (function_exists('Sentry\\captureException')) {
                             \Sentry\captureException($ex);
@@ -230,38 +248,18 @@ class NotificationService
                             report($ex);
                         }
                     } catch (\Throwable $_e) {
-                        Log::error('Failed to report WhatsApp failure: ' . $_e->getMessage());
+                        Log::error('Failed to report WhatsApp failure: '.$_e->getMessage());
                     }
                 }
-                Log::info('metric.notification_failure', ['provider' => 'whatsapp', 'to' => $smsTo]);
+                Log::info('metric.notification_failure', ['provider' => 'whatsapp']);
 
             } catch (\Throwable $e) {
-                Log::error('WhatsApp send failed: ' . $e->getMessage());
+                Log::error('WhatsApp send failed: '.$e->getMessage());
             }
         }
 
-        Log::info('No WhatsApp credentials configured; skipping WhatsApp to ' . $smsTo);
+        Log::info('No WhatsApp credentials configured; skipping the message.');
+
         return false;
-    }
-
-    private function environment(string $key): ?string
-    {
-        $value = getenv($key);
-
-        if ($value !== false && $value !== '') {
-            return $value;
-        }
-
-        if (! empty($_ENV[$key])) {
-            return $_ENV[$key];
-        }
-
-        if (! empty($_SERVER[$key])) {
-            return $_SERVER[$key];
-        }
-
-        $value = env($key);
-
-        return $value === null ? null : (string) $value;
     }
 }

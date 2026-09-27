@@ -11,10 +11,9 @@
         <input type="text" name="q" class="w-full rounded-lg border-slate-200 text-sm focus:border-cyan-500 focus:ring-cyan-500 sm:max-w-sm" placeholder="Search name, phone or reason" value="{{ request('q') }}" />
         <select name="status" class="rounded-lg border-slate-200 text-sm focus:border-cyan-500 focus:ring-cyan-500">
             <option value="">All statuses</option>
-            <option value="pending" {{ request('status')=='pending' ? 'selected':'' }}>Pending</option>
-            <option value="confirmed" {{ request('status')=='confirmed' ? 'selected':'' }}>Confirmed</option>
-            <option value="cancelled" {{ request('status')=='cancelled' ? 'selected':'' }}>Cancelled</option>
-            <option value="completed" {{ request('status')=='completed' ? 'selected':'' }}>Completed</option>
+            @foreach (\App\Models\AppointmentRequest::statuses() as $status)
+                <option value="{{ $status }}" @selected(request('status') === $status)>{{ ucfirst(str_replace('_', ' ', $status)) }}</option>
+            @endforeach
         </select>
         <button class="rounded-lg bg-slate-950 px-5 py-2 text-sm font-semibold text-white hover:bg-cyan-700">Filter</button>
     </form>
@@ -36,35 +35,39 @@
         <button class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200">Apply selected</button>
     </div>
     <div class="overflow-x-auto"><table class="min-w-full text-left text-sm">
-        <thead>
+        <thead class="bg-slate-50">
             <tr class="border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500">
-                <th><a href="?sort=id&dir={{ request('dir','desc')=='asc'?'desc':'asc' }}">ID</a></th>
-                <th>Session</th>
-                <th>Name</th>
-                <th>Phone</th>
-                <th>Preferred Date</th>
-                <th>Status</th>
-                <th>Created</th>
-                <th>Actions</th>
+                <th scope="col" class="px-4 py-3"><span class="sr-only">Select</span></th>
+                <th scope="col" class="px-4 py-3"><a href="?sort=id&dir={{ request('dir', 'desc') === 'asc' ? 'desc' : 'asc' }}" class="hover:text-slate-900">ID</a></th>
+                <th scope="col" class="px-4 py-3">Session</th>
+                <th scope="col" class="px-4 py-3">Name</th>
+                <th scope="col" class="px-4 py-3">Phone</th>
+                <th scope="col" class="px-4 py-3">Preferred Date</th>
+                <th scope="col" class="px-4 py-3">Status</th>
+                <th scope="col" class="px-4 py-3">Created</th>
+                <th scope="col" class="px-4 py-3">Actions</th>
             </tr>
         </thead>
         <tbody>
             @forelse($appointments as $a)
             <tr class="border-b border-slate-100 transition hover:bg-slate-50">
-                            <td><input type="checkbox" name="ids[]" value="{{ $a->id }}"/></td>
-                            <td>{{ $a->id }}</td>
-                            <td>{{ $a->session_id }}</td>
-                            <td>{{ $a->name }}</td>
-                            <td>{{ $a->phone }}</td>
-                            <td>{{ $a->preferred_date }}</td>
-                            <td><span class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">{{ ucfirst($a->status) }}</span></td>
-                            <td>{{ $a->created_at }}</td>
-                            <td>
-                                <a href="{{ route('admin.appointments.show', $a->id) }}" class="btn btn-sm btn-primary">Open</a>
-                            </td>
-                        </tr>
+                <td class="px-4 py-3"><input type="checkbox" name="ids[]" value="{{ $a->id }}" aria-label="Select appointment {{ $a->id }}" /></td>
+                <td class="whitespace-nowrap px-4 py-3 font-semibold text-slate-800">{{ $a->id }}</td>
+                <td class="max-w-48 truncate px-4 py-3 text-slate-600">{{ $a->session_id }}</td>
+                <td class="px-4 py-3 font-medium text-slate-800">{{ $a->name }}</td>
+                <td class="whitespace-nowrap px-4 py-3 text-slate-600">{{ $a->phone }}</td>
+                <td class="whitespace-nowrap px-4 py-3 text-slate-600">{{ $a->preferred_date?->format('M j, Y') }}</td>
+                <td class="px-4 py-3"><span class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold capitalize text-amber-700">{{ str_replace('_', ' ', $a->status) }}</span></td>
+                <td class="whitespace-nowrap px-4 py-3 text-slate-500">{{ $a->created_at?->format('M j, Y') }}</td>
+                <td class="whitespace-nowrap px-4 py-3 text-right">
+                    <a href="{{ route('admin.appointments.show', $a->id) }}" class="rounded-lg bg-[#1a5276] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#0a2f44]">Open</a>
+                </td>
+            </tr>
             @empty
-            <tr><td colspan="8">No appointment requests found.</td></tr>
+            <tr><td colspan="9" class="px-5 py-14 text-center">
+                <p class="font-semibold text-slate-800">No appointment requests found.</p>
+                <p class="mt-1 text-sm text-slate-500">Try clearing or adjusting the search and status filters.</p>
+            </td></tr>
             @endforelse
         </tbody>
     </table></div>
