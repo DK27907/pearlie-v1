@@ -50,6 +50,62 @@ class PaymentLifecycleTest extends TestCase
         Queue::assertPushed(SendPaymentNotification::class, 1);
     }
 
+    public function test_successful_tenant_callback_records_payment_event(): void
+    {
+        [$hospital, $appointment, $payment] = $this->createPaymentScenario(MpesaPayment::STATUS_INITIATED);
+        $this->configureAllowlistedProductionCallback($payment, 0);
+        $this->freezeTime();
+        Queue::fake([SendPaymentNotification::class]);
+
+        $this->withServerVariables(['REMOTE_ADDR' => '196.201.212.10'])
+            ->postJson(
+                '/api/mpesa/callback/'.$hospital->slug,
+                $this->callbackPayload($payment, 0),
+            )
+            ->assertOk();
+
+        $this->assertDatabaseHas('mpesa_payments', [
+            'id' => $payment->id,
+            'status' => MpesaPayment::STATUS_COMPLETED,
+        ]);
+        $this->assertSame(
+            1,
+            PaymentEvent::query()->where('payment_id', $payment->id)->count(),
+        );
+        $event = PaymentEvent::query()->where('payment_id', $payment->id)->firstOrFail();
+        $this->assertSame('payment_completed', $event->event);
+        $this->assertTrue($event->created_at->between(now()->subSeconds(2), now()->addSeconds(2)));
+    }
+
+    public function test_failed_tenant_callback_records_payment_event(): void
+    {
+        [$hospital, $appointment, $payment] = $this->createPaymentScenario(MpesaPayment::STATUS_INITIATED);
+        $this->configureAllowlistedProductionCallback($payment, 1037);
+        Queue::fake([SendPaymentNotification::class]);
+
+        $this->withServerVariables(['REMOTE_ADDR' => '196.201.212.10'])
+            ->postJson(
+                '/api/mpesa/callback/'.$hospital->slug,
+                $this->callbackPayload($payment, 1037),
+            )
+            ->assertOk();
+
+        $this->assertDatabaseHas('mpesa_payments', [
+            'id' => $payment->id,
+            'status' => MpesaPayment::STATUS_FAILED,
+        ]);
+        $this->assertDatabaseHas('appointment_requests', [
+            'id' => $appointment->id,
+            'status' => AppointmentRequest::STATUS_CANCELLED,
+        ]);
+        $this->assertSame(
+            1,
+            PaymentEvent::query()->where('payment_id', $payment->id)->count(),
+        );
+        $event = PaymentEvent::query()->where('payment_id', $payment->id)->firstOrFail();
+        $this->assertSame('payment_failed', $event->event);
+    }
+
     public function test_successful_callback_confirms_an_expired_booking_after_late_payment(): void
     {
         [$hospital, $appointment, $payment] = $this->createPaymentScenario();
@@ -563,7 +619,7 @@ class PaymentLifecycleTest extends TestCase
     /**
      * @return array{Hospital, AppointmentRequest, MpesaPayment}
      */
-    private function createPaymentScenario(): array
+    private function createPaymentScenario(string $paymentStatus = MpesaPayment::STATUS_PENDING): array
     {
         $hospital = Hospital::factory()->create([
             'subscription_plan' => 'enterprise',
@@ -589,6 +645,7 @@ class PaymentLifecycleTest extends TestCase
             ->create([
                 'amount' => 500,
                 'phone' => '254712345678',
+                'status' => $paymentStatus,
             ]);
 
         return [$hospital, $appointment, $payment];
@@ -605,6 +662,34 @@ class PaymentLifecycleTest extends TestCase
             'mpesa.passkey' => 'test-passkey',
             'mpesa.shortcode' => '174379',
             'mpesa.timeout' => 5,
+        ]);
+    }
+
+    private function configureAllowlistedProductionCallback(MpesaPayment $payment, int $resultCode): void
+    {
+        app()->detectEnvironment(static fn (): string => 'production');
+        config([
+            'mpesa.environment' => 'sandbox',
+            'mpesa.skip_callback_verification_in_local' => false,
+            'mpesa.consumer_key' => 'test-consumer',
+            'mpesa.consumer_secret' => 'test-secret',
+            'mpesa.passkey' => 'test-passkey',
+            'mpesa.shortcode' => '174379',
+            'mpesa.timeout' => 5,
+        ]);
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://sandbox.safaricom.co.ke/oauth/v1/generate*' => Http::response([
+                'access_token' => 'test-access-token',
+            ]),
+            'https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query' => Http::response([
+                'ResponseCode' => '0',
+                'CheckoutRequestID' => $payment->checkout_request_id,
+                'ResultCode' => $resultCode,
+                'ResultDesc' => $resultCode === 0
+                    ? 'The service request is processed successfully.'
+                    : 'The request was cancelled.',
+            ]),
         ]);
     }
 

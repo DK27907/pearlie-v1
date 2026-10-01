@@ -97,6 +97,63 @@ class MpesaCallbackIpAllowlistTest extends TestCase
             ->assertExactJson(['ResultCode' => 0, 'ResultDesc' => 'Accepted']);
     }
 
+    public function test_legacy_web_callback_rejects_non_allowlisted_ip(): void
+    {
+        app()->detectEnvironment(static fn (): string => 'production');
+        config([
+            'mpesa.enforce_safaricom_ip_allowlist' => true,
+            'mpesa.allowlist_bypass_environments' => [],
+            'mpesa.safaricom_ip_allowlist' => ['196.201.212.0/22'],
+        ]);
+        Http::preventStrayRequests();
+
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.5'])
+            ->postJson('/mpesa/callback', $this->callbackPayload('checkout-legacy-rejected'))
+            ->assertForbidden()
+            ->assertExactJson([
+                'ResultCode' => 1,
+                'ResultDesc' => 'Unauthorized source',
+            ]);
+    }
+
+    public function test_legacy_web_callback_accepts_safaricom_ip(): void
+    {
+        $this->configureAllowlistForLocalRequests(['196.201.212.0/22']);
+        Http::preventStrayRequests();
+
+        $hospital = Hospital::withoutGlobalScopes()->firstOrFail();
+        app()->instance('currentHospital', $hospital);
+        $payment = MpesaPayment::factory()->create([
+            'checkout_request_id' => 'checkout-legacy-accepted',
+        ]);
+        $payload = [
+            'Body' => [
+                'stkCallback' => [
+                    'CheckoutRequestID' => $payment->checkout_request_id,
+                    'ResultCode' => 0,
+                    'ResultDesc' => 'Accepted',
+                    'CallbackMetadata' => [
+                        'Item' => [
+                            ['Name' => 'Amount', 'Value' => 500],
+                            ['Name' => 'MpesaReceiptNumber', 'Value' => 'LEGACY123'],
+                            ['Name' => 'PhoneNumber', 'Value' => 254712345678],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $this->withServerVariables(['REMOTE_ADDR' => '196.201.212.10'])
+            ->postJson('/mpesa/callback', $payload)
+            ->assertOk()
+            ->assertExactJson(['ResultCode' => 0, 'ResultDesc' => 'Accepted']);
+
+        $this->assertDatabaseHas('mpesa_payments', [
+            'id' => $payment->id,
+            'status' => MpesaPayment::STATUS_COMPLETED,
+        ]);
+    }
+
     /**
      * @param  list<string>  $ranges
      */

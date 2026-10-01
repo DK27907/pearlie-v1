@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\MpesaPayment;
+use App\Models\PaymentEvent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -57,11 +59,23 @@ class MpesaVerifySandboxCredentialsTest extends TestCase
             '/mpesa/stkpush/v1/processrequest',
         ) && $request['BusinessShortCode'] === '174379'
             && $request['TransactionType'] === 'CustomerPayBillOnline'
-            && $request['Amount'] === 500
+            && $request['Amount'] === 1
             && $request['PartyA'] === '254712345678'
             && $request['PhoneNumber'] === '254712345678'
             && $request['CallBackURL'] === 'https://example.test/api/mpesa/callback'
             && isset($request['Password'], $request['Timestamp']));
+        $payment = MpesaPayment::query()
+            ->where('checkout_request_id', 'ws_CO_sandbox')
+            ->firstOrFail();
+        $this->assertSame(MpesaPayment::STATUS_PENDING, $payment->status);
+        $this->assertDatabaseHas('payment_events', [
+            'payment_id' => $payment->id,
+            'event' => 'payment_initiated',
+        ]);
+        $this->assertSame(
+            1,
+            PaymentEvent::query()->where('payment_id', $payment->id)->count(),
+        );
     }
 
     public function test_live_mode_is_refused_in_production(): void
@@ -88,6 +102,7 @@ class MpesaVerifySandboxCredentialsTest extends TestCase
             'mpesa.shortcode' => '174379',
             'mpesa.callback_url' => 'https://example.test/api/mpesa/callback',
             'mpesa.test_phone' => '254712345678',
+            'mpesa.test_amount' => 1,
             'mpesa.appointment_deposit' => 500,
             'mpesa.account_reference' => 'TestHospital',
             'mpesa.transaction_description' => 'Sandbox verification',

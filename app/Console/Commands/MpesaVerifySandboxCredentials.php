@@ -2,11 +2,14 @@
 
 namespace App\Console\Commands;
 
+use App\Models\MpesaPayment;
+use App\Services\PaymentLifecycleService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -14,7 +17,7 @@ use Illuminate\Support\Facades\Log;
 #[Description('Verify Safaricom sandbox credentials without initiating a payment by default')]
 class MpesaVerifySandboxCredentials extends Command
 {
-    public function handle(): int
+    public function handle(PaymentLifecycleService $lifecycle): int
     {
         $isLive = (bool) $this->option('live');
         if ($isLive && app()->environment('production')) {
@@ -104,7 +107,7 @@ class MpesaVerifySandboxCredentials extends Command
 
         $timestamp = now()->format('YmdHis');
         $password = base64_encode((string) $shortcode.(string) $passkey.$timestamp);
-        $amount = max(1, (int) round((float) config('mpesa.appointment_deposit', 500)));
+        $amount = max(1, (int) config('mpesa.test_amount', 1));
 
         try {
             $stkResponse = Http::timeout($timeout)
@@ -133,6 +136,7 @@ class MpesaVerifySandboxCredentials extends Command
         }
 
         $data = $stkResponse->json();
+        $data = is_array($data) ? $data : [];
         $this->table(
             ['CheckoutRequestID', 'MerchantRequestID', 'ResponseCode', 'ResponseDescription'],
             [[
@@ -143,7 +147,36 @@ class MpesaVerifySandboxCredentials extends Command
             ]],
         );
 
-        return (string) ($data['ResponseCode'] ?? '') === '0' ? self::SUCCESS : self::FAILURE;
+        if ((string) ($data['ResponseCode'] ?? '') !== '0') {
+            return self::FAILURE;
+        }
+
+        $checkoutRequestId = $data['CheckoutRequestID'] ?? null;
+        if (! is_string($checkoutRequestId) || $checkoutRequestId === '') {
+            $this->error('Safaricom accepted the STK request without returning a CheckoutRequestID.');
+
+            return self::FAILURE;
+        }
+
+        DB::transaction(function () use ($lifecycle, $data, $checkoutRequestId, $phone, $amount): void {
+            $payment = MpesaPayment::query()->create([
+                'checkout_request_id' => $checkoutRequestId,
+                'merchant_request_id' => $data['MerchantRequestID'] ?? null,
+                'phone' => (string) $phone,
+                'amount' => $amount,
+                'account_reference' => (string) config('mpesa.account_reference'),
+                'transaction_desc' => (string) config('mpesa.transaction_description'),
+                'status' => MpesaPayment::STATUS_PENDING,
+            ]);
+
+            $lifecycle->recordEvent($payment, 'payment_initiated', [
+                'checkout_request_id' => $checkoutRequestId,
+                'amount' => $amount,
+                'source' => 'sandbox_credential_verification',
+            ]);
+        });
+
+        return self::SUCCESS;
     }
 
     private function isConfigured(mixed $value): bool
