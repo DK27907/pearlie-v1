@@ -56,7 +56,8 @@ class MpesaCallbackVerificationTest extends TestCase
             'checkout_request_id' => 'checkout-production',
         ]);
 
-        $this->postJson('/api/mpesa/callback', $this->makeCallback('checkout-production'))
+        $this->withServerVariables(['REMOTE_ADDR' => '196.201.212.10'])
+            ->postJson('/api/mpesa/callback', $this->makeCallback('checkout-production'))
             ->assertOk();
 
         $this->assertDatabaseHas('mpesa_payments', [
@@ -102,10 +103,11 @@ class MpesaCallbackVerificationTest extends TestCase
             'checkout_request_id' => 'checkout-sandbox-production-app',
         ]);
 
-        $this->postJson(
-            '/api/mpesa/callback',
-            $this->makeCallback('checkout-sandbox-production-app'),
-        )->assertOk();
+        $this->withServerVariables(['REMOTE_ADDR' => '196.201.212.10'])
+            ->postJson(
+                '/api/mpesa/callback',
+                $this->makeCallback('checkout-sandbox-production-app'),
+            )->assertOk();
 
         $this->assertDatabaseHas('mpesa_payments', [
             'id' => $payment->id,
@@ -165,6 +167,7 @@ class MpesaCallbackVerificationTest extends TestCase
 
     public function test_callback_for_unknown_checkout_id_is_logged(): void
     {
+        Log::shouldReceive('debug')->zeroOrMoreTimes();
         Log::shouldReceive('info')
             ->once()
             ->with('Received an M-Pesa callback.', Mockery::on(
@@ -254,6 +257,7 @@ class MpesaCallbackVerificationTest extends TestCase
         $payment = MpesaPayment::factory()->create([
             'checkout_request_id' => 'checkout-without-receipt',
         ]);
+        Log::shouldReceive('debug')->zeroOrMoreTimes();
         Log::shouldReceive('info')
             ->once()
             ->with('Received an M-Pesa callback.', Mockery::on(
@@ -322,6 +326,7 @@ class MpesaCallbackVerificationTest extends TestCase
             ->once()
             ->andThrow(new RuntimeException('Synthetic callback failure.'));
         $this->app->instance(MpesaService::class, $mpesa);
+        Log::shouldReceive('debug')->zeroOrMoreTimes();
         Log::shouldReceive('error')
             ->once()
             ->with('M-Pesa callback controller exception', Mockery::on(
