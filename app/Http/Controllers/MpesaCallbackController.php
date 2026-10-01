@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\AppointmentRequest;
 use App\Models\MpesaPayment;
 use App\Services\MpesaService;
-use App\Services\WhatsAppService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -13,33 +12,33 @@ use Throwable;
 
 class MpesaCallbackController extends Controller
 {
-    public function __construct(
-        private readonly MpesaService $mpesa,
-        private readonly WhatsAppService $whatsapp,
-    ) {}
+    public function __construct(private readonly MpesaService $mpesa) {}
 
     public function handleConfirmation(Request $request): JsonResponse
     {
-        $payment = $this->mpesa->handleCallback($request->all());
+        $checkoutRequestId = null;
 
-        if ($payment?->isCompleted() && $payment->appointment && ! $payment->notified_at) {
-            try {
-                if ($this->whatsapp->sendAppointmentConfirmation($payment->appointment)) {
-                    $payment->forceFill(['notified_at' => now()])->save();
-                }
-            } catch (Throwable $exception) {
-                Log::error('Unable to send WhatsApp confirmation for completed M-Pesa payment.', [
-                    'payment_id' => $payment->id,
-                    'appointment_id' => $payment->appointment_request_id,
-                    'exception' => $exception,
-                ]);
-            }
+        try {
+            $checkoutRequestId = data_get($request->all(), 'Body.stkCallback.CheckoutRequestID');
+            $checkoutRequestId = is_string($checkoutRequestId) ? $checkoutRequestId : null;
+            $this->mpesa->handleCallback($request->all());
+
+            return response()->json([
+                'ResultCode' => 0,
+                'ResultDesc' => 'Accepted',
+            ]);
+        } catch (Throwable $exception) {
+            Log::error('M-Pesa callback controller exception', [
+                'checkout_request_id' => $checkoutRequestId,
+                'message' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'ResultCode' => 0,
+                'ResultDesc' => 'Accepted',
+            ]);
         }
-
-        return response()->json([
-            'ResultCode' => 0,
-            'ResultDesc' => 'Accepted',
-        ]);
     }
 
     /**

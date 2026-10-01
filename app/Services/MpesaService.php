@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\AppointmentRequest;
 use App\Models\MpesaPayment;
+use App\Models\SlotHold;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -14,6 +16,10 @@ use Throwable;
 
 class MpesaService
 {
+    public function __construct(
+        private readonly PaymentLifecycleService $lifecycle,
+    ) {}
+
     public function getAccessToken(?string $checkoutRequestId = null): ?string
     {
         try {
@@ -48,6 +54,8 @@ class MpesaService
         string $transactionDesc,
         ?int $appointmentId = null,
     ): array {
+        $slotHoldId = null;
+
         try {
             if (hospital() && ! hospital()->hasFeature('mpesa')) {
                 throw new RuntimeException('M-Pesa payments are not enabled for this hospital plan.');
@@ -66,6 +74,10 @@ class MpesaService
             if (! $token) {
                 throw new RuntimeException('M-Pesa did not return an access token.');
             }
+
+            $slotHoldId = $appointmentId === null
+                ? null
+                : $this->reserveAppointmentSlot($appointmentId);
 
             $shortcode = (string) $config['shortcode'];
             $timestamp = now()->format('YmdHis');
@@ -119,6 +131,10 @@ class MpesaService
                     'transaction_desc' => $transactionDesc,
                     'status' => MpesaPayment::STATUS_PENDING,
                 ]);
+                $this->lifecycle->recordEvent($payment, 'payment_initiated', [
+                    'checkout_request_id' => $payment->checkout_request_id,
+                    'amount' => $amount,
+                ]);
 
                 if ($appointment) {
                     $appointment->forceFill([
@@ -146,6 +162,21 @@ class MpesaService
                     ?? 'An M-Pesa payment prompt was sent to your phone.',
             ];
         } catch (Throwable $exception) {
+            if ($slotHoldId !== null) {
+                SlotHold::query()->whereKey($slotHoldId)->delete();
+            }
+
+            if ($appointmentId !== null) {
+                try {
+                    $this->lifecycle->cancelAppointmentAfterFailedInitiation($appointmentId);
+                } catch (Throwable $lifecycleException) {
+                    Log::error('Unable to cancel an appointment after M-Pesa initiation failed.', [
+                        'appointment_id' => $appointmentId,
+                        'exception' => $lifecycleException,
+                    ]);
+                }
+            }
+
             Log::error('Unable to initiate an M-Pesa STK push.', [
                 'appointment_id' => $appointmentId,
                 'amount' => $amount,
@@ -165,6 +196,12 @@ class MpesaService
             $checkoutRequestId = is_array($callback)
                 ? ($callback['CheckoutRequestID'] ?? null)
                 : null;
+            $checkoutRequestId = is_string($checkoutRequestId) ? $checkoutRequestId : null;
+
+            Log::info('Received an M-Pesa callback.', [
+                'checkout_request_id' => $checkoutRequestId,
+                'payload' => $callbackData,
+            ]);
 
             if (! is_array($callback)
                 || ! is_string($checkoutRequestId)
@@ -294,63 +331,59 @@ class MpesaService
                     ]);
                 }
 
-                if ($payment->isCompleted() || $payment->isFailed()) {
+                if ($payment->isCompleted()
+                    || $payment->isFailed()
+                    || $payment->status === MpesaPayment::STATUS_TIMEOUT
+                ) {
                     return $payment->load('appointment');
                 }
 
                 $payment->merchant_request_id = $callback['MerchantRequestID']
                     ?? $payment->merchant_request_id;
                 $payment->callback_payload = $callbackData;
+                $failureReason = null;
+                $receiptNumber = null;
 
                 if ($resultCode === 0) {
-                    $receiptNumber = $metadata['MpesaReceiptNumber'] ?? null;
                     $amount = $metadata['Amount'] ?? null;
                     $phone = $metadata['PhoneNumber'] ?? null;
 
+                    if (! is_numeric($amount)
+                        || ! is_finite((float) $amount)
+                        || abs((float) $amount - $payment->amount) > 0.0001
+                    ) {
+                        Log::warning('M-Pesa callback amount did not match the stored payment amount.', [
+                            'checkout_request_id' => $checkoutRequestId,
+                        ]);
+
+                        $failureReason = 'amount_mismatch';
+                    }
+
+                    $callbackPhone = $failureReason === null
+                        ? $this->comparablePhone($phone)
+                        : null;
+                    $storedPhone = $failureReason === null
+                        ? $this->comparablePhone($payment->phone)
+                        : null;
+                    if ($failureReason === null
+                        && ($callbackPhone === null || $storedPhone === null || $callbackPhone !== $storedPhone)
+                    ) {
+                        Log::warning('M-Pesa callback phone did not match the stored payment phone.', [
+                            'checkout_request_id' => $checkoutRequestId,
+                        ]);
+
+                        $failureReason = 'phone_mismatch';
+                    }
+
+                    $receiptNumber = $metadata['MpesaReceiptNumber'] ?? null;
                     if (! is_string($receiptNumber) || trim($receiptNumber) === '') {
                         Log::warning('M-Pesa callback did not include an M-Pesa receipt number.', [
                             'checkout_request_id' => $checkoutRequestId,
                         ]);
                     }
-
-                    if (is_numeric($amount)
-                        && is_finite((float) $amount)
-                        && abs((float) $amount - $payment->amount) > 0.0001
-                    ) {
-                        Log::warning('M-Pesa callback amount did not match the stored payment amount.', [
-                            'checkout_request_id' => $checkoutRequestId,
-                        ]);
-                    }
-
-                    $callbackPhone = (is_string($phone) || is_numeric($phone))
-                        ? preg_replace('/\D+/', '', (string) $phone)
-                        : '';
-                    $storedPhone = preg_replace('/\D+/', '', $payment->phone) ?? '';
-
-                    if ($callbackPhone !== '' && $storedPhone !== '' && $callbackPhone !== $storedPhone) {
-                        Log::warning('M-Pesa callback phone did not match the stored payment phone.', [
-                            'checkout_request_id' => $checkoutRequestId,
-                        ]);
-                    }
-
-                    $payment->markAsCompleted([
-                        'result_code' => $resultCode,
-                        'result_description' => $callback['ResultDesc'] ?? 'Payment completed successfully.',
-                        'mpesa_receipt' => is_string($receiptNumber) ? $receiptNumber : null,
-                        'callback_payload' => $callbackData,
-                    ]);
-                } else {
-                    $resultDescription = (string) ($callback['ResultDesc'] ?? 'M-Pesa payment failed.');
-                    $payment->markAsFailed($resultDescription, $resultCode);
-                    $payment->forceFill(['callback_payload' => $callbackData])->save();
-
-                    Log::warning('M-Pesa payment failed', [
-                        'checkout_request_id' => $checkoutRequestId,
-                        'result_code' => $resultCode,
-                        'result_desc' => $resultDescription,
-                    ]);
                 }
 
+                $payment->save();
                 $appointment = $payment->appointment;
                 if ($payment->appointment_request_id !== null && ! $appointment) {
                     Log::warning('M-Pesa payment appointment was not found.', [
@@ -360,43 +393,77 @@ class MpesaService
                 }
 
                 if ($appointment) {
-                    $appointmentAttributes = [
-                        'payment_status' => $resultCode === 0 ? 'paid' : 'unpaid',
-                        'payment_amount' => $payment->amount,
+                    $isSuccessful = $resultCode === 0 && $failureReason === null;
+                    $appointment->forceFill([
                         'mpesa_result_code' => $resultCode,
-                        'mpesa_result_description' => $callback['ResultDesc'] ?? null,
-                        'mpesa_receipt' => $resultCode === 0 && is_string($metadata['MpesaReceiptNumber'] ?? null)
-                            ? $metadata['MpesaReceiptNumber']
+                        'mpesa_result_description' => $failureReason
+                            ?? $callback['ResultDesc']
+                            ?? null,
+                        'mpesa_receipt' => $isSuccessful && is_string($receiptNumber)
+                            ? trim($receiptNumber)
                             : null,
-                        'paid_at' => $resultCode === 0 ? now() : null,
                         'mpesa_merchant_request_id' => $callback['MerchantRequestID']
                             ?? $appointment->mpesa_merchant_request_id,
-                    ];
+                    ])->save();
 
-                    $hospital = $appointment->hospital;
-                    $autoConfirmed = $resultCode === 0
-                        && $appointment->status === AppointmentRequest::STATUS_PENDING
-                        && $hospital?->shouldAutoConfirmPaidAppointments() === true;
+                    if ($isSuccessful) {
+                        $this->lifecycle->markCompleted($payment, [
+                            'result_code' => $resultCode,
+                            'result_description' => $callback['ResultDesc'] ?? 'Payment completed successfully.',
+                            'mpesa_receipt' => is_string($receiptNumber) && trim($receiptNumber) !== ''
+                                ? trim($receiptNumber)
+                                : null,
+                            'callback_payload' => $callbackData,
+                        ]);
+                    } else {
+                        $failureReason ??= (string) ($callback['ResultDesc'] ?? 'M-Pesa payment failed.');
+                        $this->lifecycle->markFailed(
+                            $payment,
+                            $failureReason,
+                            $resultCode,
+                            $callbackData,
+                        );
 
-                    if ($autoConfirmed) {
-                        $appointmentAttributes['status'] = AppointmentRequest::STATUS_CONFIRMED;
-                        $appointmentAttributes['status_updated_at'] = now();
+                        Log::warning('M-Pesa payment failed.', [
+                            'checkout_request_id' => $checkoutRequestId,
+                            'result_code' => $resultCode,
+                            'result_desc' => $failureReason,
+                        ]);
                     }
 
-                    $appointment->forceFill($appointmentAttributes)->save();
+                    $updatedAppointment = $appointment->fresh();
 
-                    Log::info('M-Pesa appointment auto-confirm decision.', [
+                    Log::info('M-Pesa appointment lifecycle transition applied.', [
                         'appointment_id' => $appointment->id,
                         'hospital_id' => $appointment->hospital_id,
-                        'auto_confirmed' => $autoConfirmed,
-                        'result_code' => $resultCode,
+                        'appointment_status' => $updatedAppointment->status,
+                        'payment_status' => $updatedAppointment->payment_status,
                     ]);
 
                     Log::info('M-Pesa appointment payment status updated.', [
                         'checkout_request_id' => $checkoutRequestId,
                         'appointment_id' => $appointment->id,
-                        'payment_status' => $appointment->payment_status,
+                        'payment_status' => $updatedAppointment->payment_status,
                     ]);
+                } else {
+                    if ($resultCode === 0 && $failureReason === null) {
+                        $this->lifecycle->markCompleted($payment, [
+                            'result_code' => $resultCode,
+                            'result_description' => $callback['ResultDesc'] ?? 'Payment completed successfully.',
+                            'mpesa_receipt' => is_string($receiptNumber) && trim($receiptNumber) !== ''
+                                ? trim($receiptNumber)
+                                : null,
+                            'callback_payload' => $callbackData,
+                        ]);
+                    } else {
+                        $failureReason ??= (string) ($callback['ResultDesc'] ?? 'M-Pesa payment failed.');
+                        $this->lifecycle->markFailed(
+                            $payment,
+                            $failureReason,
+                            $resultCode,
+                            $callbackData,
+                        );
+                    }
                 }
 
                 return $payment->load('appointment');
@@ -409,6 +476,56 @@ class MpesaService
 
             throw $exception;
         }
+    }
+
+    private function reserveAppointmentSlot(int $appointmentId): ?int
+    {
+        return DB::transaction(function () use ($appointmentId): ?int {
+            $appointment = AppointmentRequest::query()
+                ->lockForUpdate()
+                ->findOrFail($appointmentId);
+
+            if (! $appointment->doctor_id || ! $appointment->preferred_date
+                || ! $appointment->slot_start_time || ! $appointment->slot_end_time
+            ) {
+                return null;
+            }
+
+            SlotHold::query()
+                ->where('appointment_request_id', $appointment->id)
+                ->delete();
+
+            $slotDate = CarbonImmutable::parse($appointment->preferred_date)->toDateString();
+            $hold = SlotHold::query()->create([
+                'hospital_id' => $appointment->hospital_id,
+                'doctor_id' => $appointment->doctor_id,
+                'appointment_request_id' => $appointment->id,
+                'slot_start_at' => $slotDate.' '.$appointment->slot_start_time,
+                'slot_end_at' => $slotDate.' '.$appointment->slot_end_time,
+                'expires_at' => now()->addMinutes(5),
+            ]);
+
+            return $hold->id;
+        });
+    }
+
+    private function comparablePhone(mixed $phone): ?string
+    {
+        if (! is_string($phone) && ! is_numeric($phone)) {
+            return null;
+        }
+
+        $digits = preg_replace('/\D+/', '', (string) $phone) ?? '';
+
+        if (preg_match('/^0([71]\d{8})$/', $digits, $matches)) {
+            return '254'.$matches[1];
+        }
+
+        if (preg_match('/^([71]\d{8})$/', $digits, $matches)) {
+            return '254'.$matches[1];
+        }
+
+        return preg_match('/^254[71]\d{8}$/', $digits) ? $digits : null;
     }
 
     /**

@@ -23,6 +23,8 @@ class AppointmentRequest extends Model
 
     public const STATUS_NO_SHOW = 'no_show';
 
+    public const STATUS_EXPIRED = 'expired';
+
     protected $fillable = [
         'session_id',
         'name',
@@ -80,6 +82,7 @@ class AppointmentRequest extends Model
             self::STATUS_CANCELLED,
             self::STATUS_COMPLETED,
             self::STATUS_NO_SHOW,
+            self::STATUS_EXPIRED,
         ];
     }
 

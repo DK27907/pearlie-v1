@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\SendPaymentNotification;
 use App\Models\AppointmentRequest;
 use App\Models\Hospital;
 use App\Models\MpesaPayment;
@@ -9,6 +10,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class MpesaAutoConfirmTest extends TestCase
@@ -19,6 +21,7 @@ class MpesaAutoConfirmTest extends TestCase
     {
         [$hospital, $appointment, $payment] = $this->createPaymentScenario(true);
         $this->fakeCallback(0);
+        Queue::fake([SendPaymentNotification::class]);
         Log::spy();
 
         $this->postJson('/api/mpesa/callback/'.$hospital->slug, $this->callbackPayload($payment, 0))
@@ -33,18 +36,20 @@ class MpesaAutoConfirmTest extends TestCase
         $this->assertNotNull($appointment->paid_at);
         $this->assertNotNull($appointment->status_updated_at);
         Log::shouldHaveReceived('info')->with(
-            'M-Pesa appointment auto-confirm decision.',
+            'M-Pesa appointment lifecycle transition applied.',
             \Mockery::on(fn (array $context): bool => $context['appointment_id'] === $appointment->id
                 && $context['hospital_id'] === $hospital->id
-                && $context['auto_confirmed'] === true
-                && $context['result_code'] === 0),
+                && $context['appointment_status'] === AppointmentRequest::STATUS_CONFIRMED
+                && $context['payment_status'] === 'paid'),
         )->once();
+        Queue::assertPushed(SendPaymentNotification::class, fn (SendPaymentNotification $job): bool => $job->outcome === 'completed');
     }
 
-    public function test_successful_callback_leaves_appointment_pending_when_auto_confirm_is_disabled(): void
+    public function test_successful_callback_confirms_paid_appointment_when_auto_confirm_is_disabled(): void
     {
         [$hospital, $appointment, $payment] = $this->createPaymentScenario(false);
         $this->fakeCallback(0);
+        Queue::fake([SendPaymentNotification::class]);
 
         $this->postJson('/api/mpesa/callback/'.$hospital->slug, $this->callbackPayload($payment, 0))
             ->assertOk();
@@ -52,17 +57,19 @@ class MpesaAutoConfirmTest extends TestCase
         $appointment = $appointment->fresh();
         $this->assertDatabaseHas('appointment_requests', [
             'id' => $appointment->id,
-            'status' => AppointmentRequest::STATUS_PENDING,
+            'status' => AppointmentRequest::STATUS_CONFIRMED,
             'payment_status' => 'paid',
         ]);
         $this->assertNotNull($appointment->paid_at);
-        $this->assertNull($appointment->status_updated_at);
+        $this->assertNotNull($appointment->status_updated_at);
+        Queue::assertPushed(SendPaymentNotification::class, fn (SendPaymentNotification $job): bool => $job->outcome === 'completed');
     }
 
-    public function test_failed_callback_does_not_auto_confirm_appointment(): void
+    public function test_failed_callback_cancels_the_unpaid_appointment(): void
     {
         [$hospital, $appointment, $payment] = $this->createPaymentScenario(true);
         $this->fakeCallback(1037);
+        Queue::fake([SendPaymentNotification::class]);
 
         $this->postJson('/api/mpesa/callback/'.$hospital->slug, $this->callbackPayload($payment, 1037))
             ->assertOk();
@@ -70,38 +77,51 @@ class MpesaAutoConfirmTest extends TestCase
         $appointment = $appointment->fresh();
         $this->assertDatabaseHas('appointment_requests', [
             'id' => $appointment->id,
-            'status' => AppointmentRequest::STATUS_PENDING,
+            'status' => AppointmentRequest::STATUS_CANCELLED,
             'payment_status' => 'unpaid',
         ]);
         $this->assertNull($appointment->paid_at);
-        $this->assertNull($appointment->status_updated_at);
+        $this->assertNotNull($appointment->status_updated_at);
         $this->assertDatabaseHas('mpesa_payments', [
             'id' => $payment->id,
             'status' => MpesaPayment::STATUS_FAILED,
             'result_code' => 1037,
         ]);
+        Queue::assertPushed(SendPaymentNotification::class, fn (SendPaymentNotification $job): bool => $job->outcome === 'payment_failed');
     }
 
-    public function test_callback_uses_the_setting_for_the_appointment_hospital(): void
+    public function test_callback_only_transitions_the_appointment_for_its_hospital(): void
     {
-        $hospitalWithAutoConfirm = Hospital::factory()->create([
-            'settings' => ['auto_confirm_paid_appointments' => true],
-        ]);
         [$hospital, $appointment, $payment] = $this->createPaymentScenario(false);
+        $otherHospital = Hospital::factory()->create(['subscription_plan' => 'enterprise']);
+        app()->instance('currentHospital', $otherHospital);
+        $otherDoctor = User::factory()->for($otherHospital, 'hospital')->create([
+            'is_doctor' => true,
+            'role' => 'doctor',
+        ]);
+        $otherAppointment = AppointmentRequest::factory()
+            ->for($otherHospital)
+            ->for($otherDoctor, 'doctor')
+            ->create();
         $this->fakeCallback(0);
+        Queue::fake([SendPaymentNotification::class]);
 
         $this->postJson('/api/mpesa/callback/'.$hospital->slug, $this->callbackPayload($payment, 0))
             ->assertOk();
 
-        $this->assertTrue($hospitalWithAutoConfirm->shouldAutoConfirmPaidAppointments());
-        $this->assertFalse($hospital->fresh()->shouldAutoConfirmPaidAppointments());
         $this->assertDatabaseHas('appointment_requests', [
             'id' => $appointment->id,
             'hospital_id' => $hospital->id,
-            'status' => AppointmentRequest::STATUS_PENDING,
+            'status' => AppointmentRequest::STATUS_CONFIRMED,
             'payment_status' => 'paid',
         ]);
-        $this->assertNull($appointment->fresh()->status_updated_at);
+        $this->assertDatabaseHas('appointment_requests', [
+            'id' => $otherAppointment->id,
+            'hospital_id' => $otherHospital->id,
+            'status' => AppointmentRequest::STATUS_PENDING,
+            'payment_status' => 'pending',
+        ]);
+        Queue::assertPushed(SendPaymentNotification::class, 1);
     }
 
     /**

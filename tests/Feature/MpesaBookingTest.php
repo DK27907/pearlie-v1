@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\SendPaymentNotification;
 use App\Models\AppointmentRequest;
 use App\Models\DoctorAvailability;
 use App\Models\Hospital;
@@ -11,6 +12,7 @@ use App\Services\MpesaService;
 use App\Services\PearlieService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class MpesaBookingTest extends TestCase
@@ -154,7 +156,7 @@ class MpesaBookingTest extends TestCase
         $this->assertDatabaseHas('appointment_requests', [
             'id' => $appointment->id,
             'payment_status' => 'unpaid',
-            'status' => AppointmentRequest::STATUS_PENDING,
+            'status' => AppointmentRequest::STATUS_CANCELLED,
         ]);
     }
 
@@ -274,24 +276,31 @@ class MpesaBookingTest extends TestCase
         ]);
     }
 
-    public function test_callback_cannot_override_the_stored_payment_amount(): void
+    public function test_callback_amount_mismatch_fails_the_payment_and_cancels_the_appointment(): void
     {
         $appointment = $this->createAppointment();
-        MpesaPayment::factory()->for($appointment, 'appointment')->create([
+        $payment = MpesaPayment::factory()->for($appointment, 'appointment')->create([
             'checkout_request_id' => 'checkout-amount',
             'amount' => 500,
         ]);
         $callback = $this->successfulCallback('checkout-amount');
         $callback['Body']['stkCallback']['CallbackMetadata']['Item'][0]['Value'] = 1;
         $this->fakeSuccessfulCallback();
+        Queue::fake([SendPaymentNotification::class]);
 
         $this->postJson('/api/mpesa/callback', $callback)->assertOk();
 
+        $this->assertDatabaseHas('mpesa_payments', [
+            'id' => $payment->id,
+            'status' => MpesaPayment::STATUS_FAILED,
+            'result_description' => 'amount_mismatch',
+        ]);
         $this->assertDatabaseHas('appointment_requests', [
             'id' => $appointment->id,
-            'payment_status' => 'paid',
-            'payment_amount' => 500,
+            'payment_status' => 'unpaid',
+            'status' => AppointmentRequest::STATUS_CANCELLED,
         ]);
+        Queue::assertPushed(SendPaymentNotification::class, 1);
     }
 
     public function test_ai_booking_shows_slots_then_charges_for_the_selected_slot(): void
@@ -323,21 +332,28 @@ class MpesaBookingTest extends TestCase
         ]);
 
         $pearlie = app(PearlieService::class);
-        $availability = $pearlie->processMessage(
-            'I want to book an appointment on 2026-09-28.',
-            'ai-payment-session',
-        );
-        $booking = $pearlie->processMessage(
-            'I choose Dr. Ada Kamau at 9:00 AM. My name is Jane Doe and my phone is 0712345678 for a consultation.',
-            'ai-payment-session',
-        );
+        $sessionId = 'ai-payment-session';
+        $bookingStart = $pearlie->processMessage('I want to book', $sessionId);
+        $nameReply = $pearlie->processMessage('Jane Doe', $sessionId);
+        $phoneReply = $pearlie->processMessage('0712345678', $sessionId);
+        $serviceReply = $pearlie->processMessage('consultation', $sessionId);
+        $dateReply = $pearlie->processMessage('2026-09-28', $sessionId);
+        $slotReply = $pearlie->processMessage('Dr. Ada Kamau at 9:00 AM', $sessionId);
 
-        $this->assertSame('availability', $availability['source']);
-        $this->assertStringContainsString('09:00', $availability['response']);
-        $this->assertSame('booking_details', $booking['source']);
-        $this->assertStringContainsString('email address', $booking['response']);
+        $this->assertSame('booking_details', $bookingStart['source']);
+        $this->assertStringContainsString('full name', $bookingStart['response']);
+        $this->assertStringContainsString('phone number', $nameReply['response']);
+        $this->assertStringContainsString('service', $phoneReply['response']);
+        $this->assertStringContainsString('date', $serviceReply['response']);
+        $this->assertSame('availability', $dateReply['source']);
+        $this->assertStringContainsString('09:00', $dateReply['response']);
+        $this->assertSame('booking_confirmation', $slotReply['source']);
+        $this->assertStringContainsString('Reply YES to confirm', $slotReply['response']);
+        $this->assertDatabaseMissing('appointment_requests', [
+            'session_id' => $sessionId,
+        ]);
 
-        $booking = $pearlie->processMessage('jane@example.com', 'ai-payment-session');
+        $booking = $pearlie->processMessage('YES', $sessionId);
 
         $this->assertSame('appointment_payment', $booking['source']);
         $this->assertDatabaseHas('appointment_requests', [
@@ -353,6 +369,37 @@ class MpesaBookingTest extends TestCase
             'account_reference' => 'APT-'.$booking['appointment_id'],
             'transaction_desc' => 'Appointment Deposit',
         ]);
+    }
+
+    public function test_declining_the_booking_summary_does_not_create_an_appointment_or_charge(): void
+    {
+        $this->travelTo('2026-09-26 08:00:00');
+        Http::preventStrayRequests();
+
+        $doctor = User::factory()->create([
+            'is_doctor' => true,
+            'name' => 'Dr. Ada Kamau',
+        ]);
+        DoctorAvailability::factory()->for($doctor, 'doctor')->create([
+            'day_of_week' => 1,
+            'start_time' => '09:00',
+            'end_time' => '10:00',
+            'slot_duration_minutes' => 30,
+        ]);
+
+        $service = app(PearlieService::class);
+        $summary = $service->processMessage(
+            'I want to book an appointment on 2026-09-28 at 9:00 AM. My name is Jane Doe and my phone is 0712345678 for consultation.',
+            'cancelled-booking-session',
+        );
+        $cancellation = $service->processMessage('NO', 'cancelled-booking-session');
+
+        $this->assertSame('booking_confirmation', $summary['source']);
+        $this->assertSame('booking_cancelled', $cancellation['source']);
+        $this->assertDatabaseMissing('appointment_requests', [
+            'session_id' => 'cancelled-booking-session',
+        ]);
+        $this->assertDatabaseCount('mpesa_payments', 0);
     }
 
     private function configureDaraja(): void

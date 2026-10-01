@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\SendPaymentNotification;
 use App\Models\AppointmentRequest;
 use App\Models\MpesaPayment;
 use App\Services\WhatsAppBookingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class MpesaWhatsAppBookingTest extends TestCase
@@ -37,7 +39,7 @@ class MpesaWhatsAppBookingTest extends TestCase
 
         $result = app(WhatsAppBookingService::class)->handle(
             '254712345678',
-            'Book an appointment. My name is Jane Doe, tomorrow, for a consultation. jane@example.com',
+            'Book an appointment. My name is Jane Doe, 11th October 2026, for a consultation. jane@example.com',
         );
 
         $this->assertSame('whatsapp_booking', $result['source']);
@@ -45,6 +47,7 @@ class MpesaWhatsAppBookingTest extends TestCase
             'id' => $result['appointment_id'],
             'name' => 'Jane Doe',
             'phone' => '254712345678',
+            'preferred_date' => '2026-10-11 00:00:00',
             'email' => 'jane@example.com',
             'booking_fee' => 500,
             'payment_status' => 'pending',
@@ -53,7 +56,7 @@ class MpesaWhatsAppBookingTest extends TestCase
         Http::assertSent(fn ($request) => str_contains($request->url(), 'stkpush/v1/processrequest'));
     }
 
-    public function test_verified_callback_confirms_appointment_and_is_idempotent(): void
+    public function test_verified_callback_marks_appointment_paid_and_confirmed_idempotently(): void
     {
         config([
             'services.whatsapp.phone_number_id' => 'phone-id',
@@ -110,6 +113,7 @@ class MpesaWhatsAppBookingTest extends TestCase
             ]),
             'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'message-test']]]),
         ]);
+        Queue::fake([SendPaymentNotification::class]);
 
         $this->postJson('/api/mpesa/callback', $payload)->assertOk();
         $this->postJson('/api/mpesa/callback', $payload)->assertOk();
@@ -125,6 +129,6 @@ class MpesaWhatsAppBookingTest extends TestCase
             'checkout_request_id' => 'checkout-1',
             'status' => MpesaPayment::STATUS_COMPLETED,
         ]);
-        Http::assertSent(fn ($request) => str_contains($request->url(), 'graph.facebook.com'));
+        Queue::assertPushed(SendPaymentNotification::class, 1);
     }
 }

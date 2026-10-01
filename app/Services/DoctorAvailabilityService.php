@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AppointmentRequest;
 use App\Models\DoctorAvailability;
 use App\Models\DoctorUnavailableDate;
+use App\Models\SlotHold;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -47,6 +48,18 @@ class DoctorAvailabilityService
                     CarbonImmutable::parse($appointment->slot_start_time)->format('H:i') => (int) $appointment->booked_count,
                 ]);
 
+            $heldCounts = SlotHold::query()
+                ->active()
+                ->where('doctor_id', $doctorId)
+                ->whereNull('appointment_request_id')
+                ->whereBetween('slot_start_at', [
+                    $requestedDate->toDateString().' 00:00:00',
+                    $requestedDate->toDateString().' 23:59:59',
+                ])
+                ->pluck('slot_start_at')
+                ->map(fn (string $slotStart): string => CarbonImmutable::parse($slotStart)->format('H:i'))
+                ->countBy();
+
             $slots = [];
             $isUnavailable = $this->dateIsUnavailable($doctorId, $requestedDate);
 
@@ -57,7 +70,8 @@ class DoctorAvailabilityService
 
                     $slots[$slot['start']] = ! $isUnavailable
                         && ! $isInPast
-                        && ($bookedCounts[$slot['start']] ?? 0) < $availability->max_patients_per_slot;
+                        && ($bookedCounts[$slot['start']] ?? 0) + ($heldCounts[$slot['start']] ?? 0)
+                            < $availability->max_patients_per_slot;
                 }
             }
 
@@ -202,18 +216,35 @@ class DoctorAvailabilityService
                             $bookedCount = AppointmentRequest::query()
                                 ->where('doctor_id', $doctor->id)
                                 ->whereDate('preferred_date', $requestedDate->toDateString())
-                                ->whereTime('slot_start_time', $slot['start'])
+                                ->whereTime(
+                                    'slot_start_time',
+                                    CarbonImmutable::parse($slot['start'])->format('H:i:s'),
+                                )
                                 ->whereIn('status', [
                                     AppointmentRequest::STATUS_PENDING,
                                     AppointmentRequest::STATUS_CONFIRMED,
                                 ])
                                 ->count();
 
-                            if ($bookedCount >= $availability->max_patients_per_slot) {
+                            $activeHoldCount = SlotHold::query()
+                                ->active()
+                                ->where('doctor_id', $doctor->id)
+                                ->whereNull('appointment_request_id')
+                                ->whereBetween('slot_start_at', [
+                                    $requestedDate->toDateString().' 00:00:00',
+                                    $requestedDate->toDateString().' 23:59:59',
+                                ])
+                                ->whereTime(
+                                    'slot_start_at',
+                                    CarbonImmutable::parse($slot['start'])->format('H:i:s'),
+                                )
+                                ->count();
+
+                            if ($bookedCount + $activeHoldCount >= $availability->max_patients_per_slot) {
                                 continue;
                             }
 
-                            return AppointmentRequest::query()->create([
+                            $appointment = AppointmentRequest::query()->create([
                                 'session_id' => $patient['session_id'],
                                 'name' => $patient['name'],
                                 'phone' => $patient['phone'],
@@ -226,6 +257,21 @@ class DoctorAvailabilityService
                                 'slot_start_time' => $slot['start'],
                                 'slot_end_time' => $slot['end'],
                             ]);
+
+                            if (hospital()?->hasFeature('mpesa')) {
+                                SlotHold::query()->create([
+                                    'hospital_id' => $appointment->hospital_id,
+                                    'doctor_id' => $doctor->id,
+                                    'appointment_request_id' => $appointment->id,
+                                    'slot_start_at' => $slotDateTime,
+                                    'slot_end_at' => CarbonImmutable::parse(
+                                        $requestedDate->toDateString().' '.$slot['end'],
+                                    ),
+                                    'expires_at' => now()->addMinutes(5),
+                                ]);
+                            }
+
+                            return $appointment;
                         }
                     }
                 }

@@ -63,6 +63,7 @@
                                 'bg-amber-50 text-amber-800' => $appointment->status === 'pending',
                                 'bg-cyan-50 text-cyan-800' => $appointment->status === 'confirmed',
                                 'bg-emerald-50 text-emerald-800' => $appointment->status === 'completed',
+                                'bg-orange-50 text-orange-800' => $appointment->status === 'expired',
                                 'bg-slate-100 text-slate-600' => $appointment->status === 'cancelled',
                             ])>{{ $appointment->status }}</span>
                         </a>

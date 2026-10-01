@@ -167,6 +167,12 @@ class MpesaCallbackVerificationTest extends TestCase
     {
         Log::shouldReceive('info')
             ->once()
+            ->with('Received an M-Pesa callback.', Mockery::on(
+                fn (array $context): bool => $context['checkout_request_id'] === 'checkout-not-found'
+                    && isset($context['payload']['Body']['stkCallback']),
+            ));
+        Log::shouldReceive('info')
+            ->once()
             ->with('M-Pesa handleCallback: verification', [
                 'is_local_sandbox' => false,
                 'checkout_request_id' => 'checkout-not-found',
@@ -206,11 +212,11 @@ class MpesaCallbackVerificationTest extends TestCase
         $this->assertDatabaseHas('appointment_requests', [
             'id' => $appointment->id,
             'payment_status' => 'unpaid',
-            'status' => AppointmentRequest::STATUS_PENDING,
+            'status' => AppointmentRequest::STATUS_CANCELLED,
         ]);
     }
 
-    public function test_successful_callback_marks_appointment_paid_without_confirming_it(): void
+    public function test_successful_callback_marks_appointment_paid_and_confirms_it(): void
     {
         $this->configureLocalSandbox();
         Http::preventStrayRequests();
@@ -236,7 +242,7 @@ class MpesaCallbackVerificationTest extends TestCase
             'payment_status' => 'paid',
             'mpesa_receipt' => 'TEST123ABC',
             'mpesa_phone' => '0712345678',
-            'status' => AppointmentRequest::STATUS_PENDING,
+            'status' => AppointmentRequest::STATUS_CONFIRMED,
         ]);
         $this->assertNotNull($appointment->fresh()->paid_at);
     }
@@ -248,6 +254,12 @@ class MpesaCallbackVerificationTest extends TestCase
         $payment = MpesaPayment::factory()->create([
             'checkout_request_id' => 'checkout-without-receipt',
         ]);
+        Log::shouldReceive('info')
+            ->once()
+            ->with('Received an M-Pesa callback.', Mockery::on(
+                fn (array $context): bool => $context['checkout_request_id'] === 'checkout-without-receipt'
+                    && isset($context['payload']['Body']['stkCallback']),
+            ));
         Log::shouldReceive('info')
             ->once()
             ->with('M-Pesa handleCallback: verification', [

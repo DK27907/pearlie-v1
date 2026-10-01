@@ -2,21 +2,28 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToHospital;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class MpesaPayment extends Model
 {
-    use \App\Traits\BelongsToHospital, HasFactory;
+    use BelongsToHospital, HasFactory;
 
     public const STATUS_PENDING = 'pending';
+
+    public const STATUS_INITIATED = 'initiated';
 
     public const STATUS_COMPLETED = 'completed';
 
     public const STATUS_FAILED = 'failed';
 
     public const STATUS_CANCELLED = 'cancelled';
+
+    public const STATUS_TIMEOUT = 'timeout';
 
     protected $table = 'mpesa_payments';
 
@@ -50,6 +57,24 @@ class MpesaPayment extends Model
         return $this->belongsTo(AppointmentRequest::class, 'appointment_request_id');
     }
 
+    public function events(): HasMany
+    {
+        return $this->hasMany(PaymentEvent::class, 'payment_id');
+    }
+
+    public function scopePending(Builder $query): Builder
+    {
+        return $query->whereIn('status', [
+            self::STATUS_PENDING,
+            self::STATUS_INITIATED,
+        ]);
+    }
+
+    public function scopeStale(Builder $query, int $seconds): Builder
+    {
+        return $query->pending()->where('created_at', '<=', now()->subSeconds($seconds));
+    }
+
     /**
      * @param  array<string, mixed>  $receiptData
      */
@@ -71,7 +96,7 @@ class MpesaPayment extends Model
         return $this;
     }
 
-    public function markAsFailed(string $reason, int $code = 1): self
+    public function markAsFailed(string $reason, ?int $code = 1): self
     {
         $this->fill([
             'status' => self::STATUS_FAILED,
@@ -85,7 +110,10 @@ class MpesaPayment extends Model
 
     public function isPending(): bool
     {
-        return $this->status === self::STATUS_PENDING;
+        return in_array($this->status, [
+            self::STATUS_PENDING,
+            self::STATUS_INITIATED,
+        ], true);
     }
 
     public function isCompleted(): bool
