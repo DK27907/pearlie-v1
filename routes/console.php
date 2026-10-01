@@ -1,7 +1,9 @@
 <?php
 
 use App\Console\Commands\CleanupSlotHolds;
+use App\Console\Commands\MpesaHealthCheck;
 use App\Console\Commands\MpesaSimulateCallback;
+use App\Console\Commands\MpesaVerifySandboxCredentials;
 use App\Console\Commands\ReconcileMpesaPayments;
 use Illuminate\Console\Application as ArtisanApplication;
 use Illuminate\Foundation\Inspiring;
@@ -13,6 +15,8 @@ ArtisanApplication::starting(static function ($artisan): void {
         MpesaSimulateCallback::class,
         ReconcileMpesaPayments::class,
         CleanupSlotHolds::class,
+        MpesaHealthCheck::class,
+        MpesaVerifySandboxCredentials::class,
     ]);
 });
 

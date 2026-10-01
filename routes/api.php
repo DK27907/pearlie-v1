@@ -24,10 +24,10 @@ Route::post('/whatsapp/webhook/{hospitalSlug}', [WhatsAppWebhookController::clas
     ->middleware('throttle:60,1');
 Route::post('/mpesa/callback', [MpesaCallbackController::class, 'handleConfirmation'])
     ->name('mpesa.callback')
-    ->middleware('throttle:120,1');
+    ->middleware(['throttle:120,1', 'safaricom.ip']);
 Route::post('/mpesa/callback/{hospitalSlug}', [MpesaCallbackController::class, 'handleConfirmation'])
     ->name('tenant.mpesa.callback')
-    ->middleware('throttle:120,1');
+    ->middleware(['throttle:120,1', 'safaricom.ip']);
 Route::get('/mpesa/status/{checkoutRequestId}', [MpesaCallbackController::class, 'checkStatus'])
     ->name('mpesa.status')
     ->middleware(['throttle:10,1', 'feature:mpesa']);

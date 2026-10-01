@@ -1,9 +1,13 @@
 <?php
 
-use App\Http\Middleware\EnsureUserIsDoctor;
 use App\Http\Middleware\EnsureFeatureEnabled;
+use App\Http\Middleware\EnsureSuperAdmin;
+use App\Http\Middleware\EnsureUserIsDoctor;
 use App\Http\Middleware\EnsureUserIsHospitalAdmin;
 use App\Http\Middleware\ResolveHospital;
+use App\Http\Middleware\RestrictMpesaCallbackToSafaricom;
+use App\Http\Middleware\SecurityHeaders;
+use App\Models\Hospital;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -19,13 +23,14 @@ $application = Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->web(append: [ResolveHospital::class]);
+        $middleware->web(append: [ResolveHospital::class, SecurityHeaders::class]);
         $middleware->api(append: [ResolveHospital::class]);
         $middleware->alias([
             'doctor' => EnsureUserIsDoctor::class,
             'hospital.admin' => EnsureUserIsHospitalAdmin::class,
-            'superadmin' => \App\Http\Middleware\EnsureSuperAdmin::class,
+            'superadmin' => EnsureSuperAdmin::class,
             'feature' => EnsureFeatureEnabled::class,
+            'safaricom.ip' => RestrictMpesaCallbackToSafaricom::class,
         ]);
 
         $middleware->validateCsrfTokens(except: [
@@ -39,8 +44,8 @@ $application = Application::configure(basePath: dirname(__DIR__))
         );
     })->create();
 
-$application->bind(\App\Models\Hospital::class, fn ($app) => $app->bound('currentHospital')
+$application->bind(Hospital::class, fn ($app) => $app->bound('currentHospital')
     ? $app->make('currentHospital')
-    : new \App\Models\Hospital());
+    : new Hospital);
 
 return $application;
