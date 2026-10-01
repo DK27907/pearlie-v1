@@ -42,10 +42,10 @@ class MpesaAutoConfirmTest extends TestCase
                 && $context['appointment_status'] === AppointmentRequest::STATUS_CONFIRMED
                 && $context['payment_status'] === 'paid'),
         )->once();
-        Queue::assertPushed(SendPaymentNotification::class, fn (SendPaymentNotification $job): bool => $job->outcome === 'completed');
+        Queue::assertPushed(SendPaymentNotification::class, fn (SendPaymentNotification $job): bool => $job->outcome === 'payment_completed');
     }
 
-    public function test_successful_callback_confirms_paid_appointment_when_auto_confirm_is_disabled(): void
+    public function test_successful_callback_leaves_paid_appointment_pending_when_auto_confirm_is_disabled(): void
     {
         [$hospital, $appointment, $payment] = $this->createPaymentScenario(false);
         $this->fakeCallback(0);
@@ -57,12 +57,22 @@ class MpesaAutoConfirmTest extends TestCase
         $appointment = $appointment->fresh();
         $this->assertDatabaseHas('appointment_requests', [
             'id' => $appointment->id,
-            'status' => AppointmentRequest::STATUS_CONFIRMED,
+            'status' => AppointmentRequest::STATUS_PENDING,
             'payment_status' => 'paid',
         ]);
         $this->assertNotNull($appointment->paid_at);
-        $this->assertNotNull($appointment->status_updated_at);
-        Queue::assertPushed(SendPaymentNotification::class, fn (SendPaymentNotification $job): bool => $job->outcome === 'completed');
+        $this->assertDatabaseHas('payment_events', [
+            'payment_id' => $payment->id,
+            'event' => 'payment_completed_awaiting_confirmation',
+        ]);
+        Queue::assertPushed(SendPaymentNotification::class, fn (SendPaymentNotification $job): bool => (
+            $job->outcome === 'payment_completed_awaiting_confirmation'
+            && $job->recipientRole === 'patient'
+        ));
+        Queue::assertPushed(SendPaymentNotification::class, fn (SendPaymentNotification $job): bool => (
+            $job->outcome === 'payment_completed_awaiting_confirmation'
+            && $job->recipientRole === 'admin'
+        ));
     }
 
     public function test_failed_callback_cancels_the_unpaid_appointment(): void
@@ -92,7 +102,7 @@ class MpesaAutoConfirmTest extends TestCase
 
     public function test_callback_only_transitions_the_appointment_for_its_hospital(): void
     {
-        [$hospital, $appointment, $payment] = $this->createPaymentScenario(false);
+        [$hospital, $appointment, $payment] = $this->createPaymentScenario(true);
         $otherHospital = Hospital::factory()->create(['subscription_plan' => 'enterprise']);
         app()->instance('currentHospital', $otherHospital);
         $otherDoctor = User::factory()->for($otherHospital, 'hospital')->create([

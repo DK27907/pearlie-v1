@@ -131,6 +131,7 @@ class PaymentLifecycleService
                 ->lockForUpdate()
                 ->find($appointment->id) ?? $appointment;
             $previousStatus = $appointment->status;
+            $shouldAutoConfirm = $appointment->hospital?->shouldAutoConfirmPaidAppointments() ?? false;
             $attributes = [
                 'payment_status' => 'paid',
                 'payment_amount' => $payment->amount,
@@ -138,7 +139,10 @@ class PaymentLifecycleService
             ];
 
             $appointment->forceFill($attributes)->save();
-            $this->confirmSlot($appointment);
+            if ($shouldAutoConfirm) {
+                $this->confirmSlot($appointment);
+            }
+
             $this->releaseSlot($appointment);
 
             $payload = array_merge($payload, [
@@ -146,17 +150,20 @@ class PaymentLifecycleService
                 'appointment_status_after' => $appointment->status,
             ]);
 
-            $this->dispatchNotificationAfterCommit(
-                $payment,
-                $appointment->status === AppointmentRequest::STATUS_CONFIRMED
-                    ? 'completed'
-                    : 'completed_without_confirmation',
-            );
+            $event = $shouldAutoConfirm
+                ? 'payment_completed'
+                : 'payment_completed_awaiting_confirmation';
+            $this->dispatchNotificationAfterCommit($payment, $event);
+
+            if (! $shouldAutoConfirm) {
+                $this->dispatchNotificationAfterCommit($payment, $event, 'admin');
+            }
         } else {
-            $this->dispatchNotificationAfterCommit($payment, 'completed');
+            $event = 'payment_completed';
+            $this->dispatchNotificationAfterCommit($payment, $event);
         }
 
-        $this->recordEvent($payment, 'payment_completed', $payload);
+        $this->recordEvent($payment, $event, $payload);
     }
 
     private function failAppointmentPaymentWithinTransaction(
@@ -229,8 +236,11 @@ class PaymentLifecycleService
         });
     }
 
-    private function dispatchNotificationAfterCommit(MpesaPayment $payment, string $outcome): void
-    {
+    private function dispatchNotificationAfterCommit(
+        MpesaPayment $payment,
+        string $outcome,
+        string $recipientRole = 'patient',
+    ): void {
         if ($payment->appointment_request_id === null) {
             return;
         }
@@ -239,6 +249,7 @@ class PaymentLifecycleService
             $payment->id,
             (int) $payment->hospital_id,
             $outcome,
+            $recipientRole,
         )->afterCommit();
     }
 }

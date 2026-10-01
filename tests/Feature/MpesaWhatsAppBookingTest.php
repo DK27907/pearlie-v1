@@ -83,6 +83,9 @@ class MpesaWhatsAppBookingTest extends TestCase
             'payment_status' => 'pending',
             'mpesa_checkout_request_id' => 'checkout-1',
         ]);
+        $appointment->hospital->update([
+            'settings' => ['auto_confirm_paid_appointments' => true],
+        ]);
 
         $payload = [
             'Body' => [

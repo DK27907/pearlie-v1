@@ -12,7 +12,9 @@ use App\Models\SlotHold;
 use App\Models\User;
 use App\Services\DoctorAvailabilityService;
 use App\Services\MpesaService;
+use App\Services\NotificationService;
 use App\Services\PaymentReconciliationService;
+use App\Services\WhatsAppService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -26,6 +28,7 @@ class PaymentLifecycleTest extends TestCase
     public function test_successful_callback_confirms_appointment_and_records_event(): void
     {
         [$hospital, $appointment, $payment] = $this->createPaymentScenario();
+        $hospital->update(['settings' => ['auto_confirm_paid_appointments' => true]]);
         $payment->forceFill(['phone' => '0712345678'])->save();
         $this->configureLocalSandbox();
         Http::preventStrayRequests();
@@ -53,6 +56,7 @@ class PaymentLifecycleTest extends TestCase
     public function test_successful_tenant_callback_records_payment_event(): void
     {
         [$hospital, $appointment, $payment] = $this->createPaymentScenario(MpesaPayment::STATUS_INITIATED);
+        $hospital->update(['settings' => ['auto_confirm_paid_appointments' => true]]);
         $this->configureAllowlistedProductionCallback($payment, 0);
         $this->freezeTime();
         Queue::fake([SendPaymentNotification::class]);
@@ -75,6 +79,124 @@ class PaymentLifecycleTest extends TestCase
         $event = PaymentEvent::query()->where('payment_id', $payment->id)->firstOrFail();
         $this->assertSame('payment_completed', $event->event);
         $this->assertTrue($event->created_at->between(now()->subSeconds(2), now()->addSeconds(2)));
+    }
+
+    public function test_successful_callback_without_auto_confirm_leaves_appointment_pending_and_writes_awaiting_event(): void
+    {
+        [$hospital, $appointment, $payment] = $this->createPaymentScenario(MpesaPayment::STATUS_INITIATED);
+        $hospital->update(['settings' => ['auto_confirm_paid_appointments' => false]]);
+        $this->createSlotHold($appointment);
+        $this->configureAllowlistedProductionCallback($payment, 0);
+        Queue::fake([SendPaymentNotification::class]);
+
+        $this->withServerVariables(['REMOTE_ADDR' => '196.201.212.10'])
+            ->postJson(
+                '/api/mpesa/callback/'.$hospital->slug,
+                $this->callbackPayload($payment, 0),
+            )
+            ->assertOk();
+
+        $this->assertDatabaseHas('appointment_requests', [
+            'id' => $appointment->id,
+            'status' => AppointmentRequest::STATUS_PENDING,
+            'payment_status' => 'paid',
+        ]);
+        $this->assertDatabaseHas('mpesa_payments', [
+            'id' => $payment->id,
+            'status' => MpesaPayment::STATUS_COMPLETED,
+        ]);
+        $this->assertSame(0, SlotHold::query()->where('appointment_request_id', $appointment->id)->count());
+        $this->assertSame(
+            1,
+            PaymentEvent::query()
+                ->where('payment_id', $payment->id)
+                ->where('event', 'payment_completed_awaiting_confirmation')
+                ->count(),
+        );
+        Queue::assertPushed(SendPaymentNotification::class, fn (SendPaymentNotification $job): bool => (
+            $job->outcome === 'payment_completed_awaiting_confirmation'
+            && $job->recipientRole === 'patient'
+        ));
+        Queue::assertPushed(SendPaymentNotification::class, fn (SendPaymentNotification $job): bool => (
+            $job->outcome === 'payment_completed_awaiting_confirmation'
+            && $job->recipientRole === 'admin'
+        ));
+    }
+
+    public function test_successful_callback_with_auto_confirm_confirms_appointment(): void
+    {
+        [$hospital, $appointment, $payment] = $this->createPaymentScenario(MpesaPayment::STATUS_INITIATED);
+        $hospital->update(['settings' => ['auto_confirm_paid_appointments' => true]]);
+        $this->createSlotHold($appointment);
+        $this->configureAllowlistedProductionCallback($payment, 0);
+        Queue::fake([SendPaymentNotification::class]);
+
+        $this->withServerVariables(['REMOTE_ADDR' => '196.201.212.10'])
+            ->postJson(
+                '/api/mpesa/callback/'.$hospital->slug,
+                $this->callbackPayload($payment, 0),
+            )
+            ->assertOk();
+
+        $this->assertDatabaseHas('appointment_requests', [
+            'id' => $appointment->id,
+            'status' => AppointmentRequest::STATUS_CONFIRMED,
+            'payment_status' => 'paid',
+        ]);
+        $this->assertSame(0, SlotHold::query()->where('appointment_request_id', $appointment->id)->count());
+        $this->assertSame(
+            1,
+            PaymentEvent::query()
+                ->where('payment_id', $payment->id)
+                ->where('event', 'payment_completed')
+                ->count(),
+        );
+        Queue::assertPushed(SendPaymentNotification::class, fn (SendPaymentNotification $job): bool => (
+            $job->outcome === 'payment_completed'
+            && $job->recipientRole === 'patient'
+        ));
+        Queue::assertPushed(SendPaymentNotification::class, 1);
+    }
+
+    public function test_awaiting_confirmation_notifications_send_patient_message_and_notify_hospital_admin(): void
+    {
+        [$hospital, $appointment, $payment] = $this->createPaymentScenario();
+        User::factory()->for($hospital, 'hospital')->create([
+            'role' => 'hospital_admin',
+            'phone' => '254700000001',
+        ]);
+        $notifications = \Mockery::mock(NotificationService::class);
+        $notifications->shouldReceive('sendSms')
+            ->once()
+            ->with(
+                '254712345678',
+                'Payment received. Your appointment is being reviewed and you will receive a confirmation shortly.',
+            )
+            ->andReturn(true);
+        $notifications->shouldReceive('sendSms')
+            ->once()
+            ->with(
+                '254700000001',
+                sprintf(
+                    'Paid appointment #%d is awaiting confirmation. Please review it in the admin dashboard.',
+                    $appointment->id,
+                ),
+            )
+            ->andReturn(true);
+        $whatsapp = \Mockery::mock(WhatsAppService::class);
+        $whatsapp->shouldNotReceive('sendAppointmentConfirmation');
+
+        (new SendPaymentNotification(
+            $payment->id,
+            $hospital->id,
+            'payment_completed_awaiting_confirmation',
+        ))->handle($whatsapp, $notifications);
+        (new SendPaymentNotification(
+            $payment->id,
+            $hospital->id,
+            'payment_completed_awaiting_confirmation',
+            'admin',
+        ))->handle($whatsapp, $notifications);
     }
 
     public function test_failed_tenant_callback_records_payment_event(): void
@@ -109,6 +231,7 @@ class PaymentLifecycleTest extends TestCase
     public function test_successful_callback_confirms_an_expired_booking_after_late_payment(): void
     {
         [$hospital, $appointment, $payment] = $this->createPaymentScenario();
+        $hospital->update(['settings' => ['auto_confirm_paid_appointments' => true]]);
         $appointment->forceFill([
             'status' => AppointmentRequest::STATUS_EXPIRED,
             'status_updated_at' => now()->subMinute(),
@@ -265,6 +388,7 @@ class PaymentLifecycleTest extends TestCase
     public function test_reconciliation_confirms_a_stale_payment_with_successful_provider_result(): void
     {
         [$hospital, $appointment, $payment] = $this->createPaymentScenario();
+        $hospital->update(['settings' => ['auto_confirm_paid_appointments' => true]]);
         $payment->forceFill(['created_at' => now()->subSeconds(120)])->save();
         $this->configureLocalSandbox();
         Http::preventStrayRequests();
@@ -300,6 +424,7 @@ class PaymentLifecycleTest extends TestCase
     public function test_reconciliation_processes_payments_for_each_hospital_and_restores_the_binding(): void
     {
         [$firstHospital, $firstAppointment, $firstPayment] = $this->createPaymentScenario();
+        $firstHospital->update(['settings' => ['auto_confirm_paid_appointments' => true]]);
         $firstPayment->forceFill(['created_at' => now()->subSeconds(120)])->save();
         $secondHospital = Hospital::factory()->create([
             'subscription_plan' => 'enterprise',
@@ -307,6 +432,7 @@ class PaymentLifecycleTest extends TestCase
             'mpesa_consumer_secret' => 'second-test-secret',
             'mpesa_passkey' => 'second-test-passkey',
             'mpesa_shortcode' => '174379',
+            'settings' => ['auto_confirm_paid_appointments' => true],
         ]);
         app()->instance('currentHospital', $secondHospital);
         $secondDoctor = User::factory()->for($secondHospital, 'hospital')->create([
@@ -649,6 +775,20 @@ class PaymentLifecycleTest extends TestCase
             ]);
 
         return [$hospital, $appointment, $payment];
+    }
+
+    private function createSlotHold(AppointmentRequest $appointment): SlotHold
+    {
+        $slotStart = now()->addDay()->setTime(9, 0);
+
+        return SlotHold::query()->create([
+            'hospital_id' => $appointment->hospital_id,
+            'doctor_id' => $appointment->doctor_id,
+            'appointment_request_id' => $appointment->id,
+            'slot_start_at' => $slotStart,
+            'slot_end_at' => $slotStart->copy()->addMinutes(30),
+            'expires_at' => now()->addMinutes(5),
+        ]);
     }
 
     private function configureLocalSandbox(): void

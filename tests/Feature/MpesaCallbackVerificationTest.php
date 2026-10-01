@@ -221,7 +221,7 @@ class MpesaCallbackVerificationTest extends TestCase
 
     public function test_successful_callback_marks_appointment_paid_and_confirms_it(): void
     {
-        $this->configureLocalSandbox();
+        $this->configureLocalSandbox(autoConfirm: true);
         Http::preventStrayRequests();
         Http::fake([
             'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'message-test']]]),

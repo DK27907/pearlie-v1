@@ -100,6 +100,7 @@ class MpesaBookingTest extends TestCase
 
     public function test_completed_payment_updates_appointment(): void
     {
+        hospital()->update(['settings' => ['auto_confirm_paid_appointments' => true]]);
         $appointment = $this->createAppointment();
         MpesaPayment::factory()->for($appointment, 'appointment')->create([
             'checkout_request_id' => 'checkout-appointment',
