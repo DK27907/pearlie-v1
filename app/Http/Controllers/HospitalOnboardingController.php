@@ -11,10 +11,22 @@ class HospitalOnboardingController extends Controller
 {
     public function show(): View
     {
+        return $this->settingsPage(false);
+    }
+
+    public function adminSettings(): View
+    {
+        return $this->settingsPage(true);
+    }
+
+    private function settingsPage(bool $adminSettings): View
+    {
         $hospital = hospital();
 
         return view('hospital.onboarding', [
             'hospital' => $hospital,
+            'adminSettings' => $adminSettings,
+            'formAction' => $adminSettings ? route('admin.settings.update') : route('hospital.onboarding.update'),
             'checklist' => [
                 'profile' => filled($hospital->phone) && filled($hospital->address),
                 'branding' => filled($hospital->primary_color),
@@ -47,18 +59,26 @@ class HospitalOnboardingController extends Controller
             'default_language' => ['required', 'in:en,sw'],
             'supported_languages' => ['required', 'array', 'min:1'],
             'supported_languages.*' => ['required', 'in:en,sw'],
+            'settings' => ['nullable', 'array'],
+            'settings.about' => ['nullable', 'string', 'max:3000'],
+            'settings.ai_instructions' => ['nullable', 'string', 'max:4000'],
+            'settings.auto_confirm_paid_appointments' => ['nullable', 'boolean'],
             'hours_emergency' => ['required', 'string', 'max:100'],
             'hours_outpatient' => ['required', 'string', 'max:100'],
             'mpesa_shortcode' => ['nullable', 'string', 'max:20'],
             'mpesa_consumer_key' => ['nullable', 'string', 'max:255'],
             'mpesa_consumer_secret' => ['nullable', 'string', 'max:255'],
             'mpesa_passkey' => ['nullable', 'string', 'max:500'],
+            'slot_duration_minutes' => ['required', 'integer', 'min:5', 'max:240'],
+            'no_show_grace_minutes' => ['required', 'integer', 'min:0', 'max:1440'],
             'deposit_amount' => ['required', 'numeric', 'min:0', 'max:1000000'],
             'logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
         ]);
 
         $tenant = hospital();
         unset($data['logo']);
+        $settings = $data['settings'] ?? [];
+        unset($data['settings']);
         foreach ([
             'mpesa_consumer_key',
             'mpesa_consumer_secret',
@@ -71,7 +91,10 @@ class HospitalOnboardingController extends Controller
                 unset($data[$secret]);
             }
         }
-        $tenant->update($data);
+        $tenant->update([
+            ...$data,
+            'settings' => array_replace((array) $tenant->settings, $settings),
+        ]);
 
         if ($request->hasFile('logo')) {
             $oldLogoPath = $tenant->logo_url;

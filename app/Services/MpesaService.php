@@ -14,7 +14,7 @@ use Throwable;
 
 class MpesaService
 {
-    public function getAccessToken(): ?string
+    public function getAccessToken(?string $checkoutRequestId = null): ?string
     {
         try {
             $config = $this->configForCurrentHospital();
@@ -30,6 +30,7 @@ class MpesaService
             return is_string($token) && $token !== '' ? $token : null;
         } catch (Throwable $exception) {
             Log::error('Unable to obtain the M-Pesa access token.', [
+                'checkout_request_id' => $checkoutRequestId,
                 'exception' => $exception,
             ]);
 
@@ -157,25 +158,43 @@ class MpesaService
 
     public function handleCallback(array $callbackData): ?MpesaPayment
     {
+        $checkoutRequestId = null;
+
         try {
             $callback = $callbackData['Body']['stkCallback'] ?? null;
-            if (! is_array($callback) || empty($callback['CheckoutRequestID'])) {
-                Log::warning('Received a malformed M-Pesa callback.', [
+            $checkoutRequestId = is_array($callback)
+                ? ($callback['CheckoutRequestID'] ?? null)
+                : null;
+
+            if (! is_array($callback)
+                || ! is_string($checkoutRequestId)
+                || $checkoutRequestId === ''
+                || ! array_key_exists('ResultCode', $callback)
+            ) {
+                Log::error('Received a malformed M-Pesa callback.', [
+                    'checkout_request_id' => is_string($checkoutRequestId) ? $checkoutRequestId : null,
                     'payload_keys' => array_keys($callbackData),
                 ]);
 
                 return null;
             }
 
-            $checkoutRequestId = (string) $callback['CheckoutRequestID'];
             $resultCode = filter_var($callback['ResultCode'] ?? null, FILTER_VALIDATE_INT);
             if ($resultCode === false) {
-                Log::warning('Received an M-Pesa callback without a valid result code.', [
+                Log::error('Received an M-Pesa callback without a valid result code.', [
                     'checkout_request_id' => $checkoutRequestId,
                 ]);
 
                 return null;
             }
+
+            $isLocalSandbox = config('mpesa.environment') === 'sandbox'
+                && app()->environment('local')
+                && (bool) config('mpesa.skip_callback_verification_in_local', false);
+            Log::info('M-Pesa handleCallback: verification', [
+                'is_local_sandbox' => $isLocalSandbox,
+                'checkout_request_id' => $checkoutRequestId,
+            ]);
 
             $metadata = collect($callback['CallbackMetadata']['Item'] ?? [])
                 ->filter(fn (mixed $item): bool => is_array($item) && isset($item['Name']))
@@ -195,27 +214,34 @@ class MpesaService
                 ->exists();
 
             if (! $existingPayment && ! $appointmentExists) {
-                Log::warning('M-Pesa callback did not match a payment.', [
+                Log::warning('M-Pesa callback for unknown checkout_request_id', [
                     'checkout_request_id' => $checkoutRequestId,
                 ]);
 
                 return null;
             }
 
-            $providerResult = $this->verifyPayment($checkoutRequestId);
-            $providerResultCode = filter_var($providerResult['ResultCode'] ?? null, FILTER_VALIDATE_INT);
-            if ((string) ($providerResult['ResponseCode'] ?? '') !== '0'
-                || (string) ($providerResult['CheckoutRequestID'] ?? '') !== $checkoutRequestId
-                || $providerResultCode === false
-                || $providerResultCode !== $resultCode
-            ) {
-                Log::warning('M-Pesa callback did not match the verified provider status.', [
+            if ($isLocalSandbox) {
+                Log::warning('M-Pesa verification SKIPPED (local sandbox only)', [
                     'checkout_request_id' => $checkoutRequestId,
-                    'callback_result_code' => $resultCode,
-                    'provider_result_code' => $providerResultCode === false ? null : $providerResultCode,
                 ]);
+            } else {
+                $providerResult = $this->verifyPayment($checkoutRequestId);
+                $providerResultCode = filter_var($providerResult['ResultCode'] ?? null, FILTER_VALIDATE_INT);
 
-                return null;
+                if ((string) ($providerResult['ResponseCode'] ?? '') !== '0'
+                    || (string) ($providerResult['CheckoutRequestID'] ?? '') !== $checkoutRequestId
+                    || $providerResultCode === false
+                    || $providerResultCode !== $resultCode
+                ) {
+                    Log::warning('M-Pesa callback did not match the verified provider status.', [
+                        'checkout_request_id' => $checkoutRequestId,
+                        'callback_result_code' => $resultCode,
+                        'provider_result_code' => $providerResultCode === false ? null : $providerResultCode,
+                    ]);
+
+                    return null;
+                }
             }
 
             return DB::transaction(function () use (
@@ -277,44 +303,107 @@ class MpesaService
                 $payment->callback_payload = $callbackData;
 
                 if ($resultCode === 0) {
+                    $receiptNumber = $metadata['MpesaReceiptNumber'] ?? null;
+                    $amount = $metadata['Amount'] ?? null;
+                    $phone = $metadata['PhoneNumber'] ?? null;
+
+                    if (! is_string($receiptNumber) || trim($receiptNumber) === '') {
+                        Log::warning('M-Pesa callback did not include an M-Pesa receipt number.', [
+                            'checkout_request_id' => $checkoutRequestId,
+                        ]);
+                    }
+
+                    if (is_numeric($amount)
+                        && is_finite((float) $amount)
+                        && abs((float) $amount - $payment->amount) > 0.0001
+                    ) {
+                        Log::warning('M-Pesa callback amount did not match the stored payment amount.', [
+                            'checkout_request_id' => $checkoutRequestId,
+                        ]);
+                    }
+
+                    $callbackPhone = (is_string($phone) || is_numeric($phone))
+                        ? preg_replace('/\D+/', '', (string) $phone)
+                        : '';
+                    $storedPhone = preg_replace('/\D+/', '', $payment->phone) ?? '';
+
+                    if ($callbackPhone !== '' && $storedPhone !== '' && $callbackPhone !== $storedPhone) {
+                        Log::warning('M-Pesa callback phone did not match the stored payment phone.', [
+                            'checkout_request_id' => $checkoutRequestId,
+                        ]);
+                    }
+
                     $payment->markAsCompleted([
                         'result_code' => $resultCode,
                         'result_description' => $callback['ResultDesc'] ?? 'Payment completed successfully.',
-                        'mpesa_receipt' => $metadata['MpesaReceiptNumber'] ?? null,
+                        'mpesa_receipt' => is_string($receiptNumber) ? $receiptNumber : null,
                         'callback_payload' => $callbackData,
                     ]);
                 } else {
-                    $payment->markAsFailed(
-                        (string) ($callback['ResultDesc'] ?? 'M-Pesa payment failed.'),
-                        $resultCode,
-                    );
-                    $payment->callback_payload = $callbackData;
-                    $payment->save();
+                    $resultDescription = (string) ($callback['ResultDesc'] ?? 'M-Pesa payment failed.');
+                    $payment->markAsFailed($resultDescription, $resultCode);
+                    $payment->forceFill(['callback_payload' => $callbackData])->save();
+
+                    Log::warning('M-Pesa payment failed', [
+                        'checkout_request_id' => $checkoutRequestId,
+                        'result_code' => $resultCode,
+                        'result_desc' => $resultDescription,
+                    ]);
                 }
 
                 $appointment = $payment->appointment;
+                if ($payment->appointment_request_id !== null && ! $appointment) {
+                    Log::warning('M-Pesa payment appointment was not found.', [
+                        'checkout_request_id' => $checkoutRequestId,
+                        'appointment_id' => $payment->appointment_request_id,
+                    ]);
+                }
+
                 if ($appointment) {
-                    $appointment->forceFill([
+                    $appointmentAttributes = [
                         'payment_status' => $resultCode === 0 ? 'paid' : 'unpaid',
                         'payment_amount' => $payment->amount,
                         'mpesa_result_code' => $resultCode,
                         'mpesa_result_description' => $callback['ResultDesc'] ?? null,
-                        'mpesa_receipt' => $metadata['MpesaReceiptNumber'] ?? null,
+                        'mpesa_receipt' => $resultCode === 0 && is_string($metadata['MpesaReceiptNumber'] ?? null)
+                            ? $metadata['MpesaReceiptNumber']
+                            : null,
                         'paid_at' => $resultCode === 0 ? now() : null,
-                        'mpesa_checkout_request_id' => $resultCode === 0
-                            ? $appointment->mpesa_checkout_request_id
-                            : null,
-                        'mpesa_merchant_request_id' => $resultCode === 0
-                            ? $appointment->mpesa_merchant_request_id
-                            : null,
-                        ...($resultCode === 0 ? ['status' => AppointmentRequest::STATUS_CONFIRMED] : []),
-                    ])->save();
+                        'mpesa_merchant_request_id' => $callback['MerchantRequestID']
+                            ?? $appointment->mpesa_merchant_request_id,
+                    ];
+
+                    $hospital = $appointment->hospital;
+                    $autoConfirmed = $resultCode === 0
+                        && $appointment->status === AppointmentRequest::STATUS_PENDING
+                        && $hospital?->shouldAutoConfirmPaidAppointments() === true;
+
+                    if ($autoConfirmed) {
+                        $appointmentAttributes['status'] = AppointmentRequest::STATUS_CONFIRMED;
+                        $appointmentAttributes['status_updated_at'] = now();
+                    }
+
+                    $appointment->forceFill($appointmentAttributes)->save();
+
+                    Log::info('M-Pesa appointment auto-confirm decision.', [
+                        'appointment_id' => $appointment->id,
+                        'hospital_id' => $appointment->hospital_id,
+                        'auto_confirmed' => $autoConfirmed,
+                        'result_code' => $resultCode,
+                    ]);
+
+                    Log::info('M-Pesa appointment payment status updated.', [
+                        'checkout_request_id' => $checkoutRequestId,
+                        'appointment_id' => $appointment->id,
+                        'payment_status' => $appointment->payment_status,
+                    ]);
                 }
 
                 return $payment->load('appointment');
             });
         } catch (Throwable $exception) {
             Log::error('Unable to process an M-Pesa payment callback.', [
+                'checkout_request_id' => $checkoutRequestId,
                 'exception' => $exception,
             ]);
 
@@ -334,7 +423,7 @@ class MpesaService
 
             $config = $this->configForCurrentHospital();
             $this->ensureCredentials($config);
-            $token = $this->getAccessToken();
+            $token = $this->getAccessToken($checkoutRequestId);
 
             if (! $token) {
                 throw new RuntimeException('M-Pesa did not return an access token.');
@@ -363,10 +452,13 @@ class MpesaService
         } catch (Throwable $exception) {
             Log::error('Unable to verify M-Pesa payment status.', [
                 'checkout_request_id' => $checkoutRequestId,
-                'exception' => $exception,
+                'message' => $exception->getMessage(),
             ]);
 
-            throw $exception;
+            return [
+                'ResultCode' => -1,
+                'ResultDesc' => 'Verification unavailable',
+            ];
         }
     }
 

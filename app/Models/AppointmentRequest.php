@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToHospital;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class AppointmentRequest extends Model
 {
-    use \App\Traits\BelongsToHospital, HasFactory;
+    use BelongsToHospital, HasFactory;
 
     public const STATUS_PENDING = 'pending';
 
@@ -41,6 +42,7 @@ class AppointmentRequest extends Model
         'mpesa_result_description',
         'mpesa_receipt',
         'paid_at',
+        'status_updated_at',
         'doctor_id',
         'slot_start_time',
         'slot_end_time',
@@ -55,6 +57,7 @@ class AppointmentRequest extends Model
         'payment_amount' => 'float',
         'mpesa_result_code' => 'integer',
         'paid_at' => 'datetime',
+        'status_updated_at' => 'datetime',
         'confirmed_by_doctor_at' => 'datetime',
         'marked_no_show_at' => 'datetime',
     ];

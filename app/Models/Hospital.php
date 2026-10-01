@@ -162,4 +162,11 @@ class Hospital extends Model
 
         return in_array($feature, $plans[$this->subscription_plan] ?? [], true);
     }
+
+    public function shouldAutoConfirmPaidAppointments(): bool
+    {
+        $settings = $this->settings ?? [];
+
+        return (bool) ($settings['auto_confirm_paid_appointments'] ?? false);
+    }
 }
