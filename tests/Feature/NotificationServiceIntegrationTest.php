@@ -11,8 +11,8 @@ class NotificationServiceIntegrationTest extends TestCase
     public function test_send_whatsapp_when_credentials_present()
     {
         config([
-            'services.whatsapp.phone_number_id' => '12345',
-            'services.whatsapp.access_token' => 'test-access-token',
+            'whatsapp.phone_number_id' => '12345',
+            'whatsapp.access_token' => 'test-access-token',
         ]);
         Http::preventStrayRequests();
         Http::fake([
@@ -31,6 +31,7 @@ class NotificationServiceIntegrationTest extends TestCase
     public function test_africastalking_then_twilio_fallback_behavior()
     {
         config([
+            'services.sms_provider' => 'africastalking',
             'services.africastalking.username' => 'testuser',
             'services.africastalking.api_key' => 'testkey',
         ]);
@@ -47,6 +48,7 @@ class NotificationServiceIntegrationTest extends TestCase
         });
 
         config([
+            'services.sms_provider' => 'twilio',
             'services.africastalking.username' => null,
             'services.africastalking.api_key' => null,
             'services.twilio.account_sid' => 'abc',

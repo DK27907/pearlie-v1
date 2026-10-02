@@ -29,6 +29,23 @@ class HospitalSettings
 
     private ?Hospital $hospital = null;
 
+    public static function current(): static
+    {
+        $hospital = hospital();
+        if (! $hospital) {
+            throw new RuntimeException('No hospital bound to the current request.');
+        }
+
+        return (new static)->for($hospital);
+    }
+
+    public static function currentOrNull(): ?static
+    {
+        $hospital = hospital();
+
+        return $hospital ? (new static)->for($hospital) : null;
+    }
+
     public function for(Hospital $hospital): static
     {
         $this->hospital = $hospital;

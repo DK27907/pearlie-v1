@@ -13,7 +13,10 @@ use Throwable;
 
 class NoShowService
 {
-    public function __construct(private readonly WhatsAppService $whatsApp) {}
+    public function __construct(
+        private readonly WhatsAppService $whatsApp,
+        private readonly HospitalMailService $mail,
+    ) {}
 
     public function markAsNoShow(AppointmentRequest $appointment, ?string $reason = null): AppointmentRequest
     {
@@ -130,8 +133,11 @@ class NoShowService
 
         if ($appointment->email) {
             try {
-                Notification::route('mail', $appointment->email)
-                    ->notify(new NoShowNotification($appointment));
+                $this->mail->runForHospital(
+                    (int) $appointment->hospital_id,
+                    fn () => Notification::route('mail', $appointment->email)
+                        ->notify(new NoShowNotification($appointment)),
+                );
             } catch (Throwable $exception) {
                 Log::error('Email no-show notice failed.', [
                     'appointment_id' => $appointment->id,

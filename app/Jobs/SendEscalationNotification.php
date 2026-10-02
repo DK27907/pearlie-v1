@@ -5,12 +5,12 @@ namespace App\Jobs;
 use App\Mail\EscalationNotification;
 use App\Models\Escalation;
 use App\Models\Hospital;
-use Illuminate\Foundation\Bus\Dispatchable;
+use App\Services\HospitalMailService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -19,10 +19,13 @@ class SendEscalationNotification implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public Escalation $escalation;
+
     public array $meta;
+
     public int $hospitalId;
 
     public int $tries = 3;
+
     public int $backoff = 60; // seconds
 
     public function __construct(Escalation $escalation, array $meta = [], ?string $recipient = null)
@@ -35,14 +38,15 @@ class SendEscalationNotification implements ShouldQueue
 
     public ?string $recipient;
 
-    public function handle()
+    public function handle(): void
     {
-        $hospital = Hospital::query()->find($this->hospitalId);
+        $hospital = Hospital::withoutGlobalScopes()->find($this->hospitalId);
         if (! $hospital) {
             throw new \RuntimeException('The escalation hospital no longer exists.');
         }
         app()->instance('currentHospital', $hospital);
         $this->escalation->unsetRelations();
+        $mail = app(HospitalMailService::class);
 
         $recipients = $this->recipient
             ? [$this->recipient]
@@ -51,13 +55,30 @@ class SendEscalationNotification implements ShouldQueue
                 config('pearlie.notify_emails', []),
             )));
 
+        if ($recipients === []) {
+            Log::warning('Escalation email notification has no configured recipients.', [
+                'escalation_id' => $this->escalation->id,
+                'channel' => 'email',
+            ]);
+
+            return;
+        }
+
         foreach ($recipients as $recipient) {
             try {
-                Mail::to($recipient)->send(new EscalationNotification($this->escalation, $this->meta));
+                Log::info('Attempting escalation email delivery.', [
+                    'escalation_id' => $this->escalation->id,
+                    'channel' => 'email',
+                ]);
+                $mail->send($recipient, new EscalationNotification($this->escalation, $this->meta));
+                Log::info('Escalation email was handed to the mail transport.', [
+                    'escalation_id' => $this->escalation->id,
+                    'channel' => 'email',
+                ]);
             } catch (Throwable $exception) {
                 Log::error('Unable to send escalation email.', [
                     'escalation_id' => $this->escalation->id,
-                    'recipient' => $recipient,
+                    'channel' => 'email',
                     'exception' => $exception,
                 ]);
 

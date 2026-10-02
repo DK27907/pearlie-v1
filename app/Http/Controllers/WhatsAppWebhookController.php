@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\HospitalSettings;
 use App\Services\WhatsAppBookingService;
 use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
@@ -86,17 +87,25 @@ class WhatsAppWebhookController extends Controller
     private function whatsappCredential(string $tenantAttribute, string $globalKey): ?string
     {
         $tenant = hospital();
-        if (! $tenant) {
-            return null;
+        $credentialKey = match ($globalKey) {
+            'verify_token' => 'verify_token',
+            'app_secret' => 'app_secret',
+            default => null,
+        };
+        $credentials = HospitalSettings::currentOrNull()?->credential('whatsapp') ?? [];
+        if ($credentialKey && isset($credentials[$credentialKey])) {
+            return (string) $credentials[$credentialKey];
         }
 
-        $credential = $tenant->getAttribute($tenantAttribute);
-        if (filled($credential)) {
-            return (string) $credential;
+        if ($tenant) {
+            $credential = $tenant->getAttribute($tenantAttribute);
+            if (filled($credential)) {
+                return (string) $credential;
+            }
         }
 
-        return $tenant->slug === 'pearl'
-            ? (string) config('services.whatsapp.'.$globalKey)
-            : null;
+        $configuredValue = config('whatsapp.'.$globalKey);
+
+        return $configuredValue === null ? null : (string) $configuredValue;
     }
 }

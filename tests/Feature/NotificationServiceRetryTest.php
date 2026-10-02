@@ -11,6 +11,7 @@ class NotificationServiceRetryTest extends TestCase
     public function test_africastalking_retries_then_succeeds_and_skips_twilio()
     {
         config([
+            'services.sms_provider' => 'africastalking',
             'services.africastalking.username' => 'testuser',
             'services.africastalking.api_key' => 'testkey',
             'services.twilio.account_sid' => 'twiliosid',
@@ -46,9 +47,10 @@ class NotificationServiceRetryTest extends TestCase
         Http::assertSentCount(3);
     }
 
-    public function test_twilio_retries_when_africastalking_missing_or_fails_completely()
+    public function test_twilio_retries_when_selected_as_the_provider()
     {
         config([
+            'services.sms_provider' => 'twilio',
             'services.africastalking.username' => null,
             'services.africastalking.api_key' => null,
             'services.twilio.account_sid' => 'twiliosid2',

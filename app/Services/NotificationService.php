@@ -4,19 +4,32 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
 
 class NotificationService
 {
     public function sendSms(string $to, string $message): bool
     {
         $smsTo = $to;
+        $smsConfig = $this->smsConfig();
+        $provider = (string) ($smsConfig['provider'] ?? (
+            filled($smsConfig['username'] ?? null) && filled($smsConfig['api_key'] ?? null)
+                ? 'africastalking'
+                : 'twilio'
+        ));
+        if (! in_array($provider, ['africastalking', 'twilio'], true)) {
+            throw new RuntimeException("SMS provider {$provider} is not configured for this hospital.");
+        }
 
         // Africa's Talking
-        $atUser = config('services.africastalking.username');
-        $atKey = config('services.africastalking.api_key');
-        $atFrom = config('services.africastalking.sender_id');
+        $atUser = $provider === 'africastalking' ? ($smsConfig['username'] ?? null) : null;
+        $atKey = $provider === 'africastalking' ? ($smsConfig['api_key'] ?? null) : null;
+        $atFrom = $provider === 'africastalking' ? ($smsConfig['sender_id'] ?? null) : null;
+        if ($provider === 'africastalking' && (blank($atUser) || blank($atKey))) {
+            throw new RuntimeException("SMS provider {$provider} is not configured for this hospital.");
+        }
 
-        if ($atUser && $atKey) {
+        if ($provider === 'africastalking') {
             try {
                 $url = 'https://api.africastalking.com/version1/messaging';
                 $payload = [
@@ -96,11 +109,18 @@ class NotificationService
         }
 
         // Twilio fallback
-        $sid = config('services.twilio.account_sid');
-        $token = config('services.twilio.auth_token');
-        $apiKey = config('services.twilio.api_key');
-        $apiSecret = config('services.twilio.api_secret');
-        $from = config('services.twilio.from_number');
+        $sid = $smsConfig['account_sid'] ?? null;
+        $token = $smsConfig['auth_token'] ?? null;
+        $apiKey = $smsConfig['twilio_api_key'] ?? null;
+        $apiSecret = $smsConfig['api_secret'] ?? null;
+        $from = $smsConfig['from_number'] ?? null;
+        if ($provider === 'twilio' && (
+            blank($sid)
+            || blank($from)
+            || (! filled($token) && (! filled($apiKey) || ! filled($apiSecret)))
+        )) {
+            throw new RuntimeException("SMS provider {$provider} is not configured for this hospital.");
+        }
 
         if ($sid && (($apiKey && $apiSecret) || $token) && $from) {
             try {
@@ -179,19 +199,14 @@ class NotificationService
 
     public function sendWhatsApp(string $to, string $message): bool
     {
-        $tenant = hospital();
-        $usePearlFallback = ! $tenant || $tenant->slug === 'pearl';
-        $waId = $tenant?->whatsapp_phone_number_id
-            ?: ($usePearlFallback ? config('services.whatsapp.phone_number_id') : null);
-        $waToken = $tenant?->whatsapp_access_token
-            ?: ($usePearlFallback ? config('services.whatsapp.access_token') : null);
+        $whatsappConfig = $this->whatsappConfig();
+        $waId = $whatsappConfig['phone_number_id'] ?? null;
+        $waToken = $whatsappConfig['access_token'] ?? null;
         $smsTo = $to;
 
         if ($waId && $waToken) {
             try {
-                $apiVersion = $tenant && $tenant->slug !== 'pearl'
-                    ? $tenant->whatsapp_api_version
-                    : config('services.whatsapp.api_version', 'v20.0');
+                $apiVersion = $whatsappConfig['api_version'] ?? 'v20.0';
                 $waUrl = sprintf('https://graph.facebook.com/%s/%s/messages', $apiVersion, $waId);
                 $waPayload = [
                     'messaging_product' => 'whatsapp',
@@ -261,5 +276,70 @@ class NotificationService
         Log::info('No WhatsApp credentials configured; skipping the message.');
 
         return false;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function smsConfig(): array
+    {
+        $hospitalSettings = HospitalSettings::currentOrNull();
+        if ($hospitalSettings) {
+            $credentials = $hospitalSettings->credential('sms');
+            if ($credentials) {
+                return $credentials;
+            }
+        }
+
+        $legacyProvider = config('services.sms_provider');
+        if ($legacyProvider === null) {
+            $legacyProvider = filled(config('services.africastalking.username'))
+                && filled(config('services.africastalking.api_key'))
+                ? 'africastalking'
+                : 'twilio';
+        }
+
+        return [
+            'provider' => $legacyProvider,
+            'username' => config('services.africastalking.username'),
+            'api_key' => config('services.africastalking.api_key'),
+            'sender_id' => config('services.africastalking.sender_id'),
+            'account_sid' => config('services.twilio.account_sid'),
+            'auth_token' => config('services.twilio.auth_token'),
+            'twilio_api_key' => config('services.twilio.api_key'),
+            'api_secret' => config('services.twilio.api_secret'),
+            'from_number' => config('services.twilio.from_number'),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function whatsappConfig(): array
+    {
+        $config = (array) config('whatsapp');
+        $hospitalSettings = HospitalSettings::currentOrNull();
+        $credentials = $hospitalSettings?->credential('whatsapp') ?? [];
+        $tenant = hospital();
+
+        foreach (['phone_number_id', 'access_token', 'api_version'] as $key) {
+            if (isset($credentials[$key])) {
+                $config[$key] = $credentials[$key];
+
+                continue;
+            }
+
+            $legacyAttribute = match ($key) {
+                'phone_number_id' => 'whatsapp_phone_number_id',
+                'access_token' => 'whatsapp_access_token',
+                'api_version' => 'whatsapp_api_version',
+                default => null,
+            };
+            if ($tenant && $legacyAttribute && filled($tenant->getAttribute($legacyAttribute))) {
+                $config[$key] = $tenant->getAttribute($legacyAttribute);
+            }
+        }
+
+        return $config;
     }
 }

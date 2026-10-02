@@ -6,18 +6,18 @@ use App\Mail\HospitalAdminInviteMail;
 use App\Models\Hospital;
 use App\Models\Invite;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
 use Throwable;
 
 class HospitalInvitationService
 {
+    public function __construct(private readonly HospitalMailService $mail) {}
+
     public function send(Hospital $hospital, string $email, int $inviterId): Invite
     {
         $user = User::withoutGlobalScopes()->where('email', $email)->first();
@@ -63,7 +63,7 @@ class HospitalInvitationService
                 $invite->expires_at,
                 ['slug' => $hospital->slug, 'token' => $invite->token],
             );
-            Mail::to($invite->email)->send(new HospitalAdminInviteMail($hospital, $url));
+            $this->mail->send($invite->email, new HospitalAdminInviteMail($hospital, $url));
         } catch (Throwable $exception) {
             Log::error('Unable to send a hospital administrator invitation.', [
                 'hospital_id' => $hospital->id,

@@ -225,7 +225,7 @@ class MpesaService
                 return null;
             }
 
-            $isLocalSandbox = config('mpesa.environment') === 'sandbox'
+            $isLocalSandbox = $this->config('environment') === 'sandbox'
                 && app()->environment('local')
                 && (bool) config('mpesa.skip_callback_verification_in_local', false);
             Log::info('M-Pesa handleCallback: verification', [
@@ -629,10 +629,15 @@ class MpesaService
         try {
             return $this->stkPush(
                 (string) ($appointment->mpesa_phone ?: $appointment->phone),
-                (float) ($appointment->booking_fee ?: pearlie_config('appointment.deposit_amount')),
+                (float) (
+                    $appointment->payment_amount
+                    ?? $appointment->service?->price
+                    ?? $appointment->booking_fee
+                    ?? pearlie_config('appointment.deposit_amount')
+                ),
                 (string) $this->configForCurrentHospital()['account_reference'],
-                (string) pearlie_config(
-                    'mpesa.transaction_description',
+                (string) $this->config(
+                    'transaction_description',
                     pearlie_config('hospital.name').' appointment booking',
                 ),
                 $appointment->id,
@@ -662,32 +667,30 @@ class MpesaService
     private function configForCurrentHospital(): array
     {
         $config = (array) config('mpesa');
-        $hospital = hospital();
+        foreach ([
+            'consumer_key',
+            'consumer_secret',
+            'shortcode',
+            'passkey',
+            'environment',
+            'callback_url',
+            'account_reference',
+            'transaction_description',
+            'timeout',
+        ] as $key) {
+            $config[$key] = $this->config($key, $config[$key] ?? null);
+        }
 
+        $hospital = hospital();
         if (! $hospital) {
             return $config;
         }
 
-        if ($hospital->slug !== 'pearl') {
-            $config['consumer_key'] = $hospital->mpesa_consumer_key;
-            $config['consumer_secret'] = $hospital->mpesa_consumer_secret;
-            $config['passkey'] = $hospital->mpesa_passkey;
-            $config['shortcode'] = $hospital->mpesa_shortcode;
-        } else {
-            foreach ([
-                'consumer_key' => $hospital->mpesa_consumer_key,
-                'consumer_secret' => $hospital->mpesa_consumer_secret,
-                'passkey' => $hospital->mpesa_passkey,
-                'shortcode' => $hospital->mpesa_shortcode,
-            ] as $key => $value) {
-                if (filled($value)) {
-                    $config[$key] = $value;
-                }
-            }
-        }
-
         $config['appointment_deposit'] = (float) $hospital->deposit_amount;
-        $config['account_reference'] = 'MEDI'.Str::upper(Str::substr(Str::replace('-', '', $hospital->slug), 0, 8));
+        $configuredCredentials = HospitalSettings::currentOrNull()?->credential('mpesa') ?? [];
+        if (! isset($configuredCredentials['account_reference'])) {
+            $config['account_reference'] = 'MEDI'.Str::upper(Str::substr(Str::replace('-', '', $hospital->slug), 0, 8));
+        }
         $callbackUrl = (string) ($config['callback_url'] ?? '');
         if ($callbackUrl !== '') {
             $separator = str_contains($callbackUrl, '?') ? '&' : '?';
@@ -695,6 +698,28 @@ class MpesaService
         }
 
         return $config;
+    }
+
+    private function config(string $key, mixed $default = null): mixed
+    {
+        $credentials = HospitalSettings::currentOrNull()?->credential('mpesa');
+        if (isset($credentials[$key])) {
+            return $credentials[$key];
+        }
+
+        $legacyAttributes = [
+            'consumer_key' => 'mpesa_consumer_key',
+            'consumer_secret' => 'mpesa_consumer_secret',
+            'shortcode' => 'mpesa_shortcode',
+            'passkey' => 'mpesa_passkey',
+        ];
+        $hospital = hospital();
+        $legacyAttribute = $legacyAttributes[$key] ?? null;
+        if ($hospital && $legacyAttribute && filled($hospital->getAttribute($legacyAttribute))) {
+            return $hospital->getAttribute($legacyAttribute);
+        }
+
+        return config('mpesa.'.$key, $default);
     }
 
     private function baseUrl(array $config): string

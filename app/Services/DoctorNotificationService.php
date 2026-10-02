@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
-use App\Models\User;
 use App\Models\Hospital;
+use App\Models\User;
 use App\Notifications\DailyDoctorSummary;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
@@ -12,11 +12,13 @@ use Throwable;
 
 class DoctorNotificationService
 {
+    public function __construct(private readonly HospitalMailService $mail) {}
+
     public function sendDailySummary(User $doctor): void
     {
         try {
             $previousHospital = hospital();
-            $hospital = Hospital::query()->find($doctor->hospital_id);
+            $hospital = Hospital::withoutGlobalScopes()->find($doctor->hospital_id);
             if (! $hospital) {
                 throw new \RuntimeException('The doctor is not assigned to a hospital.');
             }
@@ -29,7 +31,10 @@ class DoctorNotificationService
                 ->orderBy('id')
                 ->get();
 
-            $doctor->notify(new DailyDoctorSummary($appointments, $date->toDateString()));
+            $this->mail->runForHospital(
+                (int) $hospital->id,
+                fn () => $doctor->notify(new DailyDoctorSummary($appointments, $date->toDateString())),
+            );
         } catch (Throwable $exception) {
             Log::error('Unable to send daily doctor summary.', [
                 'doctor_id' => $doctor->id,

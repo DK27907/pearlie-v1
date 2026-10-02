@@ -56,9 +56,10 @@ class NotificationServiceFallbackTest extends TestCase
         });
     }
 
-    public function test_send_sms_uses_twilio_when_africastalking_not_configured()
+    public function test_send_sms_uses_explicitly_selected_twilio_provider()
     {
         config([
+            'services.sms_provider' => 'twilio',
             'services.africastalking.username' => null,
             'services.africastalking.api_key' => null,
             'services.twilio.account_sid' => 'twiliosid2',

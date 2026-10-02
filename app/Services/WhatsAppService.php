@@ -173,18 +173,27 @@ class WhatsAppService
     {
         $config = (array) config('whatsapp');
         $tenant = hospital();
-        if (! $tenant) {
-            return $config;
-        }
+        $credentials = HospitalSettings::currentOrNull()?->credential('whatsapp') ?? [];
 
-        $usePearlFallback = $tenant->slug === 'pearl';
-        $config['access_token'] = $tenant->whatsapp_access_token
-            ?: ($usePearlFallback ? config('whatsapp.access_token') : null);
-        $config['phone_number_id'] = $tenant->whatsapp_phone_number_id
-            ?: ($usePearlFallback ? config('whatsapp.phone_number_id') : null);
-        $config['api_version'] = $usePearlFallback
-            ? config('whatsapp.api_version', 'v20.0')
-            : $tenant->whatsapp_api_version;
+        foreach (['phone_number_id', 'access_token', 'verify_token', 'app_secret', 'api_version'] as $key) {
+            if (isset($credentials[$key])) {
+                $config[$key] = $credentials[$key];
+
+                continue;
+            }
+
+            $legacyAttribute = match ($key) {
+                'phone_number_id' => 'whatsapp_phone_number_id',
+                'access_token' => 'whatsapp_access_token',
+                'verify_token' => 'whatsapp_verify_token',
+                'app_secret' => 'whatsapp_app_secret',
+                'api_version' => 'whatsapp_api_version',
+                default => null,
+            };
+            if ($tenant && $legacyAttribute && filled($tenant->getAttribute($legacyAttribute))) {
+                $config[$key] = $tenant->getAttribute($legacyAttribute);
+            }
+        }
 
         return $config;
     }

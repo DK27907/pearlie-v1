@@ -12,13 +12,14 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
 class DoctorManagementService
 {
+    public function __construct(private readonly HospitalMailService $mail) {}
+
     public function paginateDoctors(?string $search): LengthAwarePaginator
     {
         return User::query()
@@ -44,7 +45,7 @@ class DoctorManagementService
     }
 
     /**
-     * @param  array{name: string, email: string, specialization: string, phone: string}  $attributes
+     * @param  array{name: string, email: string, specialization: string, phone: string, bio?: string|null, consultation_fee?: int|float|string|null, licence_number?: string|null}  $attributes
      * @return array{doctor: User, invite_sent: bool}
      */
     public function createDoctor(array $attributes): array
@@ -72,7 +73,7 @@ class DoctorManagementService
     }
 
     /**
-     * @param  array{name: string, email: string, specialization: string, phone: string}  $attributes
+     * @param  array{name: string, email: string, specialization: string, phone: string, bio?: string|null, consultation_fee?: int|float|string|null, licence_number?: string|null}  $attributes
      */
     public function updateDoctor(User $doctor, array $attributes): void
     {
@@ -82,7 +83,7 @@ class DoctorManagementService
     public function deactivateDoctor(User $doctor): void
     {
         DB::transaction(function () use ($doctor): void {
-            $doctor->update(['is_doctor' => false]);
+            $doctor->update(['is_doctor' => false, 'is_active' => false]);
 
             $doctor->doctorInvites()
                 ->whereNull('used_at')
@@ -165,7 +166,7 @@ class DoctorManagementService
     private function sendInvite(User $doctor, string $token, Carbon $expiresAt): bool
     {
         try {
-            Mail::to($doctor->email)->send(new DoctorInviteMail($doctor, $token, $expiresAt));
+            $this->mail->send($doctor->email, new DoctorInviteMail($doctor, $token, $expiresAt));
 
             return true;
         } catch (Throwable $exception) {
