@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\BookingChatService;
 use App\Services\HospitalSettings;
-use App\Services\WhatsAppBookingService;
 use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -29,7 +29,7 @@ class WhatsAppWebhookController extends Controller
 
     public function receive(
         Request $request,
-        WhatsAppBookingService $booking,
+        BookingChatService $booking,
         WhatsAppService $whatsApp,
     ): Response {
         $secret = (string) $this->whatsappCredential('whatsapp_app_secret', 'app_secret');
@@ -58,10 +58,14 @@ class WhatsAppWebhookController extends Controller
                     }
 
                     try {
-                        $result = $booking->handleMessage((string) $message['from'], (string) $message['text']['body']);
+                        $result = $booking->handle(
+                            (string) $message['from'],
+                            (string) $message['text']['body'],
+                            'whatsapp',
+                        );
                         $whatsApp->sendMessage(
                             (string) $message['from'],
-                            (string) ($result['response'] ?? ''),
+                            $result->message,
                         );
                     } catch (\Throwable $e) {
                         Log::error('WhatsApp inbound message failed.', [
@@ -78,7 +82,7 @@ class WhatsAppWebhookController extends Controller
 
     public function handle(
         Request $request,
-        WhatsAppBookingService $booking,
+        BookingChatService $booking,
         WhatsAppService $whatsApp,
     ): Response {
         return $this->receive($request, $booking, $whatsApp);

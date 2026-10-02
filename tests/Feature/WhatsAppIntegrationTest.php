@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Conversation;
 use App\Services\WhatsAppBookingService;
 use App\Services\WhatsAppService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -15,7 +16,7 @@ class WhatsAppIntegrationTest extends TestCase
 
     public function test_webhook_verification(): void
     {
-        config(['services.whatsapp.verify_token' => 'verify-secret']);
+        config(['whatsapp.verify_token' => 'verify-secret']);
 
         $this->get('/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=verify-secret&hub.challenge=challenge-123')
             ->assertOk()
@@ -24,19 +25,35 @@ class WhatsAppIntegrationTest extends TestCase
 
     public function test_webhook_rejects_invalid_signature(): void
     {
-        config(['services.whatsapp.app_secret' => 'webhook-secret']);
+        config(['whatsapp.app_secret' => 'webhook-secret']);
 
         $this->postJson('/api/whatsapp/webhook', ['object' => 'whatsapp_business_account'], [
             'X-Hub-Signature-256' => 'sha256=invalid',
         ])->assertUnauthorized();
     }
 
+    public function test_whatsapp_message_uses_the_configured_access_token(): void
+    {
+        config([
+            'whatsapp.access_token' => 'test-token',
+            'whatsapp.phone_number_id' => 'test-phone-number-id',
+            'whatsapp.api_version' => 'v20.0',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.test']]]),
+        ]);
+
+        $result = app(WhatsAppService::class)->sendMessage('254712345678', 'Test message');
+
+        $this->assertTrue($result['success']);
+        Http::assertSent(fn ($request): bool => $request->hasHeader('Authorization', 'Bearer test-token'));
+    }
+
     public function test_incoming_message_triggers_the_booking_flow(): void
     {
         config([
-            'services.whatsapp.app_secret' => 'webhook-secret',
-            'services.whatsapp.phone_number_id' => 'phone-number-id',
-            'services.whatsapp.access_token' => 'whatsapp-token',
+            'whatsapp.app_secret' => 'webhook-secret',
             'whatsapp.phone_number_id' => 'phone-number-id',
             'whatsapp.access_token' => 'whatsapp-token',
         ]);
@@ -67,13 +84,21 @@ class WhatsAppIntegrationTest extends TestCase
             'HTTP_X_HUB_SIGNATURE_256' => $signature,
         ], $body)->assertOk();
 
-        $this->assertDatabaseHas('appointment_requests', [
+        $this->assertDatabaseMissing('appointment_requests', [
             'phone' => '254712345678',
             'session_id' => 'whatsapp:254712345678',
         ]);
+        $this->assertDatabaseHas('conversations', [
+            'session_id' => 'whatsapp:254712345678',
+            'channel' => 'whatsapp',
+        ]);
         $this->assertSame(
-            'ask_name',
-            Cache::get('whatsapp_booking_254712345678')['state'],
+            'COLLECTING',
+            Conversation::query()
+                ->where('session_id', 'whatsapp:254712345678')
+                ->latest('id')
+                ->firstOrFail()
+                ->chat_state['state'],
         );
         Http::assertSent(fn ($request): bool => str_contains($request->url(), '/messages')
             && $request['messaging_product'] === 'whatsapp');

@@ -5,11 +5,13 @@ namespace App\Services;
 use App\Models\AppointmentRequest;
 use App\Models\DoctorAvailability;
 use App\Models\DoctorUnavailableDate;
+use App\Models\Service;
 use App\Models\SlotHold;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
 use Throwable;
 
 class DoctorAvailabilityService
@@ -170,9 +172,26 @@ class DoctorAvailabilityService
         string $startTime,
         array $patient,
         ?int $preferredDoctorId = null,
+        ?Service $service = null,
     ): ?AppointmentRequest {
+        $currentHospital = hospital();
+        if ($service !== null
+            && ($service->is_active !== true
+                || $currentHospital === null
+                || (int) $service->hospital_id !== (int) $currentHospital->id)
+        ) {
+            throw new InvalidArgumentException('The selected service is not available to this hospital.');
+        }
+
         try {
-            return DB::transaction(function () use ($date, $startTime, $patient, $preferredDoctorId): ?AppointmentRequest {
+            return DB::transaction(function () use (
+                $date,
+                $startTime,
+                $patient,
+                $preferredDoctorId,
+                $service,
+                $currentHospital,
+            ): ?AppointmentRequest {
                 $requestedDate = CarbonImmutable::parse($date);
                 $normalizedStart = CarbonImmutable::parse($startTime)->format('H:i');
 
@@ -182,12 +201,29 @@ class DoctorAvailabilityService
 
                 $doctors = User::query()
                     ->where('is_doctor', true)
+                    ->where('is_active', true)
+                    ->when(
+                        filled($service?->requires_specialty),
+                        fn ($query) => $query->where('specialization', $service->requires_specialty),
+                    )
                     ->when(
                         $preferredDoctorId !== null,
                         fn ($query) => $query->whereKey($preferredDoctorId),
                     )
                     ->orderBy('id')
                     ->get();
+
+                if ($doctors->isEmpty() && filled($service?->requires_specialty)) {
+                    $doctors = User::query()
+                        ->where('is_doctor', true)
+                        ->where('is_active', true)
+                        ->when(
+                            $preferredDoctorId !== null,
+                            fn ($query) => $query->whereKey($preferredDoctorId),
+                        )
+                        ->orderBy('id')
+                        ->get();
+                }
 
                 foreach ($doctors as $doctor) {
                     if ($this->dateIsUnavailable($doctor->id, $requestedDate)) {
@@ -244,21 +280,34 @@ class DoctorAvailabilityService
                                 continue;
                             }
 
+                            $effectiveAmount = (float) (
+                                $service?->price
+                                ?? $currentHospital?->deposit_amount
+                                ?? pearlie_config('appointment.deposit_amount')
+                            );
+                            $isFreeService = $service !== null && $effectiveAmount <= 0;
                             $appointment = AppointmentRequest::query()->create([
                                 'session_id' => $patient['session_id'],
+                                'patient_id' => auth()->user()?->role === 'patient' ? auth()->id() : null,
                                 'name' => $patient['name'],
                                 'phone' => $patient['phone'],
                                 'email' => $patient['email'] ?? null,
                                 'preferred_date' => $requestedDate->toDateString(),
                                 'reason' => $patient['reason'],
                                 'raw_message' => $patient['raw_message'],
-                                'status' => AppointmentRequest::STATUS_PENDING,
+                                'status' => $isFreeService
+                                    ? AppointmentRequest::STATUS_CONFIRMED
+                                    : AppointmentRequest::STATUS_PENDING,
+                                'status_updated_at' => $isFreeService ? now() : null,
                                 'doctor_id' => $doctor->id,
                                 'slot_start_time' => $slot['start'],
                                 'slot_end_time' => $slot['end'],
+                                'service_id' => $service?->id,
+                                'booking_fee' => (int) round($effectiveAmount),
+                                'payment_amount' => $service !== null ? $effectiveAmount : null,
                             ]);
 
-                            if (hospital()?->hasFeature('mpesa')) {
+                            if ($currentHospital?->hasFeature('mpesa') && $effectiveAmount > 0) {
                                 SlotHold::query()->create([
                                     'hospital_id' => $appointment->hospital_id,
                                     'doctor_id' => $doctor->id,
