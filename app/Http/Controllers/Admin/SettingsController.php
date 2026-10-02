@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\UpdateBrandingSettingsRequest;
 use App\Http\Requests\Admin\UpdateEmailSettingsRequest;
 use App\Http\Requests\Admin\UpdateGeneralSettingsRequest;
 use App\Http\Requests\Admin\UpdateMpesaSettingsRequest;
@@ -13,6 +14,7 @@ use App\Models\HospitalIntegrationCredential;
 use App\Services\HospitalSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
 class SettingsController extends Controller
@@ -47,12 +49,13 @@ class SettingsController extends Controller
         }
 
         $activeTab = $request->query('tab', 'general');
-        if (! in_array($activeTab, ['general', ...self::PROVIDERS], true)) {
+        if (! in_array($activeTab, ['general', ...self::PROVIDERS, 'branding'], true)) {
             $activeTab = 'general';
         }
 
         return view('admin.settings.edit', [
             'activeTab' => $activeTab,
+            'hospital' => $hospital,
             'credentials' => $credentials,
             'settings' => $settings,
             'businessHours' => $settings->get('business_hours', []),
@@ -192,6 +195,35 @@ class SettingsController extends Controller
         }
 
         return $this->redirectToTab($provider, 'Email settings saved.');
+    }
+
+    public function updateBranding(UpdateBrandingSettingsRequest $request): RedirectResponse
+    {
+        $hospital = $this->currentHospital();
+        $data = $request->validated();
+        $updates = [
+            'site_header_text' => $data['site_header_text'] ?? null,
+            'site_footer_text' => $data['site_footer_text'] ?? null,
+        ];
+
+        if ($request->hasFile('site_logo')) {
+            $logoPath = $request->file('site_logo')->store('branding', 'public');
+            if ($logoPath === false) {
+                throw new \RuntimeException('The hospital logo could not be stored.');
+            }
+
+            $previousLogoPath = $hospital->site_logo_path;
+            $updates['site_logo_path'] = $logoPath;
+            $hospital->update($updates);
+
+            if ($previousLogoPath !== null && $previousLogoPath !== $logoPath) {
+                Storage::disk('public')->delete($previousLogoPath);
+            }
+        } else {
+            $hospital->update($updates);
+        }
+
+        return $this->redirectToTab('branding', 'Branding settings saved.');
     }
 
     public function clearCredential(string $provider, HospitalSettings $settings): RedirectResponse

@@ -184,6 +184,7 @@ Route::middleware(['auth', 'hospital.admin'])
             Route::put('/whatsapp', [SettingsController::class, 'updateWhatsApp'])->name('whatsapp.update');
             Route::put('/sms', [SettingsController::class, 'updateSms'])->name('sms.update');
             Route::put('/email', [SettingsController::class, 'updateEmail'])->name('email.update');
+            Route::put('/branding', [SettingsController::class, 'updateBranding'])->name('branding.update');
             Route::delete('/credentials/{provider}', [SettingsController::class, 'clearCredential'])->name('credentials.clear');
         });
 
@@ -194,6 +195,7 @@ Route::middleware(['auth', 'hospital.admin'])
         Route::post('escalations/{id}/resolve', [EscalationController::class, 'resolve'])->middleware('feature:escalation')->name('escalations.resolve');
         Route::post('escalations/{id}/reply', [EscalationController::class, 'reply'])->middleware('feature:escalation')->name('escalations.reply');
         Route::get('escalations/{id}', [EscalationController::class, 'show'])->middleware('feature:escalation')->name('escalations.show');
+        Route::post('escalations/{escalation}/assign', [EscalationController::class, 'assign'])->middleware('feature:escalation')->name('escalations.assign');
         Route::post('escalations/{id}/status', [EscalationController::class, 'updateStatus'])->middleware('feature:escalation')->name('escalations.updateStatus');
         Route::post('escalations/{id}/resend', [EscalationController::class, 'resend'])->middleware('feature:escalation')->name('escalations.resend');
         Route::post('escalations/bulk', [EscalationController::class, 'bulkAction'])->middleware('feature:escalation')->name('escalations.bulk');

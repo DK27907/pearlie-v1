@@ -10,6 +10,7 @@
             'whatsapp' => 'WhatsApp',
             'sms' => 'SMS',
             'email' => 'Email',
+            'branding' => 'Branding',
         ];
         $days = [
             'monday' => 'Monday',
@@ -139,11 +140,9 @@
                                 <input class="{{ $inputClass }}" type="url" name="callback_url" required value="{{ old('callback_url', $credentials['mpesa']['callback_url'] ?? url('/api/mpesa/callback')) }}">
                             </label>
                         </div>
-                        <div class="flex flex-wrap gap-3">
-                            <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save M-Pesa settings</button>
-                            @include('admin.settings.partials.clear-credentials', ['provider' => 'mpesa'])
-                        </div>
+                        <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save M-Pesa settings</button>
                     </form>
+                    @include('admin.settings.partials.clear-credentials', ['provider' => 'mpesa'])
                 </section>
             @elseif ($activeTab === 'whatsapp')
                 <section role="tabpanel" class="space-y-6 p-5 sm:p-7">
@@ -168,11 +167,9 @@
                                 <input class="{{ $inputClass }}" type="text" name="api_version" required maxlength="10" value="{{ old('api_version', $credentials['whatsapp']['api_version'] ?? 'v21.0') }}">
                             </label>
                         </div>
-                        <div class="flex flex-wrap gap-3">
-                            <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save WhatsApp settings</button>
-                            @include('admin.settings.partials.clear-credentials', ['provider' => 'whatsapp'])
-                        </div>
+                        <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save WhatsApp settings</button>
                     </form>
+                    @include('admin.settings.partials.clear-credentials', ['provider' => 'whatsapp'])
                 </section>
             @elseif ($activeTab === 'sms')
                 <section role="tabpanel" class="space-y-6 p-5 sm:p-7">
@@ -205,13 +202,11 @@
                                 </label>
                             @endforeach
                         </div>
-                        <div class="flex flex-wrap gap-3">
-                            <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save SMS settings</button>
-                            @include('admin.settings.partials.clear-credentials', ['provider' => 'sms'])
-                        </div>
+                        <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save SMS settings</button>
                     </form>
+                    @include('admin.settings.partials.clear-credentials', ['provider' => 'sms'])
                 </section>
-            @else
+            @elseif ($activeTab === 'email')
                 <section role="tabpanel" class="space-y-6 p-5 sm:p-7">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div><h2 class="text-lg font-bold text-slate-900">Email</h2><p class="mt-1 text-sm text-slate-600">Configure Resend, SMTP, or log mail delivery.</p></div>
@@ -251,10 +246,33 @@
                                 </label>
                             @endforeach
                         </div>
-                        <div class="flex flex-wrap gap-3">
-                            <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save email settings</button>
-                            @include('admin.settings.partials.clear-credentials', ['provider' => 'email'])
-                        </div>
+                        <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save email settings</button>
+                    </form>
+                    @include('admin.settings.partials.clear-credentials', ['provider' => 'email'])
+                </section>
+            @else
+                <section role="tabpanel" class="space-y-6 p-5 sm:p-7">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900">Branding</h2>
+                        <p class="mt-1 text-sm text-slate-600">Customize the header and footer shown on your hospital pages.</p>
+                    </div>
+                    <form method="POST" action="{{ route('admin.integration-settings.branding.update') }}" enctype="multipart/form-data" class="max-w-2xl space-y-5">
+                        @csrf
+                        @method('PUT')
+                        <label class="block text-sm font-semibold text-slate-700">Header text
+                            <input class="{{ $inputClass }}" type="text" name="site_header_text" maxlength="120" value="{{ old('site_header_text', $hospital->site_header_text ?? $hospital->name) }}">
+                        </label>
+                        <label class="block text-sm font-semibold text-slate-700">Footer text
+                            <textarea class="{{ $inputClass }}" name="site_footer_text" rows="4" maxlength="2000">{{ old('site_footer_text', $hospital->site_footer_text ?? trim($hospital->name.' — '.($hospital->address ?? ''))) }}</textarea>
+                        </label>
+                        <label class="block text-sm font-semibold text-slate-700">Hospital logo
+                            <input class="{{ $inputClass }}" type="file" name="site_logo" accept="image/png,image/jpeg,image/svg+xml">
+                            <span class="mt-1 block text-xs font-normal text-slate-500">Optional PNG, JPG, JPEG, or SVG image, up to 2 MB.</span>
+                        </label>
+                        @if ($hospital->site_logo_path)
+                            <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($hospital->site_logo_path) }}" alt="Current hospital logo" class="h-16 w-auto rounded-lg border border-slate-200 bg-white p-2">
+                        @endif
+                        <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save branding settings</button>
                     </form>
                 </section>
             @endif
