@@ -7,8 +7,8 @@ use App\Models\Conversation;
 use App\Models\Escalation;
 use App\Models\User;
 use App\Notifications\EscalationPatientMessage;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
@@ -27,14 +27,15 @@ class EscalationService
         string $sessionId,
         string $userMessage,
         ?string $aiResponse = null,
+        ?string $userPhone = null,
     ): Escalation {
         try {
-            $patientPhone = $this->patientPhoneForSession($sessionId);
+            $patientPhone = $userPhone ?: $this->patientPhoneForSession($sessionId);
             $identity = $patientPhone ? $this->normalizePhoneForIdentity($patientPhone) : $sessionId;
             $phoneVariants = $patientPhone ? $this->phoneVariants($identity) : [];
             $lock = Cache::lock('escalation-rate-limit:'.hash('sha256', $identity), 10);
 
-            $escalation = $lock->block(5, function () use ($sessionId, $userMessage, $aiResponse, $identity, $phoneVariants): Escalation {
+            $escalation = $lock->block(5, function () use ($sessionId, $userMessage, $aiResponse, $identity, $phoneVariants, $patientPhone): Escalation {
                 $recent = Escalation::query()
                     ->where('created_at', '>=', now()->subMinutes(5))
                     ->where(function ($query) use ($sessionId, $identity, $phoneVariants): void {
@@ -60,10 +61,15 @@ class EscalationService
                 return Escalation::query()->create([
                     'session_id' => $sessionId,
                     'user_message' => $userMessage,
+                    'user_phone' => $patientPhone,
                     'ai_response' => $aiResponse,
                     'status' => Escalation::STATUS_PENDING,
                 ]);
             });
+
+            if ($patientPhone && blank($escalation->user_phone)) {
+                $escalation->forceFill(['user_phone' => $patientPhone])->save();
+            }
 
             if ($escalation->wasRecentlyCreated) {
                 $this->notifications->notifyHealthWorkers($escalation);
@@ -250,7 +256,8 @@ class EscalationService
             throw new RuntimeException('No patient phone number is available for this conversation.');
         }
 
-        $body = sprintf('Pearlie escalation #%d — %s', $escalation->id, $message);
+        $botName = hospital()?->chatbotName() ?? 'Assistant';
+        $body = sprintf('%s escalation #%d — %s', $botName, $escalation->id, $message);
 
         try {
             $sent = $channel === 'whatsapp'
@@ -306,11 +313,13 @@ class EscalationService
             return false;
         }
 
+        $botName = hospital()?->chatbotName() ?? 'Assistant';
         $message = sprintf(
-            "👋 Hi %s, this is %s, a health worker at %s. I've read your conversation with Pearlie. How can I help you?",
+            "👋 Hi %s, this is %s, a health worker at %s. I've read your conversation with %s. How can I help you?",
             $escalation->patient_name,
             $worker->name,
             pearlie_config('hospital.name'),
+            $botName,
         );
 
         try {

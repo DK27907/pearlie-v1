@@ -4,11 +4,16 @@ namespace App\Services;
 
 use App\Models\AppointmentRequest;
 use App\Models\Conversation;
+use App\Models\Service;
 use App\Models\User;
+use App\Support\DateParser;
 use Carbon\CarbonImmutable;
 use Exception;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class PearlieServiceV2
 {
@@ -39,6 +44,11 @@ class PearlieServiceV2
 
     public function processMessage(string $message, string $sessionId, string $channel = 'web'): array
     {
+        $phoneCapture = $this->continueEscalationPhoneCapture($message, $sessionId, $channel);
+        if ($phoneCapture !== null) {
+            return $phoneCapture;
+        }
+
         $handoff = $this->escalationService->handleActivePatientMessage($sessionId, $message, $channel);
         if ($handoff !== null) {
             return $handoff;
@@ -90,9 +100,12 @@ class PearlieServiceV2
         }
 
         if ($this->isWeatherQuestion($message)) {
+            $location = hospital()?->address;
             $responseText = $this->isSwahili($message)
                 ? 'Samahani, sina taarifa za hali ya hewa za moja kwa moja kwa sasa. Naweza kukusaidia kuhusu taarifa za '.pearlie_config('hospital.name').', huduma, au miadi.'
-                : 'I do not have live weather data right now. For today’s weather in Nyahururu, please check your preferred weather app or website. I can still help with '.pearlie_config('hospital.name').' information, services, or appointments.';
+                : 'I do not have live weather data right now.'
+                    .($location ? ' For current weather near '.$location.', please check your preferred weather app or website.' : '')
+                    .' I can still help with '.pearlie_config('hospital.name').' information, services, or appointments.';
 
             Conversation::create([
                 'session_id' => $sessionId,
@@ -170,19 +183,27 @@ class PearlieServiceV2
                 ? $this->patientHandoffMessage($message)
                 : $reply;
 
-            Conversation::create([
+            $conversation = Conversation::create([
                 'session_id' => $sessionId,
                 'user_message' => $message,
                 'ai_response' => $patientReply,
                 'confidence_score' => $confidence,
                 'channel' => $channel,
-                'escalated' => $escalated,
+                'escalated' => false,
             ]);
 
             $threshold = (float) config('pearlie.escalation_threshold', 0.7);
             if ($confidence < $threshold) {
                 try {
-                    $this->escalationService->createEscalation($sessionId, $message, $reply);
+                    $escalationRequest = $this->requestEscalation(
+                        $sessionId,
+                        $message,
+                        $patientReply,
+                        $channel,
+                        $conversation,
+                    );
+                    $patientReply = $escalationRequest['response'];
+                    $escalated = $escalationRequest['escalated'];
                 } catch (Exception $e) {
                     Log::error('Escalation failed: '.$e->getMessage());
                     $escalated = false;
@@ -209,18 +230,26 @@ class PearlieServiceV2
             Log::error('Groq API Error: '.$e->getMessage());
 
             $fallback = $this->patientHandoffMessage($message);
-            $escalated = true;
-            Conversation::create([
+            $conversation = Conversation::create([
                 'session_id' => $sessionId,
                 'user_message' => $message,
                 'ai_response' => $fallback,
                 'confidence_score' => 0.3,
                 'channel' => $channel,
-                'escalated' => true,
+                'escalated' => false,
             ]);
+            $escalated = true;
 
             try {
-                $this->escalationService->createEscalation($sessionId, $message, null);
+                $escalationRequest = $this->requestEscalation(
+                    $sessionId,
+                    $message,
+                    $fallback,
+                    $channel,
+                    $conversation,
+                );
+                $fallback = $escalationRequest['response'];
+                $escalated = $escalationRequest['escalated'];
             } catch (Exception $escalationException) {
                 Log::error('Fallback escalation failed: '.$escalationException->getMessage());
                 $escalated = false;
@@ -252,6 +281,23 @@ class PearlieServiceV2
 
     protected function patientHandoffMessage(string $message): string
     {
+        if ($this->isEmergencyMessage($message)) {
+            $hospital = hospital();
+            $emergencyPhone = $hospital
+                ? $hospital->emergency_phone
+                : pearlie_config('hospital.emergency_phone');
+
+            if ($this->isSwahili($message)) {
+                return $emergencyPhone
+                    ? 'Kwa dharura, piga '.$emergencyPhone.' sasa. Ninakuunganisha na mhudumu wa afya.'
+                    : 'Kwa dharura, tafadhali wasiliana na timu ya dharura ya hospitali sasa. Ninakuunganisha na mhudumu wa afya.';
+            }
+
+            return $emergencyPhone
+                ? 'For an emergency, call '.$emergencyPhone.' now. I am connecting you to a health worker.'
+                : 'For an emergency, contact the hospital emergency team now. I am connecting you to a health worker.';
+        }
+
         return $this->isSwahili($message)
             ? 'Sina uhakika kabisa kuhusu hilo. Ninakuunganisha na mhudumu wa afya sasa. Utapata jibu hivi karibuni. Unaweza kuendelea kuniuliza maswali mengine unaposubiri.'
             : "I'm not 100% sure about that. I'm connecting you to a health worker now. You'll get a response shortly. You can keep asking me other questions while you wait.";
@@ -273,11 +319,18 @@ class PearlieServiceV2
             'ai_response' => $response,
             'confidence_score' => 0.0,
             'channel' => $channel,
-            'escalated' => true,
+            'escalated' => false,
         ]);
 
         try {
-            $this->escalationService->createEscalation($sessionId, $message);
+            $escalationRequest = $this->requestEscalation(
+                $sessionId,
+                $message,
+                $response,
+                $channel,
+                $conversation,
+            );
+            $response = $escalationRequest['response'];
         } catch (Exception $exception) {
             Log::error('Unable to create a keyword-triggered escalation.', [
                 'session_id' => $sessionId,
@@ -297,10 +350,178 @@ class PearlieServiceV2
         return [
             'response' => $response,
             'confidence' => 0.0,
-            'source' => 'human_escalation',
+            'source' => Cache::has($this->pendingEscalationPhoneKey($sessionId))
+                ? 'escalation_contact_details'
+                : 'human_escalation',
             'escalated' => $conversation->fresh()->escalated,
             'appointment_id' => null,
         ];
+    }
+
+    /**
+     * @return array{response: string, escalated: bool, awaiting_phone: bool}
+     */
+    private function requestEscalation(
+        string $sessionId,
+        string $message,
+        string $aiResponse,
+        string $channel,
+        Conversation $conversation,
+    ): array {
+        $userPhone = $this->extractPatientPhone($message) ?? $this->patientPhoneForSession($sessionId);
+
+        if (! $userPhone) {
+            $isSwahili = $this->isSwahili($message);
+            $phonePrompt = $isSwahili
+                ? 'Kabla sijaunganisha na mhudumu wa afya, tafadhali shiriki namba yako ya simu ili aweze kukufikia.'
+                : 'Before I connect you to a health worker, please share your phone number so they can reach you.';
+            $response = $this->isEmergencyMessage($message)
+                ? $aiResponse.' '.$phonePrompt
+                : $phonePrompt;
+
+            Cache::put($this->pendingEscalationPhoneKey($sessionId), [
+                'user_message' => $message,
+                'ai_response' => $aiResponse,
+                'channel' => $channel,
+                'conversation_id' => $conversation->id,
+            ], now()->addMinutes(30));
+            $conversation->forceFill([
+                'ai_response' => $response,
+                'escalated' => false,
+            ])->save();
+
+            return [
+                'response' => $response,
+                'escalated' => false,
+                'awaiting_phone' => true,
+            ];
+        }
+
+        $this->escalationService->createEscalation($sessionId, $message, $aiResponse, $userPhone);
+        $conversation->forceFill(['escalated' => true])->save();
+
+        return [
+            'response' => $aiResponse,
+            'escalated' => true,
+            'awaiting_phone' => false,
+        ];
+    }
+
+    /**
+     * @return array{response: string, confidence: float, source: string, escalated: bool, appointment_id: ?int}|null
+     */
+    protected function continueEscalationPhoneCapture(
+        string $message,
+        string $sessionId,
+        string $channel,
+    ): ?array {
+        $key = $this->pendingEscalationPhoneKey($sessionId);
+        $pending = Cache::get($key);
+        if (! is_array($pending)) {
+            return null;
+        }
+
+        $userPhone = $this->extractPatientPhone($message);
+        if (! $userPhone) {
+            $isSwahili = (bool) ($pending['channel'] === 'whatsapp' && $this->isSwahili($message));
+            $response = $isSwahili
+                ? 'Tafadhali tuma namba sahihi ya simu ili mhudumu wa afya aweze kukufikia.'
+                : 'Please share a valid phone number so a health worker can reach you.';
+            Conversation::query()->create([
+                'session_id' => $sessionId,
+                'user_message' => $message,
+                'ai_response' => $response,
+                'confidence_score' => 1.0,
+                'channel' => $channel,
+                'escalated' => false,
+            ]);
+
+            return [
+                'response' => $response,
+                'confidence' => 1.0,
+                'source' => 'escalation_contact_details',
+                'escalated' => false,
+                'appointment_id' => null,
+            ];
+        }
+
+        $this->escalationService->createEscalation(
+            $sessionId,
+            (string) $pending['user_message'],
+            (string) $pending['ai_response'],
+            $userPhone,
+        );
+
+        $pendingBookingKey = 'pending_appointment_booking_'.hash('sha256', $sessionId);
+        $pendingBooking = Cache::get($pendingBookingKey);
+        if (is_array($pendingBooking)) {
+            $pendingBooking['phone'] = $userPhone;
+            Cache::put($pendingBookingKey, $pendingBooking, now()->addMinutes(30));
+        }
+
+        $originalConversation = Conversation::query()->findOrFail((int) $pending['conversation_id']);
+        $originalConversation->forceFill([
+            'ai_response' => (string) $pending['ai_response'],
+            'escalated' => true,
+        ])->save();
+        Cache::forget($key);
+
+        $isSwahili = $this->isSwahili((string) $pending['user_message']);
+        $response = $isSwahili
+            ? 'Asante. Mhudumu wa afya anaweza kukufikia kupitia namba hiyo.'
+            : 'Thank you. A health worker can now reach you at that number.';
+        Conversation::query()->create([
+            'session_id' => $sessionId,
+            'user_message' => $message,
+            'ai_response' => $response,
+            'confidence_score' => 1.0,
+            'channel' => $channel,
+            'escalated' => true,
+        ]);
+
+        return [
+            'response' => $response,
+            'confidence' => 1.0,
+            'source' => 'human_escalation',
+            'escalated' => true,
+            'appointment_id' => null,
+        ];
+    }
+
+    private function patientPhoneForSession(string $sessionId): ?string
+    {
+        $appointment = AppointmentRequest::query()
+            ->where('session_id', $sessionId)
+            ->latest('id')
+            ->first(['phone', 'mpesa_phone']);
+        $phone = $appointment?->mpesa_phone ?: $appointment?->phone;
+
+        if ($phone) {
+            return $phone;
+        }
+
+        $pendingBooking = Cache::get('pending_appointment_booking_'.hash('sha256', $sessionId));
+        if (is_array($pendingBooking) && filled($pendingBooking['phone'] ?? null)) {
+            return (string) $pendingBooking['phone'];
+        }
+
+        return str_starts_with($sessionId, 'whatsapp:')
+            ? substr($sessionId, strlen('whatsapp:'))
+            : null;
+    }
+
+    private function extractPatientPhone(string $message): ?string
+    {
+        if (preg_match('/(?:0[71]\d{8}|\+?254[71]\d{8}|[71]\d{8})/', $message, $matches)) {
+            return $matches[0];
+        }
+
+        return null;
+    }
+
+    private function pendingEscalationPhoneKey(string $sessionId): string
+    {
+        return 'pending_escalation_phone_'.hash('sha256', $sessionId);
     }
 
     protected function shouldEscalateMessage(string $message, string $sessionId): bool
@@ -326,7 +547,7 @@ class PearlieServiceV2
             }
         }
 
-        if (preg_match('/\b(emergency|dharura|haraka|bleeding|can[\'’]?t breathe|chest pain)\b/iu', $message)) {
+        if ($this->isEmergencyMessage($message)) {
             return true;
         }
 
@@ -351,6 +572,14 @@ class PearlieServiceV2
         return trim($message);
     }
 
+    protected function isEmergencyMessage(string $message): bool
+    {
+        return (bool) preg_match(
+            '/\b(emergency|dharura|haraka|urgent(?:ly)?|ambulance|accident|ajali|bleeding|damu nyingi|can[\'’]?t breathe|chest pain|maumivu ya kifua|shida kupumua|kiharusi|nimeumia vibaya)\b/iu',
+            $message,
+        );
+    }
+
     public function detectDoctorBookingIntent(string $message): bool
     {
         return (bool) preg_match(
@@ -360,12 +589,31 @@ class PearlieServiceV2
     }
 
     /**
-     * @return array{date: string, doctors: array<int, array{id: int, name: string, specialization: ?string, slots: array<string, bool>}>}
+     * @return array{date: string, doctors: array<int, array{id: int, name: string, specialization: ?string, bio: ?string, consultation_fee: ?string, licence_number: ?string, slots: array<string, bool>}>}
      */
-    public function getAvailableSlotsForAI(string $message): array
-    {
+    public function getAvailableSlotsForAI(
+        string $message,
+        ?int $preferredDoctorId = null,
+        ?string $requiredSpecialty = null,
+    ): array {
         $date = $this->extractRequestedDate($message) ?? CarbonImmutable::today()->toDateString();
         $doctors = $this->availabilityService->getAllDoctorsWithSlots($date);
+
+        if (filled($requiredSpecialty)) {
+            $normalizedSpecialty = mb_strtolower(trim($requiredSpecialty));
+            $doctors = array_values(array_filter(
+                $doctors,
+                fn (array $doctorSlots): bool => mb_strtolower(trim((string) $doctorSlots['doctor']->specialization))
+                    === $normalizedSpecialty,
+            ));
+        }
+
+        if ($preferredDoctorId !== null) {
+            $doctors = array_values(array_filter(
+                $doctors,
+                fn (array $doctorSlots): bool => $doctorSlots['doctor']->id === $preferredDoctorId,
+            ));
+        }
 
         return [
             'date' => $date,
@@ -374,6 +622,9 @@ class PearlieServiceV2
                     'id' => $doctorSlots['doctor']->id,
                     'name' => $doctorSlots['doctor']->name,
                     'specialization' => $doctorSlots['doctor']->specialization,
+                    'bio' => $doctorSlots['doctor']->bio,
+                    'consultation_fee' => $doctorSlots['doctor']->consultation_fee,
+                    'licence_number' => $doctorSlots['doctor']->licence_number,
                     'slots' => $doctorSlots['slots'],
                 ],
                 $doctors,
@@ -402,13 +653,10 @@ class PearlieServiceV2
             $name = trim($n[1]);
         }
 
-        $preferredDoctorId = null;
-        foreach (User::query()->where('is_doctor', true)->get() as $doctor) {
-            if (str_contains(mb_strtolower($message), mb_strtolower($doctor->name))) {
-                $preferredDoctorId = $doctor->id;
-                break;
-            }
-        }
+        $matchingDoctors = $this->matchingDoctors($message);
+        $preferredDoctorId = $matchingDoctors->count() === 1
+            ? $matchingDoctors->first()->id
+            : null;
 
         return [
             'phone' => $phone,
@@ -418,13 +666,79 @@ class PearlieServiceV2
             'reason' => $this->extractBookingReason($message),
             'slot_start_time' => $this->extractRequestedTime($message),
             'preferred_doctor_id' => $preferredDoctorId,
+            'doctor_selection_needed' => $matchingDoctors->count() > 1,
+            'doctor_options' => $matchingDoctors->count() > 1
+                ? $matchingDoctors->pluck('name')->all()
+                : [],
         ];
+    }
+
+    /**
+     * @return Collection<int, User>
+     */
+    protected function matchingDoctors(string $message): Collection
+    {
+        $hospital = hospital();
+        if (! $hospital) {
+            return collect();
+        }
+
+        $normalizedMessage = $this->normalizeDoctorText($message);
+        $matches = [];
+
+        foreach (User::query()
+            ->where('hospital_id', $hospital->id)
+            ->where('is_doctor', true)
+            ->where('is_active', true)
+            ->get() as $doctor) {
+            $normalizedName = $this->normalizeDoctorText($doctor->name);
+            $nameTokens = array_filter(
+                explode(' ', $normalizedName),
+                fn (string $token): bool => mb_strlen($token) >= 3 && ! in_array($token, ['doctor', 'nurse'], true),
+            );
+            $matchedNameTokens = collect($nameTokens)
+                ->filter(fn (string $token): bool => str_contains($normalizedMessage, $token))
+                ->count();
+            $nameScore = $normalizedName !== '' && str_contains($normalizedMessage, $normalizedName)
+                ? 100
+                : $matchedNameTokens * 10;
+            $specialization = $this->normalizeDoctorText((string) $doctor->specialization);
+            $specializationScore = $specialization !== '' && str_contains($normalizedMessage, $specialization)
+                ? 50 + mb_strlen($specialization)
+                : 0;
+            $score = max($nameScore, $specializationScore);
+
+            if ($score > 0) {
+                $matches[] = ['doctor' => $doctor, 'score' => $score];
+            }
+        }
+
+        if ($matches === []) {
+            return collect();
+        }
+
+        $highestScore = max(array_column($matches, 'score'));
+
+        return collect($matches)
+            ->where('score', $highestScore)
+            ->pluck('doctor')
+            ->values();
+    }
+
+    private function normalizeDoctorText(string $value): string
+    {
+        $normalized = mb_strtolower($value);
+
+        return trim((string) preg_replace('/[^\pL\pN]+/u', ' ', $normalized));
     }
 
     protected function recordAppointment(array $appointmentData, string $message, string $sessionId, string $channel = 'web'): array
     {
         try {
             $appointment = null;
+            $service = isset($appointmentData['service_id'])
+                ? Service::query()->active()->findOrFail((int) $appointmentData['service_id'])
+                : null;
 
             if ($appointmentData['preferred_date'] && $appointmentData['slot_start_time']) {
                 $appointment = $this->availabilityService->bookAppointment(
@@ -438,6 +752,8 @@ class PearlieServiceV2
                         'raw_message' => $message,
                         'session_id' => $sessionId,
                     ],
+                    null,
+                    $service,
                 );
 
                 if (! $appointment) {
@@ -451,6 +767,7 @@ class PearlieServiceV2
             } else {
                 $appointment = AppointmentRequest::query()->create([
                     'session_id' => $sessionId,
+                    'patient_id' => auth()->user()?->role === 'patient' ? auth()->id() : null,
                     'name' => $appointmentData['name'],
                     'phone' => $appointmentData['phone'],
                     'email' => $appointmentData['email'] ?? null,
@@ -458,6 +775,11 @@ class PearlieServiceV2
                     'reason' => $appointmentData['reason'],
                     'raw_message' => $message,
                     'status' => AppointmentRequest::STATUS_PENDING,
+                    ...($service ? [
+                        'service_id' => $service->id,
+                        'booking_fee' => (int) round((float) $service->price),
+                        'payment_amount' => (float) $service->price,
+                    ] : []),
                 ]);
             }
         } catch (Exception $e) {
@@ -520,8 +842,10 @@ class PearlieServiceV2
         string $sessionId,
         string $channel,
         ?string $introduction = null,
+        ?int $preferredDoctorId = null,
+        ?string $requiredSpecialty = null,
     ): array {
-        $availability = $this->getAvailableSlotsForAI($message);
+        $availability = $this->getAvailableSlotsForAI($message, $preferredDoctorId, $requiredSpecialty);
         $isSwahili = $this->isSwahili($message);
         $responseText = $introduction ?? ($isSwahili
             ? 'Hizi ndizo nafasi za miadi zinazopatikana tarehe '.$availability['date'].':'
@@ -542,6 +866,22 @@ class PearlieServiceV2
                 ? ' ('.$doctorSlots['specialization'].')'
                 : '';
             $responseText .= "\n".$doctorSlots['name'].$specialization.': '.implode(', ', $times);
+
+            $profileDetails = [];
+            if (filled($doctorSlots['bio'])) {
+                $profileDetails[] = Str::limit($doctorSlots['bio'], 240);
+            }
+            if ($doctorSlots['consultation_fee'] !== null) {
+                $feeLabel = $isSwahili ? 'Ada ya ushauri' : 'Consultation fee';
+                $profileDetails[] = $feeLabel.': KSh '.number_format((float) $doctorSlots['consultation_fee'], 2);
+            }
+            if (filled($doctorSlots['licence_number'])) {
+                $licenceLabel = $isSwahili ? 'Nambari ya leseni' : 'Licence';
+                $profileDetails[] = $licenceLabel.': '.$doctorSlots['licence_number'];
+            }
+            if ($profileDetails !== []) {
+                $responseText .= "\n".implode(' | ', $profileDetails);
+            }
         }
 
         if (! $hasAvailableSlots) {
@@ -550,8 +890,8 @@ class PearlieServiceV2
                 : "\nThere are no open times for that date. Please choose another date or call the hospital for assistance.";
         } else {
             $responseText .= $isSwahili
-                ? "\nJibu kwa muda unaopendelea, jina lako kamili, namba ya simu, na barua pepe ili kuomba nafasi."
-                : "\nReply with your preferred time, full name, phone number, and email address to request a slot.";
+                ? "\nJibu kwa jina la daktari na muda unaopendelea ili kuomba nafasi."
+                : "\nReply with a doctor's name and your preferred time to request a slot.";
         }
 
         Conversation::query()->create([
@@ -575,38 +915,7 @@ class PearlieServiceV2
 
     protected function extractRequestedDate(string $message): ?string
     {
-        if (preg_match('/\b(\d{4}-\d{2}-\d{2})\b/', $message, $matches)) {
-            $date = CarbonImmutable::createFromFormat('!Y-m-d', $matches[1]);
-
-            return $date && $date->format('Y-m-d') === $matches[1]
-                ? $date->toDateString()
-                : null;
-        }
-
-        if (preg_match('/\b(tomorrow|kesho)\b/iu', $message)) {
-            return CarbonImmutable::tomorrow()->toDateString();
-        }
-
-        if (preg_match('/\b(today|leo)\b/iu', $message)) {
-            return CarbonImmutable::today()->toDateString();
-        }
-
-        $swahiliWeekdays = [
-            'jumatatu' => 'monday',
-            'jumanne' => 'tuesday',
-            'jumatano' => 'wednesday',
-            'alhamisi' => 'thursday',
-            'ijumaa' => 'friday',
-            'jumamosi' => 'saturday',
-            'jumapili' => 'sunday',
-        ];
-        if (preg_match('/\b(?:next\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday|jumatatu|jumanne|jumatano|alhamisi|ijumaa|jumamosi|jumapili)\b/iu', $message, $matches)) {
-            $weekday = $swahiliWeekdays[mb_strtolower($matches[1])] ?? mb_strtolower($matches[1]);
-
-            return CarbonImmutable::parse('next '.$weekday)->toDateString();
-        }
-
-        return null;
+        return DateParser::parse($message)?->toDateString();
     }
 
     protected function extractRequestedTime(string $message): ?string
@@ -640,7 +949,7 @@ class PearlieServiceV2
 
     protected function extractBookingReason(string $message): string
     {
-        if (preg_match('/(?:reason is|service(?: needed)? is|because|for|ninahitaji|huduma ni|kwa ajili ya)\s+(.+?)(?=\s+(?:my name|jina langu|phone|namba|email|barua pepe)\b|[,.;]|$)/iu', $message, $matches)) {
+        if (preg_match('/(?:reason is|service(?: needed)? is|because|for|i need|ninahitaji|huduma ni|kwa ajili ya)\s+(.+?)(?=\s+(?:my name|jina langu|phone|namba|email|barua pepe)\b|[,.;]|$)/iu', $message, $matches)) {
             return trim($matches[1], " \t\n\r\0\x0B.,");
         }
 
@@ -673,8 +982,41 @@ class PearlieServiceV2
 
     private function getSystemPrompt(): string
     {
-        return sprintf(
-            'You are Pearlie, a bilingual (English and Swahili) healthcare assistant at %s, %s.
+        $hospital = hospital();
+        $hospitalName = $hospital
+            ? $hospital->name
+            : pearlie_config('hospital.name', 'MediDesk Partner Hospital');
+        $hospitalAddress = $hospital ? $hospital->address : pearlie_config('hospital.location', '');
+        $hospitalPhone = $hospital ? $hospital->phone : pearlie_config('hospital.appointment_phone', '');
+        $whatsappPhone = $hospital ? $hospital->whatsapp_number : $hospitalPhone;
+        $emergencyPhone = $hospital ? $hospital->emergency_phone : pearlie_config('hospital.emergency_phone', '');
+        $hospitalEmail = $hospital ? $hospital->email : pearlie_config('hospital.email', '');
+        $hospitalWebsite = $hospital ? $hospital->website : pearlie_config('hospital.website', '');
+        $emergencyHours = $hospital ? $hospital->hours_emergency : pearlie_config('hospital.hours_emergency', '');
+        $outpatientHours = $hospital ? $hospital->hours_outpatient : pearlie_config('hospital.hours_outpatient', '');
+        $assistantName = $hospital?->chatbotName() ?? 'Assistant';
+        $hospitalDetails = collect([
+            'Address' => $hospitalAddress,
+            'Appointment phone' => $hospitalPhone,
+            'WhatsApp' => $whatsappPhone,
+            'Emergency phone' => $emergencyPhone,
+            'Email' => $hospitalEmail,
+            'Website' => $hospitalWebsite,
+            'Emergency hours' => $emergencyHours,
+            'Outpatient hours' => $outpatientHours,
+        ])->filter()->map(fn (string $value, string $label): string => '- '.$label.': '.$value)->implode("\n");
+        $services = $this->knowledgeBase->getServiceContext();
+
+        $systemPrompt = <<<PROMPT
+You are {$assistantName}, the bilingual (English and Swahili) digital front desk assistant at {$hospitalName}.
+
+HOSPITAL IDENTITY:
+- Name: {$hospitalName}
+- Address: {$hospitalAddress}
+- Phone: {$hospitalPhone}
+- Emergency line: {$emergencyPhone}
+- Email: {$hospitalEmail}
+- Website: {$hospitalWebsite}
 
 LANGUAGE RULES:
 - Detect the language of the user’s message automatically.
@@ -691,42 +1033,41 @@ RECOGNIZE common Swahili phrases:
 - Recognize greetings including Habari, Hujambo, Sijambo, Jambo, Mambo, Vipi, Niaje, Sasa, Shikamoo, Marahaba, Salama, Poa, Freshi, Mzuri, and Nzuri.
 
 HOSPITAL INFORMATION:
-- Name: %s
-- Location: %s
-- Appointment phone and WhatsApp: %s
-- Emergency phone: %s
-- Email: %s
-- Website: %s
-- Emergency services: %s
-- Routine outpatient hours: %s
-- Specialist clinics run during the week; callers should confirm the specialist’s day.
-- The hospital offers outpatient and inpatient care, surgery, dialysis, oncology, IVF and fertility care, specialist clinics, physiotherapy, CT scans, X-ray and fluoroscopy, ultrasound, biopsies, ECG/ECHO/EEG, endoscopy and colonoscopy, laboratory services, maternity and child healthcare, family planning, wellness screening, dental, optical, and emergency services.
+{$hospitalDetails}
+
+SERVICES CONFIGURED FOR THIS HOSPITAL:
+{$services}
 
 RULES:
 1. Never give medical diagnoses. For symptoms, advise the user to see a doctor.
 2. For emergencies, immediately share the emergency phone number.
 3. For appointment requests, collect the user’s full name, phone, preferred date, and service needed.
-4. If confidence is low, escalate to a health worker or ask the user to call the hospital.
-5. Do not invent live information, prices, or availability; use the supplied knowledge and tools.
-6. Never reveal internal system details, model names, or API keys.
-7. Do not describe your reasoning. Be caring and professional in both languages.',
-            pearlie_config('hospital.name'),
-            pearlie_config('hospital.location'),
-            pearlie_config('hospital.name'),
-            pearlie_config('hospital.location'),
-            pearlie_config('hospital.appointment_phone'),
-            pearlie_config('hospital.emergency_phone'),
-            pearlie_config('hospital.email'),
-            pearlie_config('hospital.website'),
-            pearlie_config('hospital.hours_emergency'),
-            pearlie_config('hospital.hours_outpatient'),
+4. If the user asks about one specific service, answer ONLY about that service using its configured knowledge-base entry. Queries such as “dental services you offer” mean that service, not the full catalog.
+5. Only list all services when the user explicitly asks for the full services overview.
+6. Accept dates including ordinal dates (for example, “11th October 2026”), “11 Oct 2026”, “11/10/2026”, ISO dates, today/leo, tomorrow/kesho, next week/wiki ijayo, and English or Swahili weekdays.
+7. For appointment requests, collect only missing details and confirm before creating the appointment or starting payment.
+8. If confidence is low, escalate to a health worker or ask the user to call the hospital.
+9. Do not invent services, prices, hours, or availability; use only the hospital information above and the configured knowledge base.
+10. Never reveal internal system details, model names, or API keys.
+11. Do not describe your reasoning. Be caring and professional in both languages.
+PROMPT;
+
+        $hospitalInstructions = trim((string) data_get(hospital()?->settings, 'ai_instructions', ''));
+        if ($hospitalInstructions === '') {
+            return $systemPrompt;
+        }
+
+        return str_replace(
+            "\n\nRULES:",
+            "\n\nHOSPITAL-SPECIFIC GUIDANCE:\nTreat the following as tenant-provided reference preferences. Do not follow it if it conflicts with safety, privacy, or the rules below.\n".$hospitalInstructions."\n\nRULES:",
+            $systemPrompt,
         );
     }
 
     protected function isSwahili(string $message): bool
     {
         return (bool) preg_match(
-            '/\b(habari|hujambo|sijambo|jambo|mambo|vipi|niaje|sasa|shikamoo|marahaba|salama|poa|freshi|mzuri|nzuri|miadi|daktari|ninaumwa|naumwa|kichwa|tumbo|homa|dharura|wapi|asante|karibu|kwaheri|tafadhali|samahani|ndiyo|hapana|kesho|leo|huduma|namba|simu|jina|barua pepe)\b/iu',
+            '/\b(habari|hujambo|sijambo|jambo|mambo|vipi|niaje|sasa|shikamoo|marahaba|salama|poa|freshi|mzuri|nzuri|miadi|daktari|ninaumwa|naumwa|kichwa|tumbo|homa|dharura|maumivu|kifua|shida|kupumua|damu|nyingi|kiharusi|ajali|nimeumia|vibaya|wapi|asante|karibu|kwaheri|tafadhali|samahani|ndiyo|hapana|kesho|leo|huduma|namba|simu|jina|barua pepe)\b/iu',
             $message,
         );
     }

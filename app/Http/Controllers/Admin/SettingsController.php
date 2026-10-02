@@ -202,6 +202,7 @@ class SettingsController extends Controller
         $hospital = $this->currentHospital();
         $data = $request->validated();
         $updates = [
+            'chatbot_name' => $data['chatbot_name'] ?? null,
             'site_header_text' => $data['site_header_text'] ?? null,
             'site_footer_text' => $data['site_footer_text'] ?? null,
         ];

@@ -2,13 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Mail\HospitalAdminInviteMail;
 use App\Models\AppointmentRequest;
 use App\Models\Hospital;
+use App\Models\Invite;
+use App\Models\KnowledgeBase;
 use App\Models\User;
-use App\Mail\HospitalAdminInviteMail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
 use Tests\TestCase;
 
 class MultiTenancyTest extends TestCase
@@ -139,16 +143,154 @@ class MultiTenancyTest extends TestCase
 
         $this->get(route('tenant.home', 'path-tenant'))
             ->assertOk()
-            ->assertSee($hospital->name);
+            ->assertSee($hospital->name)
+            ->assertSee('id="services"', false)
+            ->assertSee('id="doctors"', false)
+            ->assertSee('id="how-it-works"', false)
+            ->assertSee('id="about"', false)
+            ->assertSee('id="contact"', false)
+            ->assertSee('href="'.route('tenant.home', 'path-tenant').'"', false)
+            ->assertSee('href="#services"', false)
+            ->assertSee('href="#doctors"', false)
+            ->assertSee('href="#how-it-works"', false)
+            ->assertSee('>Appointments</a>', false)
+            ->assertSee('href="#about"', false)
+            ->assertSee('href="#contact"', false)
+            ->assertSee('href="'.route('tenant.chat.page', 'path-tenant').'"', false)
+            ->assertSee(route('tenant.chat.post', $hospital->slug), false);
+    }
+
+    public function test_root_marketing_homepage_is_tenant_neutral_even_when_a_tenant_is_selected(): void
+    {
+        $hospital = $this->createHospital('root-tenant');
+        app()->instance('currentHospital', $hospital);
+        KnowledgeBase::query()->create([
+            'category' => 'services',
+            'subcategory' => 'imaging',
+            'keywords' => ['imaging'],
+            'question' => 'What imaging services are available?',
+            'answer' => 'Tenant imaging services.',
+            'source' => 'Feature test',
+            'last_updated' => now(),
+        ]);
+        User::factory()->create([
+            'hospital_id' => $hospital->id,
+            'name' => 'Root Tenant Doctor',
+            'is_doctor' => true,
+            'role' => 'doctor',
+        ]);
+        app()->forgetInstance('currentHospital');
+
+        $this->get(route('home', ['hospital' => $hospital->slug]))
+            ->assertOk()
+            ->assertSee('MediDesk AI')
+            ->assertDontSee($hospital->name)
+            ->assertDontSee('Tenant imaging services.')
+            ->assertDontSee('Root Tenant Doctor');
+    }
+
+    public function test_doctor_profile_uses_the_master_layout_and_exposes_password_changes(): void
+    {
+        $hospital = $this->createHospital('doctor-profile');
+        $doctor = User::factory()->create([
+            'hospital_id' => $hospital->id,
+            'is_doctor' => true,
+            'role' => 'doctor',
+        ]);
+
+        $this->actingAs($doctor)
+            ->get(route('doctor.profile'))
+            ->assertOk()
+            ->assertSee($doctor->email)
+            ->assertSee('Update Password')
+            ->assertSee('Powered by AxiomForge');
     }
 
     public function test_tenant_chat_alias_selects_hospital_and_uses_its_chat_endpoint(): void
     {
-        $this->createHospital('chat-alias');
+        $hospital = $this->createHospital('chat-alias');
+        $hospital->update(['chatbot_name' => 'Pearlie']);
 
         $this->get(route('tenant.chat.page', 'chat-alias'))
             ->assertOk()
-            ->assertSee(route('tenant.chat.short', 'chat-alias'), false);
+            ->assertSee('data-chat-url="'.route('tenant.chat.post', 'chat-alias').'"', false)
+            ->assertSee('data-reset-url="'.route('tenant.chat.reset', 'chat-alias').'"', false)
+            ->assertSee('href="'.route('tenant.home', 'chat-alias').'"', false)
+            ->assertSee('data-welcome-en="👋 Hello! I\'m Pearlie, Chat Alias\'s healthcare assistant.', false)
+            ->assertSee('<title>Chat with Chat Alias | MediDesk AI</title>', false)
+            ->assertSee('<meta name="csrf-token"', false);
+    }
+
+    public function test_tenant_chat_reset_starts_a_fresh_session_for_that_hospital(): void
+    {
+        $hospital = $this->createHospital('chat-reset');
+        $sessionKey = 'tenant_chat_session_id_'.$hospital->id;
+        $previousSessionId = 'previous-conversation';
+        $pendingBookingKey = 'pending_appointment_booking_'.hash('sha256', $previousSessionId);
+
+        app()->instance('currentHospital', $hospital);
+        KnowledgeBase::query()->create([
+            'category' => 'greeting',
+            'subcategory' => 'hello',
+            'keywords' => ['hello'],
+            'question' => 'Greeting',
+            'answer' => 'Welcome to Chat Reset Hospital.',
+            'source' => 'Feature test',
+            'last_updated' => now(),
+        ]);
+        app()->forgetInstance('currentHospital');
+        Cache::put($pendingBookingKey, ['name' => 'Stale booking'], now()->addMinutes(30));
+
+        $this->withSession([$sessionKey => $previousSessionId])
+            ->postJson(route('tenant.chat.reset', $hospital->slug))
+            ->assertOk()
+            ->assertJsonPath('reset', true)
+            ->assertSessionHas($sessionKey);
+
+        $this->assertNotSame($previousSessionId, session($sessionKey));
+
+        $this->postJson(route('tenant.chat.post', $hospital->slug), ['message' => 'hello'])
+            ->assertOk()
+            ->assertJsonPath('response', 'Welcome to Chat Reset Hospital.')
+            ->assertJsonPath('source', 'knowledge_base');
+
+        $this->assertTrue(Cache::has($pendingBookingKey));
+    }
+
+    public function test_tenant_chat_post_uses_the_resolved_hospitals_knowledge_base(): void
+    {
+        $hospital = $this->createHospital('chat-post');
+        app()->instance('currentHospital', $hospital);
+        KnowledgeBase::query()->create([
+            'category' => 'greeting',
+            'subcategory' => 'hello',
+            'keywords' => ['hello'],
+            'question' => 'Greeting',
+            'answer' => 'Welcome to Chat Post Hospital.',
+            'source' => 'Feature test',
+            'last_updated' => now(),
+        ]);
+        app()->forgetInstance('currentHospital');
+
+        $this->postJson(route('tenant.chat.post', $hospital->slug), ['message' => 'hello'])
+            ->assertOk()
+            ->assertJsonPath('response', 'Welcome to Chat Post Hospital.')
+            ->assertJsonPath('source', 'knowledge_base');
+
+        $this->assertDatabaseHas('conversations', [
+            'hospital_id' => $hospital->id,
+            'user_message' => 'hello',
+            'ai_response' => 'Welcome to Chat Post Hospital.',
+        ]);
+    }
+
+    public function test_tenant_chat_post_rejects_an_empty_message(): void
+    {
+        $hospital = $this->createHospital('chat-validation');
+
+        $this->postJson(route('tenant.chat.post', $hospital->slug), ['message' => ''])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('message');
     }
 
     public function test_tenant_specific_whatsapp_webhook_resolves_the_requested_hospital(): void
@@ -338,9 +480,16 @@ class MultiTenancyTest extends TestCase
         });
         $this->assertNotNull($sentInvite);
 
-        $this->get($sentInvite->inviteUrl)->assertOk();
-        $inviteUrl = parse_url($sentInvite->inviteUrl);
-        $this->post($inviteUrl['path'].'?'.$inviteUrl['query'], [
+        $setupResponse = $this->get($sentInvite->inviteUrl)->assertOk();
+        $invite = Invite::query()->where('email', 'first-admin@invitation-test.co.ke')->firstOrFail();
+        $setupUrl = URL::temporarySignedRoute(
+            'hospital.invitation.store',
+            $invite->expires_at,
+            ['slug' => $hospital->slug, 'token' => $invite->token],
+        );
+        $setupResponse->assertSee('action="'.e($setupUrl).'"', false);
+
+        $this->post($setupUrl, [
             'name' => 'First Hospital Admin',
             'password' => 'secure-password-123',
             'password_confirmation' => 'secure-password-123',

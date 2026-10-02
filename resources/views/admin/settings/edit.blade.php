@@ -259,6 +259,10 @@
                     <form method="POST" action="{{ route('admin.integration-settings.branding.update') }}" enctype="multipart/form-data" class="max-w-2xl space-y-5">
                         @csrf
                         @method('PUT')
+                        <label class="block text-sm font-semibold text-slate-700">Chatbot name
+                            <input class="{{ $inputClass }}" type="text" name="chatbot_name" maxlength="60" value="{{ old('chatbot_name', $hospital->chatbot_name) }}" placeholder="{{ $hospital->chatbotName() }}">
+                            <span class="mt-1 block text-xs font-normal text-slate-500">The name patients see when chatting with your AI assistant. Leave blank to auto-derive from the hospital name.</span>
+                        </label>
                         <label class="block text-sm font-semibold text-slate-700">Header text
                             <input class="{{ $inputClass }}" type="text" name="site_header_text" maxlength="120" value="{{ old('site_header_text', $hospital->site_header_text ?? $hospital->name) }}">
                         </label>

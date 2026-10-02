@@ -25,6 +25,7 @@ class DuskSeedSeeder extends Seeder
         try {
             $hospital->forceFill([
                 'name' => 'Pearl Hospital',
+                'chatbot_name' => 'Pearlie',
                 'subscription_plan' => 'enterprise',
                 'subscription_status' => 'active',
                 'is_active' => true,

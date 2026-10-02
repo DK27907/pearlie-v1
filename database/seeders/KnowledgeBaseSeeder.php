@@ -13,7 +13,7 @@ class KnowledgeBaseSeeder extends Seeder
         $pearl = Hospital::query()->where('slug', 'pearl')->firstOrFail();
         app()->instance('currentHospital', $pearl);
         $hospitalName = (string) $pearl->name;
-        $assistantName = trim((string) data_get($pearl->settings, 'ai_name', '')) ?: 'Pearlie';
+        $assistantName = $pearl->chatbotName();
         $hospitalLocation = (string) $pearl->address;
         $hospitalEmail = (string) $pearl->email;
         $appointmentPhone = (string) $pearl->phone;
@@ -247,7 +247,7 @@ class KnowledgeBaseSeeder extends Seeder
                 'subcategory' => 'methods',
                 'keywords' => ['payment', 'pay', 'cost', 'fees', 'deposit', 'price', 'charges', 'medical bill'],
                 'question' => 'How do I pay an appointment deposit?',
-                'answer' => 'The appointment deposit is KSh '.$depositAmount.'. For an appointment booked through Pearlie, an M-Pesa payment prompt is sent to your phone. Call '.$appointmentPhone.' for other payment questions.',
+                'answer' => 'The appointment deposit is KSh '.$depositAmount.'. For an appointment booked through '.$assistantName.', an M-Pesa payment prompt is sent to your phone. Call '.$appointmentPhone.' for other payment questions.',
             ],
             [
                 'category' => 'payment',

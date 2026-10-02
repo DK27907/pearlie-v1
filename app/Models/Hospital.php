@@ -13,6 +13,10 @@ class Hospital extends Model
 
     protected $fillable = [
         'name',
+        'chatbot_name',
+        'site_header_text',
+        'site_footer_text',
+        'site_logo_path',
         'slug',
         'logo_url',
         'primary_color',
@@ -148,6 +152,23 @@ class Hospital extends Model
     {
         return $this->is_active
             && $this->subscription_status === 'active';
+    }
+
+    public function chatbotName(): string
+    {
+        $customName = trim((string) $this->chatbot_name);
+        if ($customName !== '') {
+            return $customName;
+        }
+
+        $name = trim((string) $this->name);
+        if (preg_match('/^(?:The\s+)?([\p{L}][\p{L}\p{M}\x{27}-]*)/iu', $name, $matches) === 1) {
+            $stem = preg_replace('/a$/i', '', $matches[1]) ?? $matches[1];
+
+            return $stem.'ie';
+        }
+
+        return 'Assistant';
     }
 
     public function isOnTrial(): bool

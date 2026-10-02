@@ -29,7 +29,7 @@ class ChatController extends Controller
 
         return view('tenant.chat', [
             'hospital' => $hospital,
-            'aiName' => trim((string) data_get($hospital->settings, 'ai_name', '')) ?: 'Pearlie',
+            'aiName' => $hospital->chatbotName(),
             'chatSessionId' => $this->chatSessionId($request, $hospital),
             'services' => $hospital->services()->active()->orderBy('name')->get(),
             'selectedServiceId' => $request->integer('service_id') ?: null,

@@ -54,6 +54,21 @@
                     <p class="mt-1 text-sm text-slate-700">Assigned health worker:
                         <span class="font-semibold">{{ $escalation->assignedWorker?->name ?: 'Not yet claimed' }}</span>
                     </p>
+                    @if ($queueRoutePrefix === 'admin')
+                        <form method="POST" action="{{ route('admin.escalations.assign', $escalation) }}" class="mt-4 space-y-3">
+                            @csrf
+                            <label for="doctor_id" class="block text-sm font-medium text-slate-700">Assign to doctor</label>
+                            <select id="doctor_id" name="doctor_id" required class="w-full rounded-lg border-slate-300 text-sm focus:border-cyan-600 focus:ring-cyan-600">
+                                @foreach ($doctors as $doctor)
+                                    <option value="{{ $doctor->id }}" @selected((int) $escalation->assigned_worker_id === (int) $doctor->id)>{{ $doctor->name }}</option>
+                                @endforeach
+                            </select>
+                            @if ($doctors->isEmpty())
+                                <p class="text-sm text-slate-500">No active doctors are available for assignment.</p>
+                            @endif
+                            <button type="submit" @disabled($doctors->isEmpty()) class="rounded-lg bg-[#1a5276] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0a2f44] disabled:cursor-not-allowed disabled:opacity-50">Assign</button>
+                        </form>
+                    @endif
                     @if ($escalation->claimed_at)
                         <p class="mt-1 text-sm text-slate-500">Claimed {{ $escalation->claimed_at->diffForHumans() }}</p>
                     @endif
@@ -67,7 +82,7 @@
                 <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">Escalation question</h2>
                 <p class="mt-3 whitespace-pre-wrap rounded-xl bg-rose-50 p-4 text-sm leading-6 text-slate-800">{{ $escalation->user_message }}</p>
                 @if ($escalation->ai_response)
-                    <h3 class="mt-5 text-sm font-semibold uppercase tracking-wide text-slate-500">Pearlie response</h3>
+                    <h3 class="mt-5 text-sm font-semibold uppercase tracking-wide text-slate-500">{{ hospital()?->chatbotName() ?? 'Assistant' }} response</h3>
                     <p class="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{{ $escalation->ai_response }}</p>
                 @endif
             </div>
@@ -129,7 +144,7 @@
                         @endif
                         @if ($turn->ai_response)
                             <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-[#1a5276]">
-                                {{ $turn->channel === 'human' ? 'Health worker' : ($turn->channel === 'human_handoff' ? 'Handoff update' : 'Pearlie') }}
+                                {{ $turn->channel === 'human' ? 'Health worker' : ($turn->channel === 'human_handoff' ? 'Handoff update' : (hospital()?->chatbotName() ?? 'Assistant')) }}
                                 · {{ $turn->created_at->format('M j, g:i A') }}
                             </p>
                             <p class="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">{{ $turn->ai_response }}</p>
