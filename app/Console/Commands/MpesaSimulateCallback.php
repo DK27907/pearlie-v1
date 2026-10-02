@@ -41,24 +41,41 @@ class MpesaSimulateCallback extends Command
             return self::FAILURE;
         }
 
-        $resultDescription = $resultCode === 0
-            ? 'Manual local sandbox callback succeeded.'
-            : 'Manual local sandbox callback failed.';
+        if (! $payment->isPending()) {
+            $this->error(sprintf(
+                'Payment %s is not pending; its current status is %s.',
+                $checkoutRequestId,
+                $payment->status,
+            ));
+
+            return self::FAILURE;
+        }
+
+        $resultDescription = match ($resultCode) {
+            0 => 'Manual local sandbox callback succeeded.',
+            1032 => 'Request cancelled by user.',
+            default => sprintf('Manual local sandbox callback failed with result code %d.', $resultCode),
+        };
+        $callback = [
+            'MerchantRequestID' => $payment->merchant_request_id,
+            'CheckoutRequestID' => $payment->checkout_request_id,
+            'ResultCode' => $resultCode,
+            'ResultDesc' => $resultDescription,
+        ];
+
+        if ($resultCode === 0) {
+            $callback['CallbackMetadata'] = [
+                'Item' => [
+                    ['Name' => 'Amount', 'Value' => $payment->amount],
+                    ['Name' => 'MpesaReceiptNumber', 'Value' => (string) $this->option('receipt')],
+                    ['Name' => 'PhoneNumber', 'Value' => $payment->phone],
+                ],
+            ];
+        }
+
         $payment = $mpesa->handleCallback([
             'Body' => [
-                'stkCallback' => [
-                    'MerchantRequestID' => $payment->merchant_request_id,
-                    'CheckoutRequestID' => $payment->checkout_request_id,
-                    'ResultCode' => $resultCode,
-                    'ResultDesc' => $resultDescription,
-                    'CallbackMetadata' => [
-                        'Item' => [
-                            ['Name' => 'Amount', 'Value' => $payment->amount],
-                            ['Name' => 'MpesaReceiptNumber', 'Value' => (string) $this->option('receipt')],
-                            ['Name' => 'PhoneNumber', 'Value' => $payment->phone],
-                        ],
-                    ],
-                ],
+                'stkCallback' => $callback,
             ],
         ]);
 
@@ -67,6 +84,8 @@ class MpesaSimulateCallback extends Command
 
             return self::FAILURE;
         }
+
+        $payment->refresh();
 
         $this->table(
             ['id', 'checkout_request_id', 'status', 'result_code', 'mpesa_receipt', 'amount', 'phone'],
