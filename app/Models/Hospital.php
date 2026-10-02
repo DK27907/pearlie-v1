@@ -36,6 +36,9 @@ class Hospital extends Model
         'mpesa_passkey',
         'deposit_amount',
         'slot_duration_minutes',
+        'auto_confirm_paid_appointments',
+        'business_hours',
+        'notification_preferences',
         'no_show_grace_minutes',
         'hours_emergency',
         'hours_outpatient',
@@ -57,7 +60,11 @@ class Hospital extends Model
             'whatsapp_access_token' => 'encrypted',
             'whatsapp_app_secret' => 'encrypted',
             'whatsapp_verify_token' => 'encrypted',
-            'deposit_amount' => 'decimal:2',
+            'deposit_amount' => 'integer',
+            'slot_duration_minutes' => 'integer',
+            'auto_confirm_paid_appointments' => 'boolean',
+            'business_hours' => 'array',
+            'notification_preferences' => 'array',
             'supported_languages' => 'array',
             'settings' => 'array',
             'trial_ends_at' => 'datetime',
@@ -89,6 +96,11 @@ class Hospital extends Model
     public function appointments(): HasMany
     {
         return $this->hasMany(AppointmentRequest::class);
+    }
+
+    public function integrationCredentials(): HasMany
+    {
+        return $this->hasMany(HospitalIntegrationCredential::class);
     }
 
     public function services(): HasMany
