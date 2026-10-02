@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\MpesaService;
 use App\Services\PearlieService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -46,6 +47,78 @@ class MpesaBookingTest extends TestCase
         Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/mpesa/stkpush/v1/processrequest')
             && $request['PartyA'] === '254712345678'
             && $request['AccountReference'] === 'APT-1');
+    }
+
+    public function test_daraja_requests_run_outside_database_transactions(): void
+    {
+        $this->configureDaraja();
+        $transactionLevels = [];
+        $expectedTransactionLevel = DB::transactionLevel();
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://sandbox.safaricom.co.ke/oauth/v1/generate*' => function () use (&$transactionLevels) {
+                $transactionLevels[] = DB::transactionLevel();
+
+                return Http::response(['access_token' => 'test-access-token']);
+            },
+            'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest' => function () use (&$transactionLevels) {
+                $transactionLevels[] = DB::transactionLevel();
+
+                return Http::response([
+                    'ResponseCode' => '0',
+                    'ResponseDescription' => 'Success.',
+                    'MerchantRequestID' => 'merchant-transaction-boundary',
+                    'CheckoutRequestID' => 'checkout-transaction-boundary',
+                ]);
+            },
+        ]);
+        $appointment = $this->createAppointment();
+
+        $result = app(MpesaService::class)->stkPush(
+            '0712345678',
+            500,
+            'APT-'.$appointment->id,
+            'Appointment Deposit',
+            $appointment->id,
+        );
+
+        $this->assertTrue($result['success']);
+        $this->assertSame(
+            [$expectedTransactionLevel, $expectedTransactionLevel],
+            $transactionLevels,
+        );
+    }
+
+    public function test_file_backed_sqlite_connection_uses_contention_pragmas(): void
+    {
+        $databasePath = tempnam(sys_get_temp_dir(), 'pearlie-sqlite-');
+        $this->assertNotFalse($databasePath);
+        $connectionName = 'sqlite-contention-test';
+        config([
+            'database.connections.'.$connectionName => [
+                ...config('database.connections.sqlite'),
+                'database' => $databasePath,
+                'url' => null,
+            ],
+        ]);
+
+        try {
+            DB::purge($connectionName);
+            $connection = DB::connection($connectionName);
+
+            $this->assertSame(5000, (int) $connection->selectOne('PRAGMA busy_timeout')->timeout);
+            $this->assertSame('wal', strtolower($connection->selectOne('PRAGMA journal_mode')->journal_mode));
+        } finally {
+            DB::purge($connectionName);
+            if (file_exists($databasePath)) {
+                unlink($databasePath);
+            }
+            foreach ([$databasePath.'-shm', $databasePath.'-wal'] as $sidecarPath) {
+                if (file_exists($sidecarPath)) {
+                    unlink($sidecarPath);
+                }
+            }
+        }
     }
 
     public function test_mpesa_payment_record_is_created(): void
