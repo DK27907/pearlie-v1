@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin\DoctorController;
+use App\Http\Controllers\Admin\ServiceController;
+use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Auth\DoctorSetupController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\Doctor;
@@ -9,6 +11,7 @@ use App\Http\Controllers\HospitalInvitationController;
 use App\Http\Controllers\HospitalOnboardingController;
 use App\Http\Controllers\MarketingDemoController;
 use App\Http\Controllers\MarketingHomeController;
+use App\Http\Controllers\Patient\AppointmentController as PatientAppointmentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
 use App\Http\Controllers\SuperAdmin\HospitalController as SuperAdminHospitalController;
@@ -62,6 +65,11 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
+Route::middleware(['auth', 'verified'])->group(function (): void {
+    Route::get('/appointments', [PatientAppointmentController::class, 'index'])->name('appointments.index');
+    Route::get('/appointments/{appointment}', [PatientAppointmentController::class, 'show'])->name('appointments.show');
+});
+
 Route::middleware(['auth', 'doctor', 'feature:doctors'])
     ->prefix('doctor')
     ->name('doctor.')
@@ -69,6 +77,7 @@ Route::middleware(['auth', 'doctor', 'feature:doctors'])
         Route::get('/dashboard', [Doctor\DashboardController::class, 'index'])->name('dashboard');
         Route::get('/profile', [ProfileController::class, 'edit'])->name('profile');
         Route::get('/appointments', [Doctor\DashboardController::class, 'appointments'])->name('appointments');
+        Route::get('/patients', [Doctor\PatientController::class, 'index'])->name('patients.index');
         Route::get('/appointments/{id}', [Doctor\DashboardController::class, 'appointmentDetails'])->name('appointments.show');
         Route::post('/appointments/{id}/confirm', [Doctor\DashboardController::class, 'confirmAppointment'])->name('appointments.confirm');
         Route::post('/appointments/{id}/complete', [Doctor\DashboardController::class, 'completeAppointment'])->name('appointments.complete');
@@ -145,13 +154,15 @@ Route::middleware(['auth', 'hospital.admin'])
         Route::resource('doctors', DoctorController::class)->except('show')->middleware('feature:doctors');
         Route::post('doctors/{doctor}/invite', [DoctorController::class, 'invite'])
             ->name('doctors.invite');
-        Route::get('services', [KnowledgeBaseController::class, 'services'])->name('services.index');
-        Route::get('services/create', [KnowledgeBaseController::class, 'serviceCreate'])->name('services.create');
-        Route::post('services', [KnowledgeBaseController::class, 'serviceStore'])->name('services.store');
-        Route::get('services/{knowledgeBase}/edit', [KnowledgeBaseController::class, 'serviceEdit'])->name('services.edit');
-        Route::put('services/{knowledgeBase}', [KnowledgeBaseController::class, 'serviceUpdate'])->name('services.update');
-        Route::patch('services/{knowledgeBase}', [KnowledgeBaseController::class, 'serviceUpdate']);
-        Route::delete('services/{knowledgeBase}', [KnowledgeBaseController::class, 'serviceDestroy'])->name('services.destroy');
+        Route::get('knowledge-services', [KnowledgeBaseController::class, 'services'])->name('knowledge-services.index');
+        Route::get('knowledge-services/create', [KnowledgeBaseController::class, 'serviceCreate'])->name('knowledge-services.create');
+        Route::post('knowledge-services', [KnowledgeBaseController::class, 'serviceStore'])->name('knowledge-services.store');
+        Route::get('knowledge-services/{knowledgeBase}/edit', [KnowledgeBaseController::class, 'serviceEdit'])->name('knowledge-services.edit');
+        Route::put('knowledge-services/{knowledgeBase}', [KnowledgeBaseController::class, 'serviceUpdate'])->name('knowledge-services.update');
+        Route::patch('knowledge-services/{knowledgeBase}', [KnowledgeBaseController::class, 'serviceUpdate']);
+        Route::delete('knowledge-services/{knowledgeBase}', [KnowledgeBaseController::class, 'serviceDestroy'])->name('knowledge-services.destroy');
+        Route::patch('services/{service}/toggle-active', [ServiceController::class, 'toggleActive'])->name('services.toggle-active');
+        Route::resource('services', ServiceController::class)->except(['show']);
         Route::get('knowledge-base', [KnowledgeBaseController::class, 'index'])->name('knowledge-base.index');
         Route::get('knowledge-base/create', [KnowledgeBaseController::class, 'create'])->name('knowledge-base.create');
         Route::post('knowledge-base', [KnowledgeBaseController::class, 'store'])->name('knowledge-base.store');
@@ -166,6 +177,15 @@ Route::middleware(['auth', 'hospital.admin'])
         Route::get('reports/export', [ReportController::class, 'exportCsv'])->name('reports.export');
         Route::get('settings', [HospitalOnboardingController::class, 'adminSettings'])->name('settings');
         Route::put('settings', [HospitalOnboardingController::class, 'update'])->name('settings.update');
+        Route::prefix('integration-settings')->name('integration-settings.')->group(function (): void {
+            Route::get('/', [SettingsController::class, 'edit'])->name('edit');
+            Route::put('/general', [SettingsController::class, 'updateGeneral'])->name('general.update');
+            Route::put('/mpesa', [SettingsController::class, 'updateMpesa'])->name('mpesa.update');
+            Route::put('/whatsapp', [SettingsController::class, 'updateWhatsApp'])->name('whatsapp.update');
+            Route::put('/sms', [SettingsController::class, 'updateSms'])->name('sms.update');
+            Route::put('/email', [SettingsController::class, 'updateEmail'])->name('email.update');
+            Route::delete('/credentials/{provider}', [SettingsController::class, 'clearCredential'])->name('credentials.clear');
+        });
 
         // Escalations
         Route::get('escalations', [EscalationController::class, 'index'])->middleware('feature:escalation')->name('escalations.index');
