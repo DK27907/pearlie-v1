@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Hospital;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -25,13 +26,12 @@ class AdminUserSeeder extends Seeder
         $password = (string) ($password ?: 'password');
 
         $accounts = [
-            ['slug' => 'pearl', 'email' => (string) config('admin.email', 'admin@pearlhospital.co.ke'), 'name' => 'Pearl Hospital Administrator'],
+            ['slug' => config('pearlie.default_hospital_slug', 'pearl'), 'email' => config('admin.email')],
         ];
         if (! app()->isProduction()) {
             $accounts[] = [
                 'slug' => 'demo',
-                'email' => 'admin@demohospital.co.ke',
-                'name' => 'Demo Hospital Administrator',
+                'email' => 'admin+demo@example.test',
             ];
         }
 
@@ -40,12 +40,13 @@ class AdminUserSeeder extends Seeder
             Role::firstOrCreate(['name' => 'hospital_admin', 'guard_name' => 'web']);
 
             foreach ($accounts as $account) {
-                $hospital = \App\Models\Hospital::query()->where('slug', $account['slug'])->firstOrFail();
+                $hospital = Hospital::query()->where('slug', $account['slug'])->firstOrFail();
                 app()->instance('currentHospital', $hospital);
-                $user = User::withoutGlobalScopes()->firstOrNew(['email' => $account['email']]);
+                $email = $account['email'] ?: 'admin+'.$hospital->slug.'@example.test';
+                $user = User::withoutGlobalScopes()->firstOrNew(['email' => $email]);
                 $user->forceFill([
                     'hospital_id' => $hospital->id,
-                    'name' => $account['name'],
+                    'name' => $hospital->name.' Administrator',
                     'password' => Hash::make($password),
                     'email_verified_at' => now(),
                     'is_admin' => true,
@@ -59,7 +60,7 @@ class AdminUserSeeder extends Seeder
                     $user->assignRole('admin');
                 }
 
-                $this->command->info("Hospital administrator created/updated: {$account['email']}");
+                $this->command->info("Hospital administrator created/updated: {$email}");
             }
         } catch (\Throwable $e) {
             $this->command->warn('Spatie roles not available yet: '.$e->getMessage());

@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Hospital;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -16,7 +17,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call(HospitalSeeder::class);
-        $pearl = \App\Models\Hospital::query()->where('slug', 'pearl')->firstOrFail();
+        $pearl = Hospital::query()->where('slug', 'pearl')->firstOrFail();
         app()->instance('currentHospital', $pearl);
         $this->call(RoleSeeder::class);
 
@@ -28,7 +29,7 @@ class DatabaseSeeder extends Seeder
         $this->call(AdminUserSeeder::class);
 
         User::factory()->create([
-            'name' => 'Test User',
+            'name' => 'Alex Mwangi',
             'email' => 'test@example.com',
         ]);
 

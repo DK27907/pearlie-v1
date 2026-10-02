@@ -31,14 +31,14 @@ class DuskSeedSeeder extends Seeder
             ])->save();
 
             $this->user($hospital, 'superadmin@pearl.test', [
-                'name' => 'Pearl Smoke Test Superadmin',
+                'name' => 'Platform Administrator',
                 'role' => 'super_admin',
                 'is_super_admin' => true,
                 'is_admin' => false,
                 'is_doctor' => false,
             ]);
             $admin = $this->user($hospital, 'admin@pearl.test', [
-                'name' => 'Pearl Smoke Test Admin',
+                'name' => 'Pearl Hospital Admin',
                 'role' => 'hospital_admin',
                 'is_admin' => true,
                 'is_super_admin' => false,
@@ -67,7 +67,7 @@ class DuskSeedSeeder extends Seeder
                 'bio' => 'Provides primary care and general consultations.',
             ]);
             $patient = $this->user($hospital, 'patient@pearl.test', [
-                'name' => 'Patricia Smoke Patient',
+                'name' => 'Patricia Wanjiku',
                 'role' => 'patient',
                 'is_admin' => false,
                 'is_super_admin' => false,

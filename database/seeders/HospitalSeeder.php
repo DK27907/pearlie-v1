@@ -12,17 +12,15 @@ class HospitalSeeder extends Seeder
         Hospital::query()->updateOrCreate(
             ['slug' => 'pearl'],
             [
-                'name' => 'Pearl Hospital',
+                'name' => config('pearlie.hospital.name', 'Pearl Hospital'),
                 'primary_color' => '#0a2f44',
                 'secondary_color' => '#1a5276',
-                'address' => 'Vin Plaza, Nyahururu-Nyeri Road, Nyahururu, Kenya',
-                'city' => 'Nyahururu',
-                'county' => 'Laikipia',
-                'phone' => '0707799114',
-                'emergency_phone' => '0707799114',
-                'email' => 'info@pearlhospital.co.ke',
-                'website' => 'https://www.pearlhospital.co.ke',
-                'whatsapp_number' => '254707799114',
+                'address' => config('pearlie.hospital.address'),
+                'phone' => config('pearlie.hospital.phone'),
+                'emergency_phone' => config('pearlie.hospital.emergency_phone'),
+                'email' => config('pearlie.hospital.email'),
+                'website' => config('pearlie.hospital.website'),
+                'whatsapp_number' => config('pearlie.hospital.whatsapp_number'),
                 'deposit_amount' => 500,
                 'slot_duration_minutes' => 30,
                 'no_show_grace_minutes' => 30,
@@ -57,7 +55,7 @@ class HospitalSeeder extends Seeder
         Hospital::query()->updateOrCreate(
             ['slug' => 'demo'],
             [
-                'name' => 'Demo Hospital',
+                'name' => 'Nairobi Medical Centre',
                 'city' => 'Nairobi',
                 'county' => 'Nairobi',
                 'email' => 'info@demohospital.co.ke',

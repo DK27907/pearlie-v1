@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Hospital;
+use App\Models\HospitalIntegrationCredential;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -32,9 +34,30 @@ class HospitalOnboardingController extends Controller
                 'branding' => filled($hospital->primary_color),
                 'doctors' => $hospital->doctors()->exists(),
                 'knowledge' => $hospital->knowledgeBases()->exists(),
-                'payments' => filled($hospital->mpesa_shortcode),
+                'payments' => ! $hospital->hasFeature('mpesa') || $this->hasValidMpesaCredentials($hospital),
             ],
         ]);
+    }
+
+    private function hasValidMpesaCredentials(Hospital $hospital): bool
+    {
+        $credential = $hospital->integrationCredentials()
+            ->where('provider', HospitalIntegrationCredential::PROVIDER_MPESA)
+            ->where('is_active', true)
+            ->first();
+        $credentials = $credential?->credentials;
+
+        if (! is_array($credentials)) {
+            return false;
+        }
+
+        foreach (['consumer_key', 'consumer_secret', 'passkey', 'shortcode', 'callback_url'] as $key) {
+            if (blank($credentials[$key] ?? null)) {
+                return false;
+            }
+        }
+
+        return in_array($credentials['environment'] ?? null, ['sandbox', 'production'], true);
     }
 
     public function update(Request $request): RedirectResponse
@@ -62,7 +85,6 @@ class HospitalOnboardingController extends Controller
             'settings' => ['nullable', 'array'],
             'settings.about' => ['nullable', 'string', 'max:3000'],
             'settings.ai_instructions' => ['nullable', 'string', 'max:4000'],
-            'settings.auto_confirm_paid_appointments' => ['nullable', 'boolean'],
             'hours_emergency' => ['required', 'string', 'max:100'],
             'hours_outpatient' => ['required', 'string', 'max:100'],
             'mpesa_shortcode' => ['nullable', 'string', 'max:20'],

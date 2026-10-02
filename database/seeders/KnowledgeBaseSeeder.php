@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Hospital;
 use App\Models\KnowledgeBase;
 use Illuminate\Database\Seeder;
 
@@ -9,24 +10,34 @@ class KnowledgeBaseSeeder extends Seeder
 {
     public function run(): void
     {
-        $pearl = \App\Models\Hospital::query()->where('slug', 'pearl')->firstOrFail();
+        $pearl = Hospital::query()->where('slug', 'pearl')->firstOrFail();
         app()->instance('currentHospital', $pearl);
-        $hospitalName = (string) pearlie_config('hospital.name');
-        $hospitalLocation = (string) pearlie_config('hospital.location');
-        $hospitalEmail = (string) pearlie_config('hospital.email');
-        $appointmentPhone = (string) pearlie_config('hospital.appointment_phone');
-        $emergencyPhone = (string) pearlie_config('hospital.emergency_phone');
-        $website = (string) pearlie_config('hospital.website');
-        $depositAmount = number_format((float) pearlie_config('appointment.deposit_amount'), 0);
+        $hospitalName = (string) $pearl->name;
+        $assistantName = trim((string) data_get($pearl->settings, 'ai_name', '')) ?: 'Pearlie';
+        $hospitalLocation = (string) $pearl->address;
+        $hospitalEmail = (string) $pearl->email;
+        $appointmentPhone = (string) $pearl->phone;
+        $emergencyPhone = (string) $pearl->emergency_phone;
+        $emergencyHours = (string) $pearl->hours_emergency;
+        $outpatientHours = (string) $pearl->hours_outpatient;
+        $website = (string) $pearl->website;
+        $depositAmount = number_format((float) $pearl->deposit_amount, 0);
         $source = $hospitalName.' Administration';
 
         $records = [
             [
                 'category' => 'services',
+                'subcategory' => 'services_overview',
+                'keywords' => ['services', 'what services do you offer', 'what services are available', 'service list', 'offer services', 'all services', 'services offered', 'huduma', 'huduma zenu'],
+                'question' => 'What services do you offer?',
+                'answer' => $hospitalName.' offers outpatient care, inpatient care, surgery, dialysis, oncology, IVF and fertility care, specialist clinics, physiotherapy, radiology and imaging, laboratory services, maternity and child healthcare, family planning, wellness screening, dental, optical, pharmacy, and emergency services.',
+            ],
+            [
+                'category' => 'services',
                 'subcategory' => 'outpatient',
                 'keywords' => ['outpatient', 'opd', 'clinic', 'consultation', 'general doctor', 'triage', 'clinical officer', 'walk-in'],
                 'question' => 'What outpatient services are available?',
-                'answer' => 'Out-patient services are available 24/7. Includes general medical officer consultations, triage, clinical officer check-ups, and emergency treatments.',
+                'answer' => 'Out-patient hours: '.$outpatientHours.'. Services include general consultations and triage; call '.$appointmentPhone.' to confirm current availability.',
             ],
             [
                 'category' => 'services',
@@ -40,154 +51,147 @@ class KnowledgeBaseSeeder extends Seeder
                 'subcategory' => 'surgery',
                 'keywords' => ['surgery', 'surgical', 'theatre', 'operation', 'theater', 'minor surgery', 'major surgery', 'obstetric surgery'],
                 'question' => 'What surgical services are available?',
-                'answer' => 'Fully functional, state-of-the-art operating theater equipped for minor, major, elective, emergency, and obstetric surgeries.',
+                'answer' => $hospitalName.' Surgical Services include minor, major, elective, emergency, and obstetric surgeries in a fully equipped theatre. Call '.$appointmentPhone.' to confirm service availability.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'dialysis',
-                'keywords' => ['dialysis', 'hemodialysis', 'kidney', 'renal', 'renal failure', 'kidney failure'],
+                'keywords' => ['dialysis', 'hemodialysis', 'kidney treatment', 'kidney', 'renal', 'renal failure', 'kidney failure', 'figo'],
                 'question' => 'What dialysis care is available?',
-                'answer' => 'Quality hemodialysis sessions with regular monthly lab monitoring and pre-dialysis screenings.',
+                'answer' => $hospitalName.' Dialysis Care Unit provides hemodialysis sessions, regular lab monitoring, and pre-dialysis screening. Contact '.$appointmentPhone.' to schedule.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'oncology',
-                'keywords' => ['oncology', 'cancer', 'chemotherapy', 'chemo', 'tumor', 'cancer treatment', 'staging'],
+                'keywords' => ['oncology', 'cancer', 'chemotherapy', 'chemo', 'tumor', 'cancer treatment', 'staging', 'saratani'],
                 'question' => 'What oncology services are available?',
-                'answer' => 'Comprehensive cancer care including diagnosis, staging, and chemotherapy administration.',
+                'answer' => $hospitalName.' Oncology Services provide cancer care including diagnosis, staging, chemotherapy administration, and supportive care. Contact '.$appointmentPhone.' for service information.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'ivf-fertility',
                 'keywords' => ['ivf', 'fertility', 'infertile', 'conceive', 'pregnancy help', 'reproductive', 'fertility clinic'],
                 'question' => 'What IVF and fertility services are available?',
-                'answer' => 'Confidential, customized fertility clinics supporting reproductive assistance, diagnostics, and management for couples.',
+                'answer' => $hospitalName.' IVF and Fertility Clinic offers confidential fertility diagnostics, reproductive assistance, and counseling. Contact '.$appointmentPhone.' to enquire or book.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'specialist-clinics',
                 'keywords' => ['specialist', 'consultant', 'physician', 'surgeon', 'oncologist', 'gynecologist', 'obstetrician', 'pediatrician', 'orthopedics', 'urologist', 'ENT', 'psychiatrist'],
                 'question' => 'Which specialist consultant clinics are available?',
-                'answer' => 'Regular clinics throughout the week with specialists including Physicians, Surgeons, Oncologists, Obstetricians & Gynecologists, Pediatricians, Orthopedic Surgeons, Urologists, ENT Specialists, and Psychiatrists.',
+                'answer' => $hospitalName.' hosts specialist clinics for Physicians, Surgeons, Oncologists, OB/GYNs, Pediatricians, Orthopedic Surgeons, Urologists, ENT, and Psychiatrists. Call '.$appointmentPhone.' to confirm a specialist clinic day.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'physiotherapy',
                 'keywords' => ['physiotherapy', 'physio', 'physical therapy', 'rehab', 'rehabilitation'],
                 'question' => 'What physiotherapy services are available?',
-                'answer' => 'Physical therapy and rehabilitation care to assist recovery and improve movement.',
+                'answer' => $hospitalName.' Physiotherapy Unit provides physical therapy and rehabilitation to support recovery and mobility. Call '.$appointmentPhone.' to confirm availability.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'ct-scan',
                 'keywords' => ['ct scan', 'ct', 'ctpa', 'ct pulmonary', 'ct angiography', 'head scan', 'chest scan', 'pelvis scan', 'abdomen scan'],
                 'question' => 'What CT scan services are available?',
-                'answer' => 'High-definition internal imaging including head, chest, pelvic, abdomen, and CT Pulmonary Angiogram (CTPA) scans.',
+                'answer' => $hospitalName.' Radiology and Imaging offers CT scans, digital X-rays, ultrasound, MRI, mammography, and fluoroscopy. Contact '.$appointmentPhone.' to confirm which services are currently available.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'xray-fluoroscopy',
                 'keywords' => ['x-ray', 'xray', 'fluoroscopy', 'hsg', 'mcu', 'barium', 'dye imaging'],
                 'question' => 'What X-ray and fluoroscopy services are available?',
-                'answer' => 'Regular digital X-rays plus specialized dye-guided imaging like HSG (Hysterosalpingography), MCU, and Barium studies.',
+                'answer' => $hospitalName.' offers digital X-rays and fluoroscopy. Call '.$appointmentPhone.' to confirm available imaging and make arrangements.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'ultrasound',
                 'keywords' => ['ultrasound', 'scan', 'sonography', 'doppler', 'color doppler', '3d scan', '4d scan', 'pregnancy scan'],
                 'question' => 'What ultrasound scanning services are available?',
-                'answer' => 'Real-time imaging by a consultant radiologist including color Doppler and advanced 3D/4D obstetric scans.',
+                'answer' => $hospitalName.' provides ultrasound imaging, including 2D, 3D/4D, and Doppler scans. Contact '.$appointmentPhone.' to confirm availability.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'biopsies',
                 'keywords' => ['biopsy', 'fna', 'fine needle aspiration', 'core biopsy', 'tissue biopsy'],
                 'question' => 'What biopsy services are available?',
-                'answer' => 'Fine Needle Aspiration (FNA) and core tissue biopsies under ultrasound or CT guidance.',
+                'answer' => $hospitalName.' provides biopsy services. Contact '.$appointmentPhone.' to confirm the available biopsy procedures and booking arrangements.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'cardio-neuro-diagnostics',
                 'keywords' => ['ecg', 'ekg', 'echo', 'echocardiogram', 'eeg', 'electrocardiogram', 'electroencephalogram', 'heart test', 'brain test'],
                 'question' => 'What cardio and neuro diagnostic tests are available?',
-                'answer' => 'Includes Electrocardiograms (ECG), Echocardiograms (ECHO), and Electroencephalograms (EEG).',
+                'answer' => $hospitalName.' offers ECG, ECHO, and EEG diagnostic tests. Contact '.$appointmentPhone.' to confirm availability.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'endoscopy-colonoscopy',
                 'keywords' => ['endoscopy', 'colonoscopy', 'gastroscopy', 'camera test', 'gi exam'],
                 'question' => 'What endoscopy services are available?',
-                'answer' => 'Internal gastrointestinal examinations using specialized diagnostic cameras.',
+                'answer' => $hospitalName.' offers endoscopy and colonoscopy services. Contact '.$appointmentPhone.' to confirm availability and preparation instructions.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'laboratory',
                 'keywords' => ['lab', 'laboratory', 'blood test', 'urine test', 'test', 'hematology', 'biochemistry', 'diagnostics'],
                 'question' => 'What laboratory services are available?',
-                'answer' => 'Fully automated modern laboratory performing accurate, timely hematology, biochemistry, and general diagnostic tests.',
+                'answer' => $hospitalName.' Laboratory offers hematology, biochemistry, microbiology, serology, urinalysis, and histopathology. Contact '.$appointmentPhone.' to confirm test availability and result timelines.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'maternity-child-health',
                 'keywords' => ['maternity', 'antenatal', 'prenatal', 'delivery', 'postnatal', 'baby clinic', 'well-baby', 'maternal', 'pregnancy'],
                 'question' => 'What maternity and child healthcare services are available?',
-                'answer' => 'Dedicated prenatal check-ups, safe delivery wards, postnatal support, and routine infant well-baby clinics.',
+                'answer' => $hospitalName.' Maternity and Child Healthcare includes antenatal clinics, delivery care, postnatal support, and well-baby clinics. Contact '.$appointmentPhone.' for details.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'family-planning',
                 'keywords' => ['family planning', 'contraception', 'birth control', 'reproductive health'],
                 'question' => 'What family planning services are available?',
-                'answer' => 'Comprehensive counseling, advice, and delivery of alternative reproductive health options.',
+                'answer' => $hospitalName.' offers family-planning counseling and contraception options. Contact '.$appointmentPhone.' for details.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'wellness-screening',
                 'keywords' => ['wellness', 'screening', 'check-up', 'annual checkup', 'well-woman', 'well-man'],
                 'question' => 'What wellness and screening services are available?',
-                'answer' => 'Standard routine check-ups including comprehensive annual Well-Woman and Well-Man health screenings.',
+                'answer' => $hospitalName.' offers routine wellness screenings, including Well-Woman and Well-Man check-ups. Contact '.$appointmentPhone.' to confirm available screening services.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'dental',
-                'keywords' => ['dental', 'dentist', 'teeth', 'tooth', 'cleaning', 'extraction', 'filling', 'cosmetic dental'],
+                'keywords' => ['dental', 'dentist', 'teeth', 'tooth', 'cleaning', 'extraction', 'filling', 'cosmetic dental', 'mno', 'menoni'],
                 'question' => 'What dental services are available?',
-                'answer' => 'Two active dental rooms delivering routine check-ups, cleaning, cosmetic procedures, extractions, and fillings for adults and children.',
+                'answer' => $hospitalName.' Dental Unit offers routine check-ups, cleaning and scaling, cosmetic procedures, extractions, fillings for adults and children, and emergency dental care. To book, call '.$appointmentPhone.' or ask me to book a dental appointment.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'optical',
                 'keywords' => ['optical', 'eye', 'vision', 'glasses', 'eyewear', 'glaucoma', 'cataract', 'eye test'],
                 'question' => 'What optical services are available?',
-                'answer' => 'Essential vision care, glaucoma/cataract screenings, and prescription eyewear fitting by eye care experts.',
+                'answer' => $hospitalName.' Optical Clinic offers vision tests, glaucoma and cataract screening, and prescription eyewear. Contact '.$appointmentPhone.' to confirm availability.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'emergency',
-                'keywords' => ['emergency', 'urgent', 'ambulance', 'accident', 'casualty', '24 hour'],
+                'keywords' => ['emergency', 'urgent', 'ambulance', 'accident', 'casualty', '24 hour', 'dharura'],
                 'question' => 'What emergency services are available?',
-                'answer' => '24/7 emergency services. For emergencies call '.$emergencyPhone.' immediately.',
-            ],
-            [
-                'category' => 'services',
-                'subcategory' => 'general',
-                'keywords' => ['services', 'departments', 'what services', 'what do you offer', 'what does the hospital do', 'hospital services'],
-                'question' => 'What services does '.$hospitalName.' offer?',
-                'answer' => 'Services include out-patient and in-patient care, surgery, dialysis, oncology, IVF and fertility care, specialist consultant clinics, physiotherapy, CT scans, X-ray and fluoroscopy, ultrasound, biopsies, ECG/ECHO/EEG diagnostics, endoscopy and colonoscopy, laboratory services, maternity and child healthcare, family planning, wellness screening, dental care, optical care, and emergency services.',
+                'answer' => $hospitalName.' provides emergency services. Emergency hours: '.$emergencyHours.'. Call '.$emergencyPhone.' immediately for urgent help.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'radiology',
                 'keywords' => ['radiology', 'x-ray', 'xray', 'ultrasound', 'scan', 'imaging', 'ct', 'ct scan', 'fluoroscopy'],
                 'question' => 'What imaging services are available at '.$hospitalName.'?',
-                'answer' => 'Imaging services include CT scans, digital X-rays and fluoroscopy, ultrasound with color Doppler and 3D/4D obstetric scans, and image-guided biopsies. Contact '.$appointmentPhone.' to confirm arrangements.',
+                'answer' => $hospitalName.' Radiology and Imaging includes Digital X-Ray, Ultrasound (2D/3D/4D), CT Scan, MRI, Mammography, and Fluoroscopy. Contact '.$appointmentPhone.' to confirm current availability.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'pharmacy',
                 'keywords' => ['pharmacy', 'medication', 'medicine', 'prescription', 'chemist'],
                 'question' => 'Is pharmacy service available?',
-                'answer' => 'Please call '.$appointmentPhone.' for current pharmacy service information.',
+                'answer' => 'Please call '.$appointmentPhone.' to ask whether pharmacy service is currently available at '.$hospitalName.'.',
             ],
             [
                 'category' => 'location',
@@ -208,14 +212,14 @@ class KnowledgeBaseSeeder extends Seeder
                 'subcategory' => 'general',
                 'keywords' => ['doctors', 'specialist', 'physician', 'surgeon', 'consultant', 'medical staff', 'doctor schedule'],
                 'question' => 'Which specialists are available at '.$hospitalName.'?',
-                'answer' => 'Specialist clinics run during the week and include Physicians, Surgeons, Oncologists, Obstetricians & Gynecologists, Pediatricians, Orthopedic Surgeons, Urologists, ENT Specialists, and Psychiatrists. Call '.$appointmentPhone.' to confirm clinic days.',
+                'answer' => $hospitalName.' hosts specialist clinics for Physicians, Surgeons, Oncologists, OB/GYNs, Pediatricians, Orthopedic Surgeons, Urologists, ENT, and Psychiatrists. Call '.$appointmentPhone.' to confirm a specialist clinic day.',
             ],
             [
                 'category' => 'hours',
                 'subcategory' => 'outpatient',
                 'keywords' => ['hours', 'open', 'opening', 'time', 'when', 'closed', 'working hours', 'outpatient hours'],
                 'question' => 'What are the opening hours at '.$hospitalName.'?',
-                'answer' => 'Emergency and out-patient services are available '.$this->emergencyHours().'. Specialist clinics run during the week; call '.$appointmentPhone.' to confirm a specialist’s day. Routine outpatient hours: '.config('pearlie.hospital.hours_outpatient').'.',
+                'answer' => 'Emergency hours: '.$emergencyHours.'. Routine outpatient hours: '.$outpatientHours.'. Call '.$appointmentPhone.' to confirm clinic availability.',
             ],
             [
                 'category' => 'location',
@@ -299,28 +303,28 @@ class KnowledgeBaseSeeder extends Seeder
                 'subcategory' => 'hello',
                 'keywords' => ['hello', 'hi', 'hey', 'greetings', 'good morning', 'good afternoon', 'good evening', 'how are you'],
                 'question' => 'Greeting',
-                'answer' => 'Hello! I’m Pearlie, your healthcare assistant at '.$hospitalName.'. How can I help you today?',
+                'answer' => 'Hello! I’m '.$assistantName.', '.$hospitalName.'’s healthcare assistant. How can I help you today?',
             ],
             [
                 'category' => 'greeting',
                 'subcategory' => 'swahili',
                 'keywords' => ['habari', 'hujambo', 'sijambo', 'jambo', 'mambo', 'vipi', 'niaje', 'sasa', 'shikamoo', 'salama', 'poa'],
                 'question' => 'Salamu kwa Kiswahili',
-                'answer' => 'Habari! Mimi ni Pearlie, msaidizi wako wa afya katika '.$this->swahiliHospitalName().'. Naweza kukusaidia vipi leo?',
+                'answer' => 'Habari! Mimi ni '.$assistantName.', msaidizi wa afya wa '.$hospitalName.'. Naweza kukusaidia vipi leo?',
             ],
             [
                 'category' => 'location',
                 'subcategory' => 'swahili',
                 'keywords' => ['mko wapi', 'mahali', 'anwani', 'wapi'],
                 'question' => 'Hospitali iko wapi?',
-                'answer' => $this->swahiliHospitalName().' iko '.str_replace('Nyahururu-Nyeri Road', 'barabara ya Nyahururu-Nyeri', $hospitalLocation).'.',
+                'answer' => $this->swahiliHospitalName($hospitalName).' iko '.$hospitalLocation.'.',
             ],
             [
                 'category' => 'hours',
                 'subcategory' => 'swahili',
                 'keywords' => ['mnafanya kazi saa ngapi', 'saa za kazi', 'muda'],
                 'question' => 'Hospitali inafunguliwa saa ngapi?',
-                'answer' => 'Huduma za dharura na wagonjwa wa nje zinapatikana masaa 24/7. Kliniki za wataalamu zinafanyika wakati wa wiki — piga '.$appointmentPhone.' kuthibitisha.',
+                'answer' => 'Saa za dharura: '.$emergencyHours.'. Saa za wagonjwa wa nje: '.$outpatientHours.'. Piga '.$appointmentPhone.' kuthibitisha upatikanaji wa huduma.',
             ],
             [
                 'category' => 'appointments',
@@ -332,9 +336,9 @@ class KnowledgeBaseSeeder extends Seeder
             [
                 'category' => 'services',
                 'subcategory' => 'emergency-swahili',
-                'keywords' => ['dharura', 'haraka', 'ajali', 'msaada wa haraka', 'msada wa haraka'],
+                'keywords' => ['dharura', 'maumivu ya kifua', 'shida kupumua', 'damu nyingi', 'kiharusi', 'haraka', 'ajali', 'nimeumia vibaya', 'msaada wa haraka', 'msada wa haraka'],
                 'question' => 'Nifanye nini wakati wa dharura?',
-                'answer' => 'Kwa dharura, piga '.$emergencyPhone.' mara moja. Tunapatikana masaa 24/7.',
+                'answer' => 'Kwa dharura, piga '.$emergencyPhone.' sasa. Ninakuunganisha na mhudumu wa afya.',
             ],
             [
                 'category' => 'location',
@@ -348,7 +352,7 @@ class KnowledgeBaseSeeder extends Seeder
                 'subcategory' => 'complete-service-list-swahili',
                 'keywords' => ['huduma', 'mnafanya nini', 'huduma zenu'],
                 'question' => 'Hospitali inatoa huduma gani?',
-                'answer' => $this->swahiliHospitalName().' inatoa huduma za wagonjwa wa nje (24/7), kulazwa, upasuaji, dialysis, saratani (oncology), IVF na uzazi, kliniki za wataalamu, physiotherapy, CT scan, X-ray, ultrasound, biopsy, ECG/ECHO/EEG, endoscopy, maabara, uzazi na afya ya watoto, family planning, uchunguzi wa afya, meno, macho, na dharura.',
+                'answer' => $hospitalName.' inatoa huduma za wagonjwa wa nje, kulazwa, upasuaji, dialysis, oncology, IVF na uzazi, kliniki za wataalamu, physiotherapy, radiology na imaging, maabara, uzazi na afya ya watoto, family planning, uchunguzi wa afya, huduma za meno na macho, pharmacy, na huduma za dharura.',
             ],
         ];
 
@@ -380,13 +384,8 @@ class KnowledgeBaseSeeder extends Seeder
         }
     }
 
-    private function emergencyHours(): string
+    private function swahiliHospitalName(string $hospitalName): string
     {
-        return (string) pearlie_config('hospital.hours_emergency', '24/7');
-    }
-
-    private function swahiliHospitalName(): string
-    {
-        return 'Hospitali ya '.(string) pearlie_config('hospital.name', 'Pearl Hospital');
+        return 'Hospitali ya '.$hospitalName;
     }
 }

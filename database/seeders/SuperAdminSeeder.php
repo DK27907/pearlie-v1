@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Hospital;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -18,7 +19,7 @@ class SuperAdminSeeder extends Seeder
             return;
         }
 
-        $hospital = \App\Models\Hospital::query()->where('slug', 'pearl')->firstOrFail();
+        $hospital = Hospital::query()->where('slug', 'pearl')->firstOrFail();
         $user = User::withoutGlobalScopes()->firstOrNew(['email' => $email]);
         $user->forceFill([
             'hospital_id' => $hospital->id,
