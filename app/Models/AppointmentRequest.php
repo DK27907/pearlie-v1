@@ -51,6 +51,7 @@ class AppointmentRequest extends Model
         'confirmed_by_doctor_at',
         'marked_no_show_at',
         'no_show_reason',
+        'service_id',
     ];
 
     protected $casts = [
@@ -72,6 +73,11 @@ class AppointmentRequest extends Model
     public function doctor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'doctor_id');
+    }
+
+    public function service(): BelongsTo
+    {
+        return $this->belongsTo(Service::class);
     }
 
     public static function statuses(): array
