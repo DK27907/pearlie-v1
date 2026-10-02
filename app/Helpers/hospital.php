@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Hospital;
+use Illuminate\Support\Facades\Storage;
 
 if (! function_exists('hospital')) {
     function hospital(): ?Hospital
@@ -38,5 +39,31 @@ if (! function_exists('pearlie_config')) {
         }
 
         return $value ?? config('pearlie.'.$key, $default);
+    }
+}
+
+if (! function_exists('hospital_branding')) {
+    /**
+     * @return array{header_text: string, footer_text: string, logo_url: ?string}
+     */
+    function hospital_branding(): array
+    {
+        $tenantHospital = hospital();
+        $hospitalName = $tenantHospital?->name ?? 'MediDesk AI';
+        $defaultFooter = '© '.date('Y').' '.$hospitalName;
+        if (filled($tenantHospital?->address)) {
+            $defaultFooter .= ' · '.$tenantHospital->address;
+        }
+        $logoPath = $tenantHospital?->site_logo_path ?: $tenantHospital?->logo_url;
+
+        return [
+            'header_text' => filled($tenantHospital?->site_header_text)
+                ? $tenantHospital->site_header_text
+                : $hospitalName,
+            'footer_text' => filled($tenantHospital?->site_footer_text)
+                ? $tenantHospital->site_footer_text
+                : $defaultFooter,
+            'logo_url' => $logoPath ? Storage::disk('public')->url($logoPath) : null,
+        ];
     }
 }

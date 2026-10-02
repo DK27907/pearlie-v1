@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\DoctorAvailability;
 use App\Models\User;
 use Database\Seeders\AdminUserSeeder;
 use Database\Seeders\DoctorUserSeeder;
@@ -28,10 +29,13 @@ class DemoAccountSeederTest extends TestCase
 
         $expectedAccounts = [
             'super@axiomforge.co.ke',
-            'admin@pearlhospital.co.ke',
-            'admin@demohospital.co.ke',
-            'doctor1@pearlhospital.co.ke',
-            'doctor2@pearlhospital.co.ke',
+            'admin+pearl@example.test',
+            'admin+demo@example.test',
+            'doctor1@pearl.test',
+            'doctor2@pearl.test',
+            'doctor3@pearl.test',
+            'doctor4@pearl.test',
+            'doctor5@pearl.test',
             'doctor1@demohospital.co.ke',
             'doctor2@demohospital.co.ke',
         ];
@@ -46,11 +50,30 @@ class DemoAccountSeederTest extends TestCase
         }
 
         $doctors = $accounts->filter(fn (User $user): bool => $user->is_doctor);
-        $this->assertCount(4, $doctors);
+        $this->assertCount(7, $doctors);
         foreach ($doctors as $doctor) {
-            $this->assertCount(5, $doctor->availabilities);
-            $this->assertSame('09:00', $doctor->availabilities->first()->start_time);
-            $this->assertSame('17:00', $doctor->availabilities->first()->end_time);
+            $availabilities = DoctorAvailability::withoutGlobalScopes()
+                ->where('doctor_id', $doctor->id)
+                ->orderBy('day_of_week')
+                ->get()
+                ->keyBy('day_of_week');
+
+            $this->assertCount(7, $availabilities);
+            $this->assertSame('08:00', $availabilities->first()->start_time);
+            $this->assertSame('17:00', $availabilities->first()->end_time);
+
+            if (str_ends_with($doctor->email, '@pearl.test')) {
+                $this->assertFalse($availabilities[0]->is_active);
+                foreach (range(1, 6) as $dayOfWeek) {
+                    $this->assertTrue($availabilities[$dayOfWeek]->is_active);
+                }
+
+                continue;
+            }
+
+            foreach (range(0, 6) as $dayOfWeek) {
+                $this->assertTrue($availabilities[$dayOfWeek]->is_active);
+            }
         }
     }
 }

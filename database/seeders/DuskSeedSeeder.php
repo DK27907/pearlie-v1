@@ -18,6 +18,8 @@ class DuskSeedSeeder extends Seeder
             throw new RuntimeException('Browser smoke-test accounts must not be seeded in production.');
         }
 
+        $this->call([HospitalSeeder::class, DoctorUserSeeder::class]);
+
         $hospital = Hospital::withoutGlobalScopes()->where('slug', 'pearl')->firstOrFail();
         $previousHospital = app()->bound('currentHospital') ? hospital() : null;
         app()->instance('currentHospital', $hospital);
@@ -53,7 +55,7 @@ class DuskSeedSeeder extends Seeder
                 'is_super_admin' => false,
                 'specialization' => 'Dentist',
                 'consultation_fee' => 2500,
-                'licence_number' => 'SMOKE-DENT-001',
+                'licence_number' => 'KMPDC-12345',
                 'bio' => 'Provides general dental care and preventive dentistry.',
             ]);
             $doctorTwo = $this->user($hospital, 'doctor2@pearl.test', [
@@ -62,9 +64,9 @@ class DuskSeedSeeder extends Seeder
                 'is_doctor' => true,
                 'is_admin' => false,
                 'is_super_admin' => false,
-                'specialization' => 'General',
+                'specialization' => 'General Practitioner',
                 'consultation_fee' => 1500,
-                'licence_number' => 'SMOKE-GEN-002',
+                'licence_number' => 'KMPDC-67890',
                 'bio' => 'Provides primary care and general consultations.',
             ]);
             $patient = $this->user($hospital, 'patient@pearl.test', [
@@ -76,50 +78,11 @@ class DuskSeedSeeder extends Seeder
                 'phone' => '254748249882',
             ]);
 
-            foreach ([$doctorOne, $doctorTwo] as $doctor) {
-                foreach (range(0, 6) as $weekday) {
-                    $doctor->availabilities()->updateOrCreate(
-                        ['day_of_week' => $weekday],
-                        [
-                            'start_time' => '09:00',
-                            'end_time' => '17:00',
-                            'slot_duration_minutes' => $hospital->slot_duration_minutes ?? 30,
-                            'max_patients_per_slot' => 1,
-                            'is_active' => true,
-                        ],
-                    );
-                }
-            }
-
-            $services = [];
-            foreach ([
-                [
-                    'name' => 'Dental Cleaning',
-                    'price' => 2500,
-                    'duration_minutes' => 45,
-                    'category' => 'Dental',
-                    'requires_specialty' => 'Dentist',
-                ],
-                [
-                    'name' => 'General Consultation',
-                    'price' => 1500,
-                    'duration_minutes' => 30,
-                    'category' => 'General',
-                    'requires_specialty' => 'General',
-                ],
-                [
-                    'name' => 'X-Ray',
-                    'price' => 3000,
-                    'duration_minutes' => 30,
-                    'category' => 'Diagnostic',
-                    'requires_specialty' => null,
-                ],
-            ] as $serviceData) {
-                $services[$serviceData['name']] = $hospital->services()->updateOrCreate(
-                    ['name' => $serviceData['name']],
-                    [...$serviceData, 'description' => $serviceData['name'].' for browser smoke testing.', 'is_active' => true],
-                );
-            }
+            $services = $hospital->services()
+                ->active()
+                ->orderBy('name')
+                ->get()
+                ->keyBy('name');
 
             $appointmentDate = CarbonImmutable::now()->next(CarbonImmutable::MONDAY)->toDateString();
             $hospital->appointments()->updateOrCreate(
@@ -131,16 +94,16 @@ class DuskSeedSeeder extends Seeder
                     'mpesa_phone' => '254748249882',
                     'email' => $patient->email,
                     'preferred_date' => $appointmentDate,
-                    'reason' => 'Dental cleaning browser smoke test',
+                    'reason' => 'Dental checkup browser smoke test',
                     'raw_message' => 'Browser smoke-test appointment: pending.',
                     'status' => AppointmentRequest::STATUS_PENDING,
                     'booking_fee' => 2500,
                     'payment_amount' => 2500,
                     'payment_status' => 'pending',
                     'doctor_id' => $doctorOne->id,
-                    'service_id' => $services['Dental Cleaning']->id,
+                    'service_id' => $services['Dental Checkup & Cleaning']->id,
                     'slot_start_time' => '09:00',
-                    'slot_end_time' => '09:45',
+                    'slot_end_time' => '09:30',
                     'status_updated_at' => now(),
                 ],
             );
@@ -160,7 +123,7 @@ class DuskSeedSeeder extends Seeder
                     'payment_amount' => 1500,
                     'payment_status' => 'paid',
                     'paid_at' => now(),
-                    'doctor_id' => $doctorOne->id,
+                    'doctor_id' => $doctorTwo->id,
                     'service_id' => $services['General Consultation']->id,
                     'slot_start_time' => '10:00',
                     'slot_end_time' => '10:30',
@@ -187,7 +150,7 @@ class DuskSeedSeeder extends Seeder
                 [
                     'subcategory' => 'browser-smoke',
                     'keywords' => ['browser', 'services', 'smoke test'],
-                    'answer' => 'Dental Cleaning, General Consultation, and X-Ray are available.',
+                    'answer' => implode(', ', $services->keys()->all()).' are available.',
                     'source' => 'Browser smoke-test seed data',
                     'last_updated' => today(),
                     'approved_by' => $admin->name,
