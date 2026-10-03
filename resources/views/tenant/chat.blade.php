@@ -367,19 +367,18 @@
         </div>
 
         @if ($services->isNotEmpty())
-            <div class="grid gap-2 border-b border-slate-200 bg-white px-5 py-3 sm:grid-cols-[1fr_auto] sm:items-end">
+            <div class="border-b border-slate-200 bg-white px-5 py-3">
                 <div>
                     <label for="bookingService" class="block text-sm font-semibold text-slate-700">Choose a service (optional)</label>
                     <select id="bookingService" data-service-select class="mt-1 block w-full rounded-lg border-slate-300 text-sm focus:border-cyan-600 focus:ring-cyan-600">
                         <option value="" disabled @selected($selectedServiceId === null)>Select a service</option>
                         @foreach ($services as $service)
-                            <option value="{{ $service->id }}" data-price="{{ number_format((float) $service->price, 2, '.', '') }}" data-duration="{{ $service->duration_minutes }}" @selected($selectedServiceId === $service->id)>
-                                {{ $service->name }} — KSh {{ number_format((float) $service->price, 2) }} ({{ $service->duration_minutes }} min)
+                            <option value="{{ $service->id }}" data-duration="{{ $service->duration_minutes }}" @selected($selectedServiceId === $service->id)>
+                                {{ $service->name }} ({{ $service->duration_minutes }} min)
                             </option>
                         @endforeach
                     </select>
                 </div>
-                <output data-service-price aria-live="polite" class="text-base font-bold text-slate-900">Select a service to see its price.</output>
             </div>
         @endif
 

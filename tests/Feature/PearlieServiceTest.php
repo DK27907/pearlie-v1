@@ -156,7 +156,8 @@ class PearlieServiceTest extends TestCase
         $pendingBooking = $this->pendingBooking($sessionId);
 
         $this->assertSame('booking_details', $result['source']);
-        $this->assertStringContainsString('Dental Cleaning (KSh 2,500.00)', $result['response']);
+        $this->assertStringContainsString('Dental Cleaning', $result['response']);
+        $this->assertStringNotContainsString('KSh', $result['response']);
         $this->assertStringNotContainsString('Which service do you need?', $result['response']);
         $this->assertSame($service->id, $pendingBooking['service_id']);
         $this->assertSame($doctor->id, $pendingBooking['preferred_doctor_id']);

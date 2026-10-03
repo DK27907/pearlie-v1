@@ -49,6 +49,7 @@ class BookingChatService
         private readonly DoctorAvailabilityService $availability,
         private readonly MpesaService $mpesa,
         private readonly PearlieServiceV2 $assistant,
+        private readonly KnowledgeBaseService $knowledgeBase,
     ) {}
 
     public function handle(string $channelId, string $message, string $channel = 'web'): ChatResponse
@@ -99,6 +100,63 @@ class BookingChatService
                 $state,
                 $state['appointment_id'],
                 true,
+            );
+        }
+
+        if ($intent === 'pricing') {
+            $response = preg_match('/\b(bei|ada)\b/iu', $message)
+                ? 'Bei ya huduma itaonyeshwa kwenye muhtasari wa mwisho wa kuweka miadi. Ni huduma gani ungependa kuweka miadi?'
+                : 'Service prices are shown in the final booking confirmation. Tell me which service you would like to book and I can help.';
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $response,
+                $state,
+            );
+        }
+
+        if ($intent === 'greeting') {
+            $greeting = $this->knowledgeBase->search($message);
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $greeting ?? sprintf(
+                    "Hello! I'm %s, %s's healthcare assistant. I can help with services, hospital information, or booking an appointment.",
+                    $hospital->chatbotName(),
+                    $hospital->name,
+                ),
+                $state,
+                source: $greeting !== null ? 'knowledge_base' : 'hospital_greeting',
+            );
+        }
+
+        if ($intent === 'out_of_scope') {
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                sprintf(
+                    'I can help with %s services, appointments, and hospital information. What can I help you with?',
+                    $hospital->name,
+                ),
+                $state,
+            );
+        }
+
+        if ($intent === 'help') {
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                sprintf(
+                    'I can help with %s services, hospital information, and appointment bookings. To book, tell me the service you need.',
+                    $hospital->name,
+                ),
+                $state,
             );
         }
 
@@ -269,6 +327,14 @@ class BookingChatService
             }
         }
 
+        if (! $this->availability->isSlotAvailable(
+            (int) $state['doctor_id'],
+            (string) $state['date'],
+            (string) $state['time'],
+        )) {
+            return $this->offerBookingAlternatives($sessionId, $channel, $message, $hospital, $state);
+        }
+
         $state['state'] = self::STATE_CONFIRMING;
         $state['summary'] = $this->bookingSummary($state, $hospital);
 
@@ -354,15 +420,12 @@ class BookingChatService
             );
         }
 
-        $amount = (float) ($appointment->payment_amount ?? $appointment->booking_fee);
-
         return $this->respond(
             $sessionId,
             $channel,
             $message,
             sprintf(
-                'We sent an M-Pesa prompt for KSh %s to %s. Your appointment will be updated when payment is verified.',
-                number_format($amount, 2),
+                'We sent an M-Pesa prompt to %s. Your appointment will be updated when payment is verified.',
                 $this->mpesa->formatPhone((string) $state['patient_phone']),
             ),
             $state,
@@ -587,11 +650,20 @@ class BookingChatService
         if (preg_match('/\b(status|payment status|booking status)\b/u', $normalized)) {
             return 'status';
         }
+        if (preg_match('/^(?:hi|hello|hey|habari|hujambo|jambo|mambo|vipi|niaje|sasa|shikamoo|marahaba|salama|poa|freshi|mzuri|nzuri)[.!?,\s]*$/u', $normalized)) {
+            return 'greeting';
+        }
         if (preg_match('/\b(help|support|what can you do)\b/u', $normalized)) {
             return 'help';
         }
+        if (preg_match('/\b(price|prices|fee|fees|cost|costs|how much|charge|charges|bei|ada)\b/u', $normalized)) {
+            return 'pricing';
+        }
         if (preg_match('/\b(book|booking|appointment|schedule|miadi|need)\b/u', $normalized)) {
             return 'book';
+        }
+        if (preg_match('/\b(capital of|president of|population of|weather|stock price|who invented|who won|define|meaning of|translate)\b/u', $normalized)) {
+            return 'out_of_scope';
         }
 
         return 'other';

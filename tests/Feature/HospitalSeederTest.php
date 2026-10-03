@@ -133,8 +133,9 @@ class HospitalSeederTest extends TestCase
 
         $this->get('/h/pearl/chat')
             ->assertSee('Pearlie AI Assistant')
-            ->assertSee('Dental Checkup & Cleaning — KSh 2,500.00 (30 min)')
-            ->assertSee('Renal Dialysis Session — KSh 15,000.00 (240 min)')
+            ->assertSee('Dental Checkup & Cleaning (30 min)')
+            ->assertSee('Renal Dialysis Session (240 min)')
+            ->assertDontSee('KSh')
             ->assertDontSee('Paediatric Consultation');
 
         $this->get('/h/demo')
@@ -145,7 +146,8 @@ class HospitalSeederTest extends TestCase
 
         $this->get('/h/demo/chat')
             ->assertSee('Nairobie AI Assistant')
-            ->assertSee('Paediatric Consultation — KSh 1,800.00 (30 min)')
+            ->assertSee('Paediatric Consultation (30 min)')
+            ->assertDontSee('KSh')
             ->assertDontSee('Renal Dialysis Session');
     }
 }

@@ -276,9 +276,8 @@ class PearlieService extends PearlieServiceV2
                 ? 'Unapendelea miadi tarehe gani?'
                 : ($service
                     ? sprintf(
-                        'Got it — booking %s (KSh %s). What date would you prefer?',
+                        'Got it — booking %s. What date would you prefer?',
                         $service->name,
-                        number_format((float) $service->price, 2),
                     )
                     : 'What date would you prefer for the appointment?');
         }
@@ -470,19 +469,17 @@ class PearlieService extends PearlieServiceV2
 
             $response = $isSwahili
                 ? sprintf(
-                    'Ombi lako la miadi na %s tarehe %s saa %s limepokelewa. Tumetuma ombi la M-Pesa la KSh %s kwa %s. Weka PIN yako ya M-Pesa ili kulipa amana.',
+                    'Ombi lako la miadi na %s tarehe %s saa %s limepokelewa. Tumetuma ombi la M-Pesa kwa %s. Weka PIN yako ya M-Pesa ili kulipa amana.',
                     $appointment->doctor?->name ?? 'daktari uliyemchagua',
                     $appointment->preferred_date?->toFormattedDateString() ?? $date,
                     substr((string) $appointment->slot_start_time, 0, 5),
-                    number_format($paymentAmount, 2),
                     $this->mpesaService->formatPhone((string) $appointmentData['phone']),
                 )
                 : sprintf(
-                    'Your appointment request with %s for %s at %s is confirmed as pending. We sent an M-Pesa STK prompt for KSh %s to %s. Enter your M-Pesa PIN to complete the deposit.',
+                    'Your appointment request with %s for %s at %s is confirmed as pending. We sent an M-Pesa STK prompt to %s. Enter your M-Pesa PIN to complete the deposit.',
                     $appointment->doctor?->name ?? 'your selected doctor',
                     $appointment->preferred_date?->toFormattedDateString() ?? $date,
                     substr((string) $appointment->slot_start_time, 0, 5),
-                    number_format($paymentAmount, 2),
                     $this->mpesaService->formatPhone((string) $appointmentData['phone']),
                 );
 

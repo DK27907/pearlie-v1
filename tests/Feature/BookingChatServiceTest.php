@@ -40,6 +40,18 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame($services[0]->id, $this->state('extract-service-partial')['service_id']);
     }
 
+    public function test_chat_recognizes_a_service_from_a_distinctive_partial_message(): void
+    {
+        [, $services] = $this->createContext([
+            'CT Scan (Head/Chest/Abdomen)',
+            'Ultrasound Scan (Obstetric)',
+        ]);
+
+        app(BookingChatService::class)->handle('extract-service-distinctive-partial', 'I need obstetric', 'web');
+
+        $this->assertSame($services[1]->id, $this->state('extract-service-distinctive-partial')['service_id']);
+    }
+
     public function test_ambiguous_service_match_returns_null_and_requests_clarification(): void
     {
         $this->createContext(['Dental Cleaning', 'Teeth Cleaning']);
@@ -211,10 +223,28 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame('PAYMENT_PENDING', $response->state);
         $this->assertSame(1, AppointmentRequest::query()->where('id', $response->appointmentId)->count());
         $this->assertTrue($response->paymentRequired);
+        $this->assertStringNotContainsString('KSh', $response->message);
         Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/mpesa/stkpush/v1/processrequest'));
     }
 
-    public function test_unavailable_time_offers_alternatives_on_the_same_day(): void
+    public function test_invalid_early_time_offers_available_slots_before_confirmation(): void
+    {
+        $this->createContext();
+
+        $response = app(BookingChatService::class)->handle(
+            'alternative-early-time',
+            'Book Dental Cleaning with Dr. Amina Njeri tomorrow at 3am. My name is Test Patient, phone 254748249882, email patient@test.com.',
+            'web',
+        );
+
+        $this->assertStringContainsString('09:00, 09:30', $response->message);
+        $this->assertStringNotContainsString('03:00', $response->message);
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertNull($response->collectedFields['time']);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_unavailable_time_offers_alternatives_before_confirmation(): void
     {
         [, , $doctors] = $this->createContext();
         DoctorAvailability::query()
@@ -227,13 +257,11 @@ class BookingChatServiceTest extends TestCase
                 'is_active' => true,
             ]);
         $chat = app(BookingChatService::class);
-        $chat->handle(
+        $response = $chat->handle(
             'alternative-same-day',
             'Book Dental Cleaning with Dr. Amina Njeri Saturday at 2pm. My name is Test Patient, phone 254748249882, email patient@test.com.',
             'web',
         );
-
-        $response = $chat->handle('alternative-same-day', 'yes', 'web');
 
         $this->assertStringContainsString('09:30, 10:00, 10:30', $response->message);
         $this->assertSame('COLLECTING', $response->state);
@@ -252,13 +280,11 @@ class BookingChatServiceTest extends TestCase
             ->whereIn('day_of_week', [0, 6])
             ->update(['is_active' => false]);
         $chat = app(BookingChatService::class);
-        $chat->handle(
+        $response = $chat->handle(
             'alternative-nearest-days',
             'Book Dental Cleaning with Dr. Amina Njeri Saturday at 9am. My name is Test Patient, phone 254748249882, email patient@test.com.',
             'web',
         );
-
-        $response = $chat->handle('alternative-nearest-days', 'yes', 'web');
 
         $this->assertStringContainsString('Monday October 5', $response->message);
         $this->assertStringContainsString('Tuesday October 6', $response->message);
@@ -284,12 +310,11 @@ class BookingChatServiceTest extends TestCase
                 'is_active' => true,
             ]);
         $chat = app(BookingChatService::class);
-        $chat->handle(
+        $alternatives = $chat->handle(
             'alternative-booking-success',
             'Book Dental Cleaning with Dr. Amina Njeri Saturday at 2pm. My name is Test Patient, phone 254748249882, email patient@test.com.',
             'web',
         );
-        $chat->handle('alternative-booking-success', 'yes', 'web');
         $confirmation = $chat->handle('alternative-booking-success', '09:30', 'web');
 
         $response = $chat->handle('alternative-booking-success', 'yes', 'web');
@@ -297,6 +322,7 @@ class BookingChatServiceTest extends TestCase
             ->where('session_id', 'alternative-booking-success')
             ->firstOrFail();
 
+        $this->assertStringContainsString('09:30, 10:00, 10:30', $alternatives->message);
         $this->assertSame('CONFIRMING', $confirmation->state);
         $this->assertSame('COMPLETED', $response->state);
         $this->assertSame('2026-10-03', CarbonImmutable::parse($appointment->preferred_date)->toDateString());
@@ -534,6 +560,115 @@ class BookingChatServiceTest extends TestCase
 
         $this->assertStringContainsString('Which service', $response->message);
         $this->assertSame('COLLECTING', $response->state);
+    }
+
+    public function test_chat_matches_a_doctor_from_a_partial_name(): void
+    {
+        [, , $doctors] = $this->createContext(doctorNames: ['Dr. Amina Njeri', 'Dr. Brian Otieno']);
+
+        $response = app(BookingChatService::class)->handle(
+            'partial-doctor-name',
+            'Book Dental Cleaning with Dr. Amina',
+            'web',
+        );
+
+        $this->assertSame($doctors[0]->id, $response->collectedFields['doctor_id']);
+    }
+
+    public function test_chat_requests_missing_booking_fields_one_at_a_time(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+
+        $service = $chat->handle('fields-one-at-a-time', 'I want to book an appointment', 'web');
+        $date = $chat->handle('fields-one-at-a-time', 'Dental Cleaning', 'web');
+        $time = $chat->handle('fields-one-at-a-time', 'tomorrow', 'web');
+        $name = $chat->handle('fields-one-at-a-time', '9am', 'web');
+        $phone = $chat->handle('fields-one-at-a-time', 'Test Patient', 'web');
+        $email = $chat->handle('fields-one-at-a-time', '254748249882', 'web');
+        $confirmation = $chat->handle('fields-one-at-a-time', 'patient@test.com', 'web');
+
+        $this->assertStringContainsString('Which service', $service->message);
+        $this->assertStringContainsString('What date', $date->message);
+        $this->assertStringContainsString('What time', $time->message);
+        $this->assertStringContainsString('full name', $name->message);
+        $this->assertStringContainsString('mobile number', $phone->message);
+        $this->assertStringContainsString('email address', $email->message);
+        $this->assertSame('CONFIRMING', $confirmation->state);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_chat_greeting_uses_the_hospital_chatbot_name_without_ai(): void
+    {
+        [$hospital] = $this->createContext();
+        $hospital->forceFill(['chatbot_name' => 'Pearlie'])->save();
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle('configured-greeting', 'Hello!', 'web');
+
+        $this->assertStringContainsString("I'm Pearlie", $response->message);
+        $this->assertStringContainsString('Booking Chat Hospital', $response->message);
+        $this->assertSame('IDLE', $response->state);
+    }
+
+    public function test_chat_keeps_general_knowledge_questions_in_hospital_scope(): void
+    {
+        $this->createContext();
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'out-of-scope-question',
+            'What is the capital of France?',
+            'web',
+        );
+
+        $this->assertStringContainsString('services, appointments, and hospital information', $response->message);
+        $this->assertStringNotContainsString('Paris', $response->message);
+    }
+
+    public function test_chat_help_keeps_an_in_progress_booking_intact(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $bookingPrompt = $chat->handle('help-preserves-booking', 'Book Dental Cleaning', 'web');
+        Http::preventStrayRequests();
+
+        $help = $chat->handle('help-preserves-booking', 'help', 'web');
+
+        $this->assertStringContainsString('appointment bookings', $help->message);
+        $this->assertSame('COLLECTING', $help->state);
+        $this->assertSame($bookingPrompt->collectedFields['service_id'], $help->collectedFields['service_id']);
+    }
+
+    public function test_chat_shows_prices_only_in_the_booking_confirmation_summary(): void
+    {
+        $this->createContext(price: 1500);
+        $chat = app(BookingChatService::class);
+        Http::preventStrayRequests();
+
+        $priceQuestion = $chat->handle('chat-price-visibility', 'How much does the service cost?', 'web');
+        $confirmation = $chat->handle(
+            'chat-price-visibility',
+            'Book Dental Cleaning with Dr. Amina Njeri tomorrow at 9am. My name is Test Patient, phone 254748249882, email patient@test.com.',
+            'web',
+        );
+
+        $this->assertStringContainsString('final booking confirmation', $priceQuestion->message);
+        $this->assertStringNotContainsString('KSh', $priceQuestion->message);
+        $this->assertSame('CONFIRMING', $confirmation->state);
+        $this->assertStringContainsString('KSh 1,500.00', $confirmation->message);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_tenant_chat_service_selector_does_not_render_prices(): void
+    {
+        [$hospital] = $this->createContext(price: 1500);
+
+        $this->withoutVite()
+            ->get('/h/'.$hospital->slug.'/chat')
+            ->assertSee('Dental Cleaning')
+            ->assertDontSee('KSh')
+            ->assertDontSee('data-price', false);
     }
 
     public function test_multi_message_booking_collects_fields_in_order(): void

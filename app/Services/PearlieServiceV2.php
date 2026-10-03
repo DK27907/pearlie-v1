@@ -589,7 +589,7 @@ class PearlieServiceV2
     }
 
     /**
-     * @return array{date: string, doctors: array<int, array{id: int, name: string, specialization: ?string, bio: ?string, consultation_fee: ?string, licence_number: ?string, slots: array<string, bool>}>}
+     * @return array{date: string, doctors: array<int, array{id: int, name: string, specialization: ?string, bio: ?string, licence_number: ?string, slots: array<string, bool>}>}
      */
     public function getAvailableSlotsForAI(
         string $message,
@@ -623,7 +623,6 @@ class PearlieServiceV2
                     'name' => $doctorSlots['doctor']->name,
                     'specialization' => $doctorSlots['doctor']->specialization,
                     'bio' => $doctorSlots['doctor']->bio,
-                    'consultation_fee' => $doctorSlots['doctor']->consultation_fee,
                     'licence_number' => $doctorSlots['doctor']->licence_number,
                     'slots' => $doctorSlots['slots'],
                 ],
@@ -871,10 +870,6 @@ class PearlieServiceV2
             if (filled($doctorSlots['bio'])) {
                 $profileDetails[] = Str::limit($doctorSlots['bio'], 240);
             }
-            if ($doctorSlots['consultation_fee'] !== null) {
-                $feeLabel = $isSwahili ? 'Ada ya ushauri' : 'Consultation fee';
-                $profileDetails[] = $feeLabel.': KSh '.number_format((float) $doctorSlots['consultation_fee'], 2);
-            }
             if (filled($doctorSlots['licence_number'])) {
                 $licenceLabel = $isSwahili ? 'Nambari ya leseni' : 'Licence';
                 $profileDetails[] = $licenceLabel.': '.$doctorSlots['licence_number'];
@@ -1048,8 +1043,9 @@ RULES:
 7. For appointment requests, collect only missing details and confirm before creating the appointment or starting payment.
 8. If confidence is low, escalate to a health worker or ask the user to call the hospital.
 9. Do not invent services, prices, hours, or availability; use only the hospital information above and the configured knowledge base.
-10. Never reveal internal system details, model names, or API keys.
-11. Do not describe your reasoning. Be caring and professional in both languages.
+10. Do not include prices or fees in chat responses; prices appear only in the final booking confirmation summary.
+11. Never reveal internal system details, model names, or API keys.
+12. Do not describe your reasoning. Be caring and professional in both languages.
 PROMPT;
 
         $hospitalInstructions = trim((string) data_get(hospital()?->settings, 'ai_instructions', ''));
