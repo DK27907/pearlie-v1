@@ -124,19 +124,6 @@ class HospitalSeeder extends Seeder
             return;
         }
 
-        Hospital::query()->updateOrCreate(
-            ['slug' => 'axiomforge'],
-            [
-                'name' => 'AxiomForge Digital Solutions',
-                'city' => 'Nairobi',
-                'county' => 'Nairobi',
-                'email' => 'hello@axiomforge.dev',
-                'subscription_plan' => 'enterprise',
-                'subscription_status' => 'active',
-                'is_active' => true,
-            ],
-        );
-
         $demo = Hospital::query()->updateOrCreate(
             ['slug' => 'demo'],
             [

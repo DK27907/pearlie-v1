@@ -7,6 +7,7 @@ use App\Models\Hospital;
 use App\Models\Service;
 use App\Models\User;
 use Database\Seeders\DoctorUserSeeder;
+use Database\Seeders\DuskSeedSeeder;
 use Database\Seeders\HospitalSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -21,12 +22,35 @@ class HospitalSeederTest extends TestCase
         $this->withoutVite();
     }
 
+    public function test_dusk_seed_keeps_only_appointment_fixtures_without_test_escalation_or_knowledge(): void
+    {
+        $this->seed(DuskSeedSeeder::class);
+
+        $this->assertDatabaseCount('hospitals', 2);
+        $this->assertDatabaseHas('appointment_requests', [
+            'session_id' => 'browser-smoke-pending',
+        ]);
+        $this->assertDatabaseHas('appointment_requests', [
+            'session_id' => 'browser-smoke-confirmed',
+        ]);
+        $this->assertDatabaseMissing('escalations', [
+            'session_id' => 'browser-smoke-pending',
+        ]);
+        $this->assertDatabaseMissing('knowledge_bases', [
+            'question' => 'What services are available for browser testing?',
+        ]);
+    }
+
     public function test_seeders_create_the_requested_pearl_and_demo_hospital_catalogs(): void
     {
         $this->seed([HospitalSeeder::class, DoctorUserSeeder::class]);
 
         $pearl = Hospital::withoutGlobalScopes()->where('slug', 'pearl')->firstOrFail();
         $demo = Hospital::withoutGlobalScopes()->where('slug', 'demo')->firstOrFail();
+        $this->assertSame(
+            ['demo', 'pearl'],
+            Hospital::withoutGlobalScopes()->orderBy('slug')->pluck('slug')->all(),
+        );
 
         $this->assertSame('Pearl Hospital', $pearl->name);
         $this->assertSame('info@pearlhospital.co.ke', $pearl->email);

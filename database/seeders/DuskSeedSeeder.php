@@ -3,7 +3,6 @@
 namespace Database\Seeders;
 
 use App\Models\AppointmentRequest;
-use App\Models\Escalation;
 use App\Models\Hospital;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -40,7 +39,7 @@ class DuskSeedSeeder extends Seeder
                 'is_admin' => false,
                 'is_doctor' => false,
             ]);
-            $admin = $this->user($hospital, 'admin@pearl.test', [
+            $this->user($hospital, 'admin@pearl.test', [
                 'name' => 'Pearl Hospital Admin',
                 'role' => 'hospital_admin',
                 'is_admin' => true,
@@ -131,31 +130,6 @@ class DuskSeedSeeder extends Seeder
                 ],
             );
 
-            Escalation::query()->updateOrCreate(
-                ['session_id' => 'browser-smoke-pending'],
-                [
-                    'user_message' => 'Please have a clinician follow up about my appointment.',
-                    'user_phone' => '254700000101',
-                    'ai_response' => 'A team member will follow up shortly.',
-                    'status' => Escalation::STATUS_PENDING,
-                    'assigned_worker_id' => $doctorOne->id,
-                ],
-            );
-
-            $hospital->knowledgeBases()->updateOrCreate(
-                [
-                    'category' => 'services',
-                    'question' => 'What services are available for browser testing?',
-                ],
-                [
-                    'subcategory' => 'browser-smoke',
-                    'keywords' => ['browser', 'services', 'smoke test'],
-                    'answer' => implode(', ', $services->keys()->all()).' are available.',
-                    'source' => 'Browser smoke-test seed data',
-                    'last_updated' => today(),
-                    'approved_by' => $admin->name,
-                ],
-            );
         } finally {
             if ($previousHospital) {
                 app()->instance('currentHospital', $previousHospital);
