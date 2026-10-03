@@ -102,6 +102,10 @@ class BookingChatService
             );
         }
 
+        if ($this->assistant->shouldEscalateMessage($message, $sessionId)) {
+            return $this->delegateToAssistant($sessionId, $channel, $message);
+        }
+
         if ($intent === 'pricing') {
             $response = preg_match('/\b(bei|ada)\b/iu', $message)
                 ? 'Bei ya huduma itaonyeshwa kwenye muhtasari wa mwisho wa kuweka miadi. Ni huduma gani ungependa kuweka miadi?'
@@ -721,6 +725,7 @@ class BookingChatService
         string $response,
         array $state,
         ?int $appointmentId = null,
+        bool $escalated = false,
     ): void {
         Conversation::query()->create([
             'session_id' => $sessionId,
@@ -728,6 +733,7 @@ class BookingChatService
             'ai_response' => $response,
             'confidence_score' => 1.0,
             'channel' => $channel,
+            'escalated' => $escalated,
             'chat_state' => $state,
             'chat_state_updated_at' => now(),
         ]);
@@ -738,7 +744,14 @@ class BookingChatService
         $result = $this->assistant->processMessage($message, $sessionId, $channel);
         $response = (string) ($result['response'] ?? 'I could not process that message. Please try again.');
         $state = $this->emptyState();
-        $this->persistState($sessionId, $channel, $message, $response, $state);
+        $this->persistState(
+            $sessionId,
+            $channel,
+            $message,
+            $response,
+            $state,
+            escalated: (bool) ($result['escalated'] ?? false),
+        );
 
         return new ChatResponse(
             $response,

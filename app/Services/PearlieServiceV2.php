@@ -524,7 +524,7 @@ class PearlieServiceV2
         return 'pending_escalation_phone_'.hash('sha256', $sessionId);
     }
 
-    protected function shouldEscalateMessage(string $message, string $sessionId): bool
+    public function shouldEscalateMessage(string $message, string $sessionId): bool
     {
         $normalized = $this->normalizeForEscalation($message);
         $bookingIntent = (bool) preg_match(
