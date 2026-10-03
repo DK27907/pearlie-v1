@@ -42,7 +42,6 @@ class BookingChatService
         'time' => 'What time would you prefer?',
         'patient_name' => 'What is your full name?',
         'patient_phone' => 'What Kenyan mobile number should we use?',
-        'patient_email' => 'What email address should we use for appointment updates?',
     ];
 
     public function __construct(
@@ -361,7 +360,7 @@ class BookingChatService
             [
                 'name' => (string) $state['patient_name'],
                 'phone' => (string) $state['patient_phone'],
-                'email' => (string) $state['patient_email'],
+                'email' => $state['patient_email'],
                 'reason' => $service->name,
                 'raw_message' => $message,
                 'session_id' => $sessionId,
@@ -766,15 +765,13 @@ class BookingChatService
         $date = CarbonImmutable::parse((string) $state['date'])->toFormattedDateString();
 
         return sprintf(
-            'Please confirm: %s with %s on %s at %s for %s, phone %s, email %s (KSh %s).',
+            'Please confirm: %s with %s on %s at %s for %s, phone %s.',
             $service->name,
             $doctor?->name ?? 'your selected doctor',
             $date,
             $state['time'],
             $state['patient_name'],
             $state['patient_phone'],
-            $state['patient_email'],
-            number_format((float) $service->price, 2),
         );
     }
 

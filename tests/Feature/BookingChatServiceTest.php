@@ -204,6 +204,8 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame('CONFIRMING', $response->state);
         $this->assertStringContainsString('Dental Cleaning', $response->message);
         $this->assertStringContainsString('Dr. Amina Njeri', $response->message);
+        $this->assertStringNotContainsString('email', mb_strtolower($response->message));
+        $this->assertStringNotContainsString('KSh', $response->message);
         $this->assertDatabaseCount('appointment_requests', 0);
     }
 
@@ -585,16 +587,15 @@ class BookingChatServiceTest extends TestCase
         $time = $chat->handle('fields-one-at-a-time', 'tomorrow', 'web');
         $name = $chat->handle('fields-one-at-a-time', '9am', 'web');
         $phone = $chat->handle('fields-one-at-a-time', 'Test Patient', 'web');
-        $email = $chat->handle('fields-one-at-a-time', '254748249882', 'web');
-        $confirmation = $chat->handle('fields-one-at-a-time', 'patient@test.com', 'web');
+        $confirmation = $chat->handle('fields-one-at-a-time', '254748249882', 'web');
 
         $this->assertStringContainsString('Which service', $service->message);
         $this->assertStringContainsString('What date', $date->message);
         $this->assertStringContainsString('What time', $time->message);
         $this->assertStringContainsString('full name', $name->message);
         $this->assertStringContainsString('mobile number', $phone->message);
-        $this->assertStringContainsString('email address', $email->message);
         $this->assertSame('CONFIRMING', $confirmation->state);
+        $this->assertStringNotContainsString('email', mb_strtolower($confirmation->message));
         $this->assertDatabaseCount('appointment_requests', 0);
     }
 
@@ -640,7 +641,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame($bookingPrompt->collectedFields['service_id'], $help->collectedFields['service_id']);
     }
 
-    public function test_chat_shows_prices_only_in_the_booking_confirmation_summary(): void
+    public function test_chat_never_shows_prices_in_the_booking_confirmation(): void
     {
         $this->createContext(price: 1500);
         $chat = app(BookingChatService::class);
@@ -656,7 +657,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertStringContainsString('final booking confirmation', $priceQuestion->message);
         $this->assertStringNotContainsString('KSh', $priceQuestion->message);
         $this->assertSame('CONFIRMING', $confirmation->state);
-        $this->assertStringContainsString('KSh 1,500.00', $confirmation->message);
+        $this->assertStringNotContainsString('KSh', $confirmation->message);
         $this->assertDatabaseCount('appointment_requests', 0);
     }
 
@@ -699,7 +700,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame($services[0]->id, $this->state('natural-typo')['service_id']);
     }
 
-    public function test_missing_email_is_requested_before_confirmation(): void
+    public function test_confirmation_summary_omits_optional_email(): void
     {
         $this->createContext();
 
@@ -709,8 +710,68 @@ class BookingChatServiceTest extends TestCase
             'web',
         );
 
-        $this->assertStringContainsString('email address', $response->message);
+        $this->assertSame('CONFIRMING', $response->state);
+        $this->assertStringContainsString('phone 254748249882', $response->message);
+        $this->assertStringNotContainsString('email', mb_strtolower($response->message));
+        $this->assertStringNotContainsString('KSh', $response->message);
+    }
+
+    public function test_chat_does_not_require_email_for_booking(): void
+    {
+        $this->createContext(price: 0);
+        $chat = app(BookingChatService::class);
+        $summary = $chat->handle(
+            'booking-without-email',
+            'Book Dental Cleaning with Dr. Amina Njeri tomorrow at 9am. My name is Test Patient, phone 254748249882',
+            'web',
+        );
+
+        $response = $chat->handle('booking-without-email', 'yes', 'web');
+        $appointment = AppointmentRequest::query()->findOrFail($response->appointmentId);
+
+        $this->assertSame('CONFIRMING', $summary->state);
+        $this->assertStringContainsString('Dental Cleaning', $summary->message);
+        $this->assertStringContainsString('Dr. Amina Njeri', $summary->message);
+        $this->assertStringContainsString('phone 254748249882', $summary->message);
+        $this->assertStringNotContainsString('email', mb_strtolower($summary->message));
+        $this->assertStringNotContainsString('KSh', $summary->message);
+        $this->assertSame('COMPLETED', $response->state);
+        $this->assertSame(null, $appointment->email);
+    }
+
+    public function test_chat_never_asks_for_email(): void
+    {
+        $this->createContext();
+
+        $response = app(BookingChatService::class)->handle(
+            'booking-asks-for-phone-not-email',
+            'Book Dental Cleaning with Dr. Amina Njeri tomorrow at 9am. My name is Test Patient',
+            'web',
+        );
+
+        $this->assertStringContainsString('mobile number', $response->message);
+        $this->assertStringNotContainsString('email', mb_strtolower($response->message));
         $this->assertSame('COLLECTING', $response->state);
+    }
+
+    public function test_chat_captures_email_when_provided(): void
+    {
+        $this->createContext(price: 0);
+        $chat = app(BookingChatService::class);
+        $summary = $chat->handle(
+            'booking-with-email',
+            'Book Dental Cleaning with Dr. Amina Njeri tomorrow at 9am. My name is Test Patient, phone 254748249882. My email is patient@test.com.',
+            'web',
+        );
+
+        $response = $chat->handle('booking-with-email', 'yes', 'web');
+        $appointment = AppointmentRequest::query()->findOrFail($response->appointmentId);
+
+        $this->assertSame('CONFIRMING', $summary->state);
+        $this->assertSame('patient@test.com', $summary->collectedFields['patient_email']);
+        $this->assertStringNotContainsString('patient@test.com', $summary->message);
+        $this->assertSame('COMPLETED', $response->state);
+        $this->assertSame('patient@test.com', $appointment->email);
     }
 
     public function test_web_channel_booking_flow_uses_persisted_state(): void
