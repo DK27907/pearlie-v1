@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Escalation;
 use App\Models\Hospital;
 use App\Services\BookingChatService;
+use App\Services\EscalationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -66,6 +67,57 @@ class BookingChatEscalationTest extends TestCase
             'user_phone' => '254748249882',
             'hospital_id' => $hospital->id,
             'status' => Escalation::STATUS_PENDING,
+        ]);
+    }
+
+    public function test_human_handoff_preserves_booking_fields_and_uses_the_collected_phone(): void
+    {
+        $hospital = $this->createHospitalContext();
+        Mail::fake();
+        Http::preventStrayRequests();
+        $sessionId = 'booking-human-preserved-state';
+        $chat = app(BookingChatService::class);
+        $chat->handle($sessionId, 'I want to book an appointment', 'web');
+        $chat->handle($sessionId, 'My name is Test Patient, phone 254748249882', 'web');
+
+        $response = $chat->handle($sessionId, 'I need a human about my appointment.', 'web');
+        $state = $chat->getState($sessionId);
+
+        $this->assertSame('human_escalation', $response->source);
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertSame('Test Patient', $state['patient_name']);
+        $this->assertSame('254748249882', $state['patient_phone']);
+        $this->assertStringNotContainsString('share your phone number', $response->message);
+        $this->assertDatabaseHas('escalations', [
+            'session_id' => $sessionId,
+            'hospital_id' => $hospital->id,
+            'user_phone' => '254748249882',
+            'status' => Escalation::STATUS_PENDING,
+        ]);
+    }
+
+    public function test_messages_are_routed_to_a_pending_human_handoff(): void
+    {
+        $this->createHospitalContext();
+        Mail::fake();
+        Http::preventStrayRequests();
+        $sessionId = 'pending-human-handoff-follow-up';
+        app(EscalationService::class)->createEscalation(
+            $sessionId,
+            'Please connect me to a health worker.',
+            'A health worker will follow up.',
+            '254748249882',
+        );
+
+        $response = app(BookingChatService::class)->handle($sessionId, 'I have another question.', 'web');
+
+        $this->assertSame('human_handoff', $response->source);
+        $this->assertStringContainsString('in the queue', $response->message);
+        $this->assertDatabaseHas('conversations', [
+            'session_id' => $sessionId,
+            'user_message' => 'I have another question.',
+            'channel' => 'human_handoff',
+            'escalated' => true,
         ]);
     }
 

@@ -7,6 +7,7 @@ use App\Models\AppointmentRequest;
 use App\Models\Hospital;
 use App\Models\Invite;
 use App\Models\KnowledgeBase;
+use App\Models\Service;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -219,6 +220,23 @@ class MultiTenancyTest extends TestCase
             ->assertSee('data-welcome-en="👋 Hello! I\'m Pearlie, Chat Alias\'s healthcare assistant.', false)
             ->assertSee('<title>Chat with Chat Alias | MediDesk AI</title>', false)
             ->assertSee('<meta name="csrf-token"', false);
+    }
+
+    public function test_tenant_chat_service_selector_displays_hospital_service_prices(): void
+    {
+        $hospital = $this->createHospital('chat-service-price');
+        app()->instance('currentHospital', $hospital);
+        Service::factory()->create([
+            'name' => 'General Consultation',
+            'price' => 1500,
+            'duration_minutes' => 30,
+        ]);
+        app()->forgetInstance('currentHospital');
+
+        $this->get(route('tenant.chat.page', $hospital->slug))
+            ->assertOk()
+            ->assertSee('data-price="1500.00" data-duration="30"', false)
+            ->assertSee('General Consultation — KSh 1,500.00 (30 min)', false);
     }
 
     public function test_tenant_chat_reset_starts_a_fresh_session_for_that_hospital(): void

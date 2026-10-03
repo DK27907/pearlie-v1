@@ -60,12 +60,22 @@ class PearlieService extends PearlieServiceV2
             return $phoneCapture;
         }
 
-        $handoff = $this->escalationService->handleActivePatientMessage($sessionId, $message, $channel);
-        if ($handoff !== null) {
-            return $handoff;
+        $hasActiveBooking = Cache::has($this->pendingBookingKey($sessionId))
+            || $this->hasActiveSlotSelection($sessionId);
+        if (! $hasActiveBooking) {
+            $handoff = $this->escalationService->handleActivePatientMessage($sessionId, $message, $channel);
+            if ($handoff !== null) {
+                return $handoff;
+            }
         }
 
-        $handoff = $this->handleEscalationIntent($message, $sessionId, $channel);
+        $handoff = $this->handleEscalationIntent(
+            $message,
+            $sessionId,
+            $channel,
+            $this->bookingPatientPhone(),
+            $hasActiveBooking,
+        );
         if ($handoff !== null) {
             return $handoff;
         }

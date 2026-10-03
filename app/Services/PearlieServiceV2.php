@@ -17,6 +17,8 @@ use Illuminate\Support\Str;
 
 class PearlieServiceV2
 {
+    protected ?string $bookingPatientPhone = null;
+
     protected KnowledgeBaseService $knowledgeBase;
 
     protected EscalationService $escalationService;
@@ -54,7 +56,12 @@ class PearlieServiceV2
             return $handoff;
         }
 
-        $handoff = $this->handleEscalationIntent($message, $sessionId, $channel);
+        $handoff = $this->handleEscalationIntent(
+            $message,
+            $sessionId,
+            $channel,
+            $this->bookingPatientPhone,
+        );
         if ($handoff !== null) {
             return $handoff;
         }
@@ -279,6 +286,27 @@ class PearlieServiceV2
         }
     }
 
+    public function processMessageWithPatientPhone(
+        string $message,
+        string $sessionId,
+        string $channel,
+        ?string $patientPhone,
+    ): array {
+        $previousPatientPhone = $this->bookingPatientPhone;
+        $this->bookingPatientPhone = $patientPhone;
+
+        try {
+            return $this->processMessage($message, $sessionId, $channel);
+        } finally {
+            $this->bookingPatientPhone = $previousPatientPhone;
+        }
+    }
+
+    protected function bookingPatientPhone(): ?string
+    {
+        return $this->bookingPatientPhone;
+    }
+
     protected function patientHandoffMessage(string $message): string
     {
         if ($this->isEmergencyMessage($message)) {
@@ -306,9 +334,14 @@ class PearlieServiceV2
     /**
      * @return array{response: string, confidence: float, source: string, escalated: bool, appointment_id: ?int}|null
      */
-    public function handleEscalationIntent(string $message, string $sessionId, string $channel): ?array
-    {
-        if (! $this->shouldEscalateMessage($message, $sessionId)) {
+    public function handleEscalationIntent(
+        string $message,
+        string $sessionId,
+        string $channel,
+        ?string $patientPhone = null,
+        bool $bookingInProgress = false,
+    ): ?array {
+        if (! $this->shouldEscalateMessage($message, $sessionId, $bookingInProgress)) {
             return null;
         }
 
@@ -329,6 +362,7 @@ class PearlieServiceV2
                 $response,
                 $channel,
                 $conversation,
+                $patientPhone,
             );
             $response = $escalationRequest['response'];
         } catch (Exception $exception) {
@@ -367,8 +401,11 @@ class PearlieServiceV2
         string $aiResponse,
         string $channel,
         Conversation $conversation,
+        ?string $patientPhone = null,
     ): array {
-        $userPhone = $this->extractPatientPhone($message) ?? $this->patientPhoneForSession($sessionId);
+        $userPhone = $this->extractPatientPhone($message)
+            ?? $patientPhone
+            ?? $this->patientPhoneForSession($sessionId);
 
         if (! $userPhone) {
             $isSwahili = $this->isSwahili($message);
@@ -524,8 +561,17 @@ class PearlieServiceV2
         return 'pending_escalation_phone_'.hash('sha256', $sessionId);
     }
 
-    public function shouldEscalateMessage(string $message, string $sessionId): bool
-    {
+    public function shouldEscalateMessage(
+        string $message,
+        string $sessionId,
+        bool $bookingInProgress = false,
+    ): bool {
+        if (Cache::has($this->pendingEscalationPhoneKey($sessionId))
+            || (! $bookingInProgress && $this->escalationService->hasOpenPatientHandoff($sessionId))
+        ) {
+            return true;
+        }
+
         $normalized = $this->normalizeForEscalation($message);
         $bookingIntent = (bool) preg_match(
             '/\b(book|booking|appointment|schedule|availability|available slots?|free slots?|miadi|weka\s+miadi|kuweka\s+miadi|naomba\s+miadi)\b/iu',

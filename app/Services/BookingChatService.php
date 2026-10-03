@@ -103,13 +103,34 @@ class BookingChatService
         }
 
         if ($this->assistant->shouldEscalateMessage($message, $sessionId)) {
-            return $this->delegateToAssistant($sessionId, $channel, $message);
+            return $this->delegateToAssistant($sessionId, $channel, $message, $state);
+        }
+
+        if ($intent === 'reset') {
+            $state = $this->emptyState();
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                'Your booking details have been cleared. What would you like help with?',
+                $state,
+                source: 'booking_reset',
+            );
         }
 
         if ($intent === 'pricing') {
             $response = preg_match('/\b(bei|ada)\b/iu', $message)
-                ? 'Bei ya huduma itaonyeshwa kwenye muhtasari wa mwisho wa kuweka miadi. Ni huduma gani ungependa kuweka miadi?'
-                : 'Service prices are shown in the final booking confirmation. Tell me which service you would like to book and I can help.';
+                ? sprintf(
+                    'Kwa bei za sasa, wasiliana na %s kwa %s. Pia naweza kukusaidia kuweka miadi.',
+                    $hospital->name,
+                    $hospital->phone ?: 'namba ya mawasiliano ya hospitali',
+                )
+                : sprintf(
+                    'For current service prices, please contact %s%s. I can also help you book an appointment.',
+                    $hospital->name,
+                    $hospital->phone ? ' at '.$hospital->phone : '',
+                );
 
             return $this->respond(
                 $sessionId,
@@ -137,6 +158,114 @@ class BookingChatService
             );
         }
 
+        if ($intent === 'thanks') {
+            $response = preg_match('/\b(asante|shukran)\b/iu', $message)
+                ? 'Karibu! Naweza kukusaidia na huduma au miadi.'
+                : "You're welcome! I can help with hospital information or an appointment.";
+
+            return $this->respond($sessionId, $channel, $message, $response, $state, source: 'acknowledgement');
+        }
+
+        if ($intent === 'services') {
+            if (! $this->isBroadServicesOverview($message)
+                && $this->extractService($message, $hospital) !== null
+            ) {
+                return $this->delegateToAssistant($sessionId, $channel, $message, $state);
+            }
+
+            $services = $hospital->services()->active()->orderBy('name')->pluck('name');
+            $response = $services->isEmpty()
+                ? sprintf('%s has no active services listed right now. Please contact the hospital for help.', $hospital->name)
+                : sprintf('Available services at %s: %s.', $hospital->name, $services->implode(', '));
+
+            return $this->respond($sessionId, $channel, $message, $response, $state, source: 'hospital_services');
+        }
+
+        if ($intent === 'doctors') {
+            $doctors = $hospital->doctors()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get();
+            $normalizedMessage = mb_strtolower($message);
+            $specialtyTerms = match (true) {
+                preg_match('/\b(dentist|dentists|dental)\b/iu', $normalizedMessage) === 1 => ['dent', 'oral'],
+                preg_match('/\b(ob\/gyn|obstetrician|gynecologist|gynaecologist)\b/iu', $normalizedMessage) === 1 => ['obstetric', 'gynec', 'gynaec'],
+                preg_match('/\b(radiologist|radiology)\b/iu', $normalizedMessage) === 1 => ['radiolog'],
+                preg_match('/\b(physiotherapist|physiotherapy)\b/iu', $normalizedMessage) === 1 => ['physiotherap'],
+                default => [],
+            };
+            if ($specialtyTerms !== []) {
+                $doctors = $doctors->filter(
+                    fn (User $doctor): bool => collect($specialtyTerms)
+                        ->contains(fn (string $term): bool => str_contains(mb_strtolower((string) $doctor->specialization), $term)),
+                );
+            }
+
+            $response = $doctors->isEmpty()
+                ? sprintf(
+                    'I could not find an active %s listed at %s. Please contact the hospital to confirm current clinic availability.',
+                    $specialtyTerms !== [] ? 'doctor in that specialty' : 'doctor',
+                    $hospital->name,
+                )
+                : sprintf(
+                    'Doctors currently listed%s: %s. Tell me if you would like me to check appointment times.',
+                    $specialtyTerms !== [] ? ' for this specialty' : ' at '.$hospital->name,
+                    $doctors->map(fn (User $doctor): string => $doctor->name.(
+                        filled($doctor->specialization) ? ' ('.$doctor->specialization.')' : ''
+                    ))->implode(', '),
+                );
+
+            return $this->respond($sessionId, $channel, $message, $response, $state, source: 'hospital_doctors');
+        }
+
+        if (in_array($intent, ['hours', 'location', 'contact'], true)) {
+            if ($intent === 'hours') {
+                $businessHours = collect($hospital->business_hours ?? [])
+                    ->map(function (mixed $hours, string $day): ?string {
+                        if (! is_array($hours)) {
+                            return null;
+                        }
+
+                        if ($hours['closed'] ?? false) {
+                            return ucfirst($day).': closed';
+                        }
+
+                        if (! filled($hours['open'] ?? null) || ! filled($hours['close'] ?? null)) {
+                            return null;
+                        }
+
+                        return ucfirst($day).': '.$hours['open'].'-'.$hours['close'];
+                    })
+                    ->filter()
+                    ->implode('; ');
+                $outpatientHours = $businessHours !== ''
+                    ? $businessHours
+                    : ($hospital->hours_outpatient ?: 'Please contact the hospital to confirm');
+
+                $response = sprintf(
+                    '%s outpatient hours: %s. Emergency hours: %s.',
+                    $hospital->name,
+                    $outpatientHours,
+                    $hospital->hours_emergency ?: 'Please contact the hospital to confirm',
+                );
+            } elseif ($intent === 'location') {
+                $response = $hospital->address
+                    ? sprintf('%s is located at %s.', $hospital->name, $hospital->address)
+                    : sprintf('Please contact %s for its current location.', $hospital->name);
+            } else {
+                $contacts = collect([
+                    $hospital->phone ? 'Phone: '.$hospital->phone : null,
+                    $hospital->email ? 'Email: '.$hospital->email : null,
+                    $hospital->website ? 'Website: '.$hospital->website : null,
+                ])->filter();
+                $response = $contacts->isNotEmpty()
+                    ? $contacts->implode('. ')
+                    : sprintf('Please contact %s through its usual channels.', $hospital->name);
+            }
+
+            return $this->respond($sessionId, $channel, $message, $response, $state, source: 'hospital_information');
+        }
+
         if ($intent === 'out_of_scope') {
             return $this->respond(
                 $sessionId,
@@ -148,6 +277,22 @@ class BookingChatService
                 ),
                 $state,
             );
+        }
+
+        if ($intent === 'status') {
+            $appointment = AppointmentRequest::query()
+                ->where('session_id', $sessionId)
+                ->latest('id')
+                ->first();
+            $response = $appointment
+                ? sprintf(
+                    'Your latest appointment request is %s. Payment status: %s.',
+                    str_replace('_', ' ', (string) $appointment->status),
+                    str_replace('_', ' ', (string) $appointment->payment_status),
+                )
+                : 'I could not find an appointment request in this chat yet. I can help you book one.';
+
+            return $this->respond($sessionId, $channel, $message, $response, $state, source: 'appointment_status');
         }
 
         if ($intent === 'help') {
@@ -192,11 +337,19 @@ class BookingChatService
             return $this->advanceState($sessionId, $channel, $message, $hospital, $state);
         }
 
+        if (in_array($intent, ['yes', 'no'], true)) {
+            $response = $state['state'] === self::STATE_COLLECTING
+                ? $this->promptForNextField($state, $hospital)
+                : 'There is no booking waiting for confirmation. Tell me what service or hospital information you need.';
+
+            return $this->respond($sessionId, $channel, $message, $response, $state, source: 'clarification');
+        }
+
         if ($state['state'] === self::STATE_IDLE
             && ! in_array($intent, ['book'], true)
             && $this->extractService($message, $hospital) === null
         ) {
-            return $this->delegateToAssistant($sessionId, $channel, $message);
+            return $this->delegateToAssistant($sessionId, $channel, $message, $state);
         }
 
         $state['state'] = self::STATE_IDENTIFYING;
@@ -641,7 +794,10 @@ class BookingChatService
     private function extractIntent(string $message): string
     {
         $normalized = mb_strtolower(trim($message));
-        if (preg_match('/\b(cancel|never mind|nevermind|hapana)\b/u', $normalized)) {
+        if (preg_match('/\b(start over|start again|restart|reset|begin again|anza upya|tuanzie upya)\b/u', $normalized)) {
+            return 'reset';
+        }
+        if (preg_match('/\b(cancel|never mind|nevermind|hapana|stop booking)\b/u', $normalized)) {
             return 'cancel';
         }
         if (preg_match('/^\s*(?:yes|y|yeah|yep|confirm|ndiyo|ndio|sawa)\b/u', $normalized)) {
@@ -656,11 +812,31 @@ class BookingChatService
         if (preg_match('/^(?:hi|hello|hey|habari|hujambo|jambo|mambo|vipi|niaje|sasa|shikamoo|marahaba|salama|poa|freshi|mzuri|nzuri)[.!?,\s]*$/u', $normalized)) {
             return 'greeting';
         }
+        if (preg_match('/\b(thank you|thanks|thank you very much|asante|shukran)\b/iu', $normalized)) {
+            return 'thanks';
+        }
         if (preg_match('/\b(help|support|what can you do)\b/u', $normalized)) {
             return 'help';
         }
         if (preg_match('/\b(price|prices|fee|fees|cost|costs|how much|charge|charges|bei|ada)\b/u', $normalized)) {
             return 'pricing';
+        }
+        if (preg_match('/\b(what services|which services|services do you offer|services are available|hospital services|huduma zenu|huduma gani)\b/iu', $normalized)) {
+            return 'services';
+        }
+        if (preg_match('/\b(dentist|dentists|doctor|doctors|specialist|specialists|radiologist|physiotherapist|obstetrician|gynecologist|gynaecologist)\b/iu', $normalized)
+            && preg_match('/\b(do you have|is there|are there|available|availability|which|who|can i see|mna|yupo|wapo)\b/iu', $normalized)
+        ) {
+            return 'doctors';
+        }
+        if (preg_match('/\b(opening hours|working hours|outpatient hours|emergency hours|what time|when do you open|when are you open|hours|saa ngapi|mnafunga)\b/iu', $normalized)) {
+            return 'hours';
+        }
+        if (preg_match('/\b(where are you|where is|location|address|directions|mko wapi|iko wapi)\b/iu', $normalized)) {
+            return 'location';
+        }
+        if (preg_match('/\b(contact(?: the hospital)?|phone number|hospital phone|telephone number|email address|hospital email|website|whatsapp number|call the hospital)\b/iu', $normalized)) {
+            return 'contact';
         }
         if (preg_match('/\b(book|booking|appointment|schedule|miadi|need)\b/u', $normalized)) {
             return 'book';
@@ -739,11 +915,17 @@ class BookingChatService
         ]);
     }
 
-    private function delegateToAssistant(string $sessionId, string $channel, string $message): ChatResponse
-    {
-        $result = $this->assistant->processMessage($message, $sessionId, $channel);
+    private function delegateToAssistant(
+        string $sessionId,
+        string $channel,
+        string $message,
+        array $state,
+    ): ChatResponse {
+        $patientPhone = filled($state['patient_phone'] ?? null)
+            ? (string) $state['patient_phone']
+            : null;
+        $result = $this->assistant->processMessageWithPatientPhone($message, $sessionId, $channel, $patientPhone);
         $response = (string) ($result['response'] ?? 'I could not process that message. Please try again.');
-        $state = $this->emptyState();
         $this->persistState(
             $sessionId,
             $channel,
@@ -757,8 +939,24 @@ class BookingChatService
             $response,
             $state['state'],
             $result['appointment_id'] ?? null,
+            collectedFields: $state,
             source: isset($result['source']) ? (string) $result['source'] : null,
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private function promptForNextField(array $state, Hospital $hospital): string
+    {
+        $field = $this->nextMissingField($state);
+        if ($field === 'service_id') {
+            return $this->servicePrompt($hospital);
+        }
+
+        return $field !== null
+            ? self::FIELD_PROMPTS[$field]
+            : 'Please provide the missing booking detail so I can continue.';
     }
 
     private function servicePrompt(Hospital $hospital): string
@@ -924,6 +1122,14 @@ class BookingChatService
         $normalized = mb_strtolower($value);
 
         return trim((string) preg_replace('/[^\pL\pN]+/u', ' ', $normalized));
+    }
+
+    private function isBroadServicesOverview(string $message): bool
+    {
+        return preg_match(
+            '/\b(what services|which services|list (?:all )?services|all services|full service list|services overview|services are available|huduma zenu|huduma gani)\b/iu',
+            $message,
+        ) === 1;
     }
 
     /**

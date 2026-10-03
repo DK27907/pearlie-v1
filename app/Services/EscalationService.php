@@ -23,6 +23,14 @@ class EscalationService
         private readonly WhatsAppService $whatsApp,
     ) {}
 
+    public function hasOpenPatientHandoff(string $sessionId): bool
+    {
+        return Escalation::query()
+            ->where('session_id', $sessionId)
+            ->whereIn('status', [Escalation::STATUS_PENDING, Escalation::STATUS_IN_PROGRESS])
+            ->exists();
+    }
+
     public function createEscalation(
         string $sessionId,
         string $userMessage,
@@ -97,7 +105,7 @@ class EscalationService
         $escalation = Escalation::query()
             ->with('assignedWorker')
             ->where('session_id', $sessionId)
-            ->where('status', Escalation::STATUS_IN_PROGRESS)
+            ->whereIn('status', [Escalation::STATUS_PENDING, Escalation::STATUS_IN_PROGRESS])
             ->latest('id')
             ->first();
 
@@ -106,9 +114,13 @@ class EscalationService
         }
 
         $isSwahili = (bool) preg_match('/\b(nataka|msaada|dharura|haraka|tafadhali|naomba|miadi)\b/iu', $message);
-        $acknowledgement = $isSwahili
-            ? 'Mhudumu wa afya anashughulikia mazungumzo haya. Ujumbe wako umetumwa kwake, naye atakujibu hivi karibuni.'
-            : 'A health worker is handling this conversation. Your message has been shared with them, and they will reply shortly.';
+        $acknowledgement = $escalation->status === Escalation::STATUS_PENDING
+            ? ($isSwahili
+                ? 'Ombi lako la kuzungumza na mhudumu wa afya liko kwenye foleni. Ujumbe wako umetumwa kwa timu ya afya.'
+                : 'Your request to speak with a health worker is in the queue. Your message has been shared with the care team.')
+            : ($isSwahili
+                ? 'Mhudumu wa afya anashughulikia mazungumzo haya. Ujumbe wako umetumwa kwake, naye atakujibu hivi karibuni.'
+                : 'A health worker is handling this conversation. Your message has been shared with them, and they will reply shortly.');
         Conversation::query()->create([
             'session_id' => $sessionId,
             'user_message' => $message,

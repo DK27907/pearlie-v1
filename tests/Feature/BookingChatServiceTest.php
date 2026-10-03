@@ -641,6 +641,152 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame($bookingPrompt->collectedFields['service_id'], $help->collectedFields['service_id']);
     }
 
+    public function test_chat_start_over_clears_a_booking_in_progress(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $chat->handle('start-over-booking', 'Book Dental Cleaning', 'web');
+
+        $response = $chat->handle('start-over-booking', 'start over', 'web');
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertSame('booking_reset', $response->source);
+        $this->assertNull($chat->getState('start-over-booking')['service_id']);
+    }
+
+    public function test_thank_you_does_not_become_the_patient_name_during_booking(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $chat->handle('thanks-during-booking', 'Book Dental Cleaning', 'web');
+        $chat->handle('thanks-during-booking', 'tomorrow at 9am', 'web');
+        $chat->handle('thanks-during-booking', '254748249882', 'web');
+
+        $response = $chat->handle('thanks-during-booking', 'Thank you', 'web');
+        $state = $chat->getState('thanks-during-booking');
+
+        $this->assertStringContainsString("You're welcome", $response->message);
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertNull($state['patient_name']);
+        $this->assertSame('254748249882', $state['patient_phone']);
+    }
+
+    public function test_services_overview_uses_only_the_hospital_active_catalog(): void
+    {
+        [$hospital, $services] = $this->createContext(['Dental Cleaning', 'General Consultation']);
+        $hospital->services()->create([
+            'name' => 'Retired Service',
+            'price' => 100,
+            'duration_minutes' => 30,
+            'category' => 'Other',
+            'is_active' => false,
+        ]);
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'dynamic-services-overview',
+            'What services do you offer?',
+            'web',
+        );
+
+        $this->assertStringContainsString($services[0]->name, $response->message);
+        $this->assertStringContainsString($services[1]->name, $response->message);
+        $this->assertStringNotContainsString('Retired Service', $response->message);
+        $this->assertSame('hospital_services', $response->source);
+    }
+
+    public function test_doctor_availability_question_uses_active_hospital_doctors(): void
+    {
+        [, , $doctors] = $this->createContext(doctorNames: ['Dr. Amina Njeri', 'Dr. Brian Otieno']);
+        $doctors[0]->update(['specialization' => 'Dentist']);
+        $doctors[1]->update(['specialization' => 'General Practitioner']);
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'dynamic-doctor-question',
+            'Do you have a dentist?',
+            'web',
+        );
+
+        $this->assertStringContainsString('Dr. Amina Njeri', $response->message);
+        $this->assertStringNotContainsString('Dr. Brian Otieno', $response->message);
+        $this->assertSame('IDLE', $response->state);
+        $this->assertSame('hospital_doctors', $response->source);
+    }
+
+    public function test_hospital_location_answer_uses_current_hospital_settings(): void
+    {
+        [$hospital] = $this->createContext();
+        $hospital->forceFill(['address' => 'Updated clinic address, Nyahururu'])->save();
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'dynamic-hospital-location',
+            'Where is the hospital located?',
+            'web',
+        );
+
+        $this->assertStringContainsString('Updated clinic address, Nyahururu', $response->message);
+        $this->assertSame('hospital_information', $response->source);
+    }
+
+    public function test_hospital_hours_answer_uses_current_hospital_settings(): void
+    {
+        [$hospital] = $this->createContext();
+        $hospital->forceFill([
+            'business_hours' => [
+                'monday' => ['open' => '07:30', 'close' => '17:30', 'closed' => false],
+                'sunday' => ['open' => '09:00', 'close' => '12:00', 'closed' => true],
+            ],
+            'hours_emergency' => '24/7',
+        ])->save();
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'dynamic-hospital-hours',
+            'What are your opening hours?',
+            'web',
+        );
+
+        $this->assertStringContainsString('Monday: 07:30-17:30', $response->message);
+        $this->assertStringContainsString('Sunday: closed', $response->message);
+        $this->assertStringContainsString('24/7', $response->message);
+    }
+
+    public function test_hospital_contact_answer_uses_current_phone_and_email(): void
+    {
+        [$hospital] = $this->createContext();
+        $hospital->forceFill([
+            'phone' => '0700123456',
+            'email' => 'updated@example.test',
+        ])->save();
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'dynamic-hospital-contact',
+            'How can I contact the hospital?',
+            'web',
+        );
+
+        $this->assertStringContainsString('0700123456', $response->message);
+        $this->assertStringContainsString('updated@example.test', $response->message);
+    }
+
+    public function test_status_question_without_an_appointment_gives_a_local_answer(): void
+    {
+        $this->createContext();
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'missing-appointment-status',
+            'What is my booking status?',
+            'web',
+        );
+
+        $this->assertStringContainsString('could not find an appointment request', $response->message);
+        $this->assertSame('appointment_status', $response->source);
+    }
+
     public function test_chat_never_shows_prices_in_the_booking_confirmation(): void
     {
         $this->createContext(price: 1500);
@@ -654,22 +800,21 @@ class BookingChatServiceTest extends TestCase
             'web',
         );
 
-        $this->assertStringContainsString('final booking confirmation', $priceQuestion->message);
+        $this->assertStringContainsString('contact Booking Chat Hospital', $priceQuestion->message);
         $this->assertStringNotContainsString('KSh', $priceQuestion->message);
         $this->assertSame('CONFIRMING', $confirmation->state);
         $this->assertStringNotContainsString('KSh', $confirmation->message);
         $this->assertDatabaseCount('appointment_requests', 0);
     }
 
-    public function test_tenant_chat_service_selector_does_not_render_prices(): void
+    public function test_tenant_chat_service_selector_displays_service_prices(): void
     {
         [$hospital] = $this->createContext(price: 1500);
 
         $this->withoutVite()
             ->get('/h/'.$hospital->slug.'/chat')
-            ->assertSee('Dental Cleaning')
-            ->assertDontSee('KSh')
-            ->assertDontSee('data-price', false);
+            ->assertSee('data-price="1500.00"', false)
+            ->assertSee('Dental Cleaning — KSh 1,500.00 (30 min)', false);
     }
 
     public function test_multi_message_booking_collects_fields_in_order(): void

@@ -131,12 +131,23 @@ class HospitalSeederTest extends TestCase
             ->assertSee('KSh 15,000.00')
             ->assertDontSee('Paediatric Consultation');
 
-        $this->get('/h/pearl/chat')
-            ->assertSee('Pearlie AI Assistant')
-            ->assertSee('Dental Checkup & Cleaning (30 min)')
-            ->assertSee('Renal Dialysis Session (240 min)')
-            ->assertDontSee('KSh')
-            ->assertDontSee('Paediatric Consultation');
+        $pearlChat = $this->get('/h/pearl/chat')
+            ->assertSee('Pearlie AI Assistant');
+        foreach ([
+            'Antenatal Clinic Visit — KSh 1,000.00 (30 min)',
+            'CT Scan (Head/Chest/Abdomen) — KSh 12,000.00 (45 min)',
+            'Dental Checkup & Cleaning — KSh 2,500.00 (30 min)',
+            'Digital X-Ray — KSh 3,000.00 (20 min)',
+            'General Consultation — KSh 1,500.00 (30 min)',
+            'Oncology Consultation — KSh 5,000.00 (45 min)',
+            'Optical Eye Checkup — KSh 1,500.00 (30 min)',
+            'Physiotherapy Session — KSh 2,000.00 (45 min)',
+            'Renal Dialysis Session — KSh 15,000.00 (240 min)',
+            'Ultrasound Scan (Obstetric) — KSh 1,000.00 (30 min)',
+        ] as $serviceOption) {
+            $pearlChat->assertSee($serviceOption);
+        }
+        $pearlChat->assertDontSee('Paediatric Consultation');
 
         $this->get('/h/demo')
             ->assertSee('Nairobi Medical Centre')
@@ -146,8 +157,10 @@ class HospitalSeederTest extends TestCase
 
         $this->get('/h/demo/chat')
             ->assertSee('Nairobie AI Assistant')
-            ->assertSee('Paediatric Consultation (30 min)')
-            ->assertDontSee('KSh')
+            ->assertSee('Dental Checkup — KSh 2,000.00 (30 min)')
+            ->assertSee('General Consultation — KSh 1,200.00 (30 min)')
+            ->assertSee('Paediatric Consultation — KSh 1,800.00 (30 min)')
+            ->assertSee('Ultrasound Scan — KSh 3,500.00 (45 min)')
             ->assertDontSee('Renal Dialysis Session');
     }
 }

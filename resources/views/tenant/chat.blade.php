@@ -373,8 +373,8 @@
                     <select id="bookingService" data-service-select class="mt-1 block w-full rounded-lg border-slate-300 text-sm focus:border-cyan-600 focus:ring-cyan-600">
                         <option value="" disabled @selected($selectedServiceId === null)>Select a service</option>
                         @foreach ($services as $service)
-                            <option value="{{ $service->id }}" data-duration="{{ $service->duration_minutes }}" @selected($selectedServiceId === $service->id)>
-                                {{ $service->name }} ({{ $service->duration_minutes }} min)
+                            <option value="{{ $service->id }}" data-price="{{ number_format((float) $service->price, 2, '.', '') }}" data-duration="{{ $service->duration_minutes }}" @selected($selectedServiceId === $service->id)>
+                                {{ $service->name }} — KSh {{ number_format((float) $service->price, 2) }} ({{ $service->duration_minutes }} min)
                             </option>
                         @endforeach
                     </select>
