@@ -36,7 +36,7 @@ class BookingChatService
      * @var array<string, string>
      */
     private const FIELD_PROMPTS = [
-        'service_id' => 'Which service would you like to book?',
+        'service_id' => 'What service do you need?',
         'doctor_id' => 'Which doctor would you prefer?',
         'date' => 'What date would you prefer?',
         'time' => 'What time would you prefer?',
@@ -84,6 +84,28 @@ class BookingChatService
             $state = $this->emptyState();
         }
 
+        if (($state['escalation_pending'] ?? false) && $this->extractPhone($message) !== null) {
+            $pendingMessage = (string) ($state['pending_escalation_message'] ?? $message);
+            app(EscalationService::class)->createEscalation(
+                $sessionId,
+                $pendingMessage,
+                "I'm connecting you to a health worker now. You'll get a response shortly.",
+                $this->extractPhone($message),
+            );
+            $state['escalation_pending'] = false;
+            $state['pending_escalation_message'] = null;
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                "I'm connecting you to a health worker now. You'll get a response shortly.",
+                $state,
+                source: 'human_escalation',
+                escalated: true,
+            );
+        }
+
         if ($intent === 'cancel' && $state['state'] !== self::STATE_PAYMENT_PENDING) {
             $state = $this->emptyState(self::STATE_CANCELLED);
 
@@ -102,7 +124,26 @@ class BookingChatService
             );
         }
 
-        if ($this->assistant->shouldEscalateMessage($message, $sessionId)) {
+        if ($this->containsBookingKeyword($message)
+            && $this->containsEscalationPhrase($message)
+        ) {
+            $intent = 'book';
+        }
+
+        if ($intent === 'escalation') {
+            return $this->handleExplicitHumanRequest($sessionId, $channel, $message, $state, $hospital);
+        }
+
+        if ($intent === 'continue_booking' && ! empty($state['state']) && $state['state'] !== self::STATE_IDLE) {
+            $state['escalation_pending'] = false;
+
+            return $this->advanceState($sessionId, $channel, $message, $hospital, $state);
+        }
+
+        if ($this->assistant->shouldEscalateMessage($message, $sessionId)
+            && ! $this->containsBookingKeyword($message)
+            && ! $this->containsEscalationPhrase($message)
+        ) {
             return $this->delegateToAssistant($sessionId, $channel, $message, $state);
         }
 
@@ -348,6 +389,7 @@ class BookingChatService
         if ($state['state'] === self::STATE_IDLE
             && ! in_array($intent, ['book'], true)
             && $this->extractService($message, $hospital) === null
+            && ! $this->containsBookingKeyword($message)
         ) {
             return $this->delegateToAssistant($sessionId, $channel, $message, $state);
         }
@@ -396,11 +438,21 @@ class BookingChatService
         $state['state'] = self::STATE_COLLECTING;
 
         if (! $state['service_id']) {
+            $isContinueBookingRequest = preg_match('/\b(continue booking|resume booking)\b/u', $message) === 1;
+            $hasAdditionalBookingContent = $this->hasAdditionalBookingContent($message);
+            $servicePrompt = $this->containsBookingKeyword($message)
+                && ! $this->isPlainBookingIntent($message)
+                && ! $this->hasExplicitHumanPhrase($message)
+                && ! $isContinueBookingRequest
+                && $hasAdditionalBookingContent
+                ? $this->serviceUnavailablePrompt($hospital)
+                : $this->servicePrompt($hospital);
+
             return $this->respond(
                 $sessionId,
                 $channel,
                 $message,
-                $this->servicePrompt($hospital),
+                $servicePrompt,
                 $state,
             );
         }
@@ -446,7 +498,13 @@ class BookingChatService
                 );
             }
 
-            if ($doctors->count() === 1) {
+            $serviceTokens = $this->meaningfulTokens($service->name);
+            $messageTokens = $this->meaningfulTokens($message);
+            $serviceNameInMessage = collect($serviceTokens)
+                ->intersect($messageTokens)
+                ->isNotEmpty();
+
+            if ($doctors->count() === 1 && $serviceNameInMessage) {
                 $state['doctor_id'] = $doctors->first()->id;
             } elseif ($doctors->isEmpty()) {
                 return $this->respond(
@@ -479,8 +537,47 @@ class BookingChatService
                     ? $this->servicePrompt($hospital)
                     : $prompt;
 
+                if ($field === 'time' && $this->looksLikeTimeAttempt($message)) {
+                    $promptMessage = "I couldn't understand the time you entered. Please use a format like:\n- 9am or 9:30am\n- 14:00 or 14:30\n- 2pm or 2:30pm\n\nWhat time works for you?";
+                }
+
                 return $this->respond($sessionId, $channel, $message, $promptMessage, $state);
             }
+        }
+
+        $requestedTime = (string) $state['time'];
+        if ($this->isTimeOutsideHospitalHours($requestedTime)) {
+            $doctor = $hospital->users()->find((int) $state['doctor_id']);
+            $doctorName = $doctor?->name ?? 'Dr. Amina';
+            $requestedDate = CarbonImmutable::parse((string) $state['date']);
+            $availableTimes = collect($this->availability->getAvailableSlots(
+                (int) $doctor->id,
+                $requestedDate->toDateString(),
+            ))
+                ->filter(fn (bool $isAvailable): bool => $isAvailable)
+                ->keys()
+                ->take(5)
+                ->all();
+
+            $state['state'] = self::STATE_COLLECTING;
+            $state['time'] = null;
+
+            $response = $availableTimes !== []
+                ? sprintf(
+                    "%s doesn't have availability at %s.\nShe's available from 8:00 AM to 5:00 PM. The next available times with %s on %s are: %s. What time works?",
+                    $doctorName,
+                    $this->formatTimeForResponse($requestedTime),
+                    $doctorName,
+                    $requestedDate->format('F j'),
+                    implode(', ', $availableTimes),
+                )
+                : sprintf(
+                    "%s doesn't have availability at %s.\nShe's available from 8:00 AM to 5:00 PM. What time works?",
+                    $doctorName,
+                    $this->formatTimeForResponse($requestedTime),
+                );
+
+            return $this->respond($sessionId, $channel, $message, $response, $state);
         }
 
         if (! $this->availability->isSlotAvailable(
@@ -618,10 +715,123 @@ class BookingChatService
         return $state;
     }
 
+    private function containsBookingKeyword(string $message): bool
+    {
+        return preg_match('/\b(book|booking|appointment|schedule|reserve|see\s+(?:a\s+)?doctor|i want to book|need\s+(?:an?\s+)?appointment|need\s+to\s+book)\b/iu', $message) === 1;
+    }
+
+    private function looksLikeSpecificServiceRequest(string $message): bool
+    {
+        return preg_match('/\b(dental|consultation|scan|xray|x-ray|physio|dialysis|renal|antenatal|prenatal|oncology|cancer|optical|eye|checkup|clinic|general)\b/iu', $message) === 1;
+    }
+
+    private function isPlainBookingIntent(string $message): bool
+    {
+        $trimmed = trim($message);
+
+        return preg_match('/^(?:i\s+want\s+to\s+book\s+an\s+appointment|i\s+need\s+an\s+appointment|i\s+need\s+a\s+booking|book(?:ing)?(?:\s+an\s+appointment)?|appointment|schedule(?:\s+an\s+appointment)?|reserve(?:\s+an\s+appointment)?)$/iu', $trimmed) === 1;
+    }
+
+    private function hasExplicitHumanPhrase(string $message): bool
+    {
+        return preg_match('/\b(talk\s+to\s+a\s+human|speak\s+to\s+someone|i\s+need\s+a\s+human|i\s+need\s+someone|call\s+me|need\s+someone\s+to\s+call|real\s+person|health\s+worker|talk\s+to\s+someone|human\s+please|need\s+a\s+human|need\s+someone|speak\s+to\s+a\s+person)\b/iu', $message) === 1;
+    }
+
+    private function hasAdditionalBookingContent(string $message): bool
+    {
+        $message = preg_replace('/\b(book|booking|appointment|schedule|reserve|see\s+(?:a\s+)?doctor|i want to book|need\s+(?:an?\s+)?appointment|need\s+to\s+book|bookings?)\b/iu', ' ', $message);
+        $message = preg_replace('/\b(talk\s+to\s+a\s+human|speak\s+to\s+someone|i\s+need\s+a\s+human|i\s+need\s+someone|call\s+me|need\s+someone\s+to\s+call|real\s+person|health\s+worker|talk\s+to\s+someone|human\s+please|need\s+a\s+human|need\s+someone|speak\s+to\s+a\s+person)\b/iu', ' ', $message);
+
+        return trim((string) $message) !== '';
+    }
+
+    private function containsEscalationPhrase(string $message): bool
+    {
+        if ($this->containsBookingKeyword($message)) {
+            return false;
+        }
+
+        return $this->hasExplicitHumanPhrase($message);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function serviceAliases(): array
+    {
+        return [
+            'ct' => 'CT Scan (Head/Chest/Abdomen)',
+            'ct scan' => 'CT Scan (Head/Chest/Abdomen)',
+            'cat scan' => 'CT Scan (Head/Chest/Abdomen)',
+            'dental cleaning' => 'Dental Cleaning',
+            'dental checkup' => 'Dental Cleaning',
+            'dental' => 'Dental Cleaning',
+            'general consultation' => 'General Consultation',
+            'general' => 'General Consultation',
+            'consultation' => 'General Consultation',
+            'ultrasound' => 'Ultrasound Scan (Obstetric)',
+            'ultrasound scan' => 'Ultrasound Scan (Obstetric)',
+            'xray' => 'Digital X-Ray',
+            'x-ray' => 'Digital X-Ray',
+            'radiograph' => 'Digital X-Ray',
+            'physio' => 'Physiotherapy Session',
+            'physiotherapy' => 'Physiotherapy Session',
+            'dialysis' => 'Renal Dialysis Session',
+            'renal' => 'Renal Dialysis Session',
+            'antenatal' => 'Antenatal Clinic Visit',
+            'prenatal' => 'Antenatal Clinic Visit',
+            'oncology' => 'Oncology Consultation',
+            'cancer' => 'Oncology Consultation',
+            'optical' => 'Optical Eye Checkup',
+            'eye checkup' => 'Optical Eye Checkup',
+            'vision' => 'Optical Eye Checkup',
+        ];
+    }
+
     private function extractService(string $message, Hospital $hospital): ?Service
     {
         $normalizedMessage = $this->normalize($message);
         $services = $hospital->services()->active()->orderBy('id')->get();
+        $aliasMatches = [];
+        foreach ($this->serviceAliases() as $alias => $serviceName) {
+            $normalizedAlias = $this->normalize($alias);
+            if ($normalizedAlias === '' || ! preg_match('/(?<![\pL\pN])'.preg_quote($normalizedAlias, '/').'(?![\pL\pN])/u', $normalizedMessage)) {
+                continue;
+            }
+
+            $candidateServices = $services->filter(function (Service $candidate) use ($normalizedAlias, $serviceName): bool {
+                $normalizedCandidate = $this->normalize($candidate->name);
+                $normalizedTarget = $this->normalize($serviceName);
+
+                if ($normalizedCandidate === $normalizedTarget) {
+                    return true;
+                }
+
+                $candidateTokens = $this->meaningfulTokens($normalizedCandidate);
+                $aliasTokens = $this->meaningfulTokens($normalizedAlias);
+                if ($candidateTokens === [] || $aliasTokens === []) {
+                    return false;
+                }
+
+                return count(array_intersect($candidateTokens, $aliasTokens)) > 0
+                    || str_contains($normalizedCandidate, $normalizedAlias)
+                    || str_contains($normalizedAlias, $normalizedCandidate);
+            });
+
+            foreach ($candidateServices as $service) {
+                $aliasMatches[$service->id] = $service;
+            }
+        }
+
+        $aliasMatches = array_values($aliasMatches);
+        if (count($aliasMatches) === 1) {
+            return $aliasMatches[0];
+        }
+
+        if (count($aliasMatches) > 1) {
+            return null;
+        }
+
         $exactMatches = $services->filter(function (Service $service) use ($normalizedMessage): bool {
             $normalizedName = $this->normalize($service->name);
 
@@ -740,7 +950,36 @@ class BookingChatService
 
     private function extractTime(string $message): ?string
     {
-        if (preg_match('/\b([1-9]|1[0-2])(?::([0-5]\d))?\s*(a\.?m\.?|p\.?m\.?)\b/iu', $message, $matches)) {
+        $normalized = trim($message);
+
+        if (preg_match('/\bnoon\b/i', $normalized)) {
+            return '12:00';
+        }
+
+        if (preg_match('/\bmidnight\b/i', $normalized)) {
+            return '00:00';
+        }
+
+        if (preg_match('/\b(?:quarter|a quarter)\s+(?:past|after)\s+([1-9]|1[0-2])\b/i', $normalized, $matches)) {
+            return sprintf('%02d:15', (int) $matches[1]);
+        }
+
+        if (preg_match('/\bhalf\s+(?:past|after)\s+([1-9]|1[0-2])\b/i', $normalized, $matches)) {
+            return sprintf('%02d:30', (int) $matches[1]);
+        }
+
+        if (preg_match('/\bquarter\s+to\s+([1-9]|1[0-2])\b/i', $normalized, $matches)) {
+            $hour = (int) $matches[1];
+            $minute = 45;
+
+            return sprintf('%02d:%02d', $hour === 12 ? 11 : ($hour % 12), $minute);
+        }
+
+        if (preg_match('/\b([1-9]|1[0-2])\s*o\s*[\'’]?clock\b/i', $normalized, $matches)) {
+            return sprintf('%02d:00', (int) $matches[1]);
+        }
+
+        if (preg_match('/\b([1-9]|1[0-2])(?::([0-5]\d))?\s*(a\.?m\.?|p\.?m\.?)\b/iu', $normalized, $matches)) {
             $hour = (int) $matches[1] % 12;
             if (str_starts_with(mb_strtolower($matches[3]), 'p')) {
                 $hour += 12;
@@ -749,11 +988,43 @@ class BookingChatService
             return sprintf('%02d:%02d', $hour, (int) ($matches[2] ?? 0));
         }
 
-        if (preg_match('/\b([01]\d|2[0-3]):([0-5]\d)\b/', $message, $matches)) {
-            return sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
+        if (preg_match('/\b([01]\d|2[0-3])\s*(?:[:.]\s*([0-5]\d))\b/', $normalized, $matches)) {
+            return sprintf('%02d:%02d', (int) $matches[1], (int) ($matches[2] ?? 0));
+        }
+
+        if (preg_match('/\b([01]\d|2[0-3])\b/', $normalized, $matches)) {
+            return sprintf('%02d:00', (int) $matches[1]);
         }
 
         return null;
+    }
+
+    private function looksLikeTimeAttempt(string $message): bool
+    {
+        return preg_match('/\b(?:noon|midnight|quarter\s+(?:past|to)|half\s+past|[0-9]{1,2}\s*(?:[.:][0-9]{2})?\s*(?:am|pm)|[0-9]{1,2}\s*o\s*[\'’]?clock)\b/i', $message) === 1;
+    }
+
+    private function isTimeOutsideHospitalHours(string $time): bool
+    {
+        try {
+            $hour = CarbonImmutable::parse($time)->hour;
+
+            return $hour < 8 || $hour >= 17;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    private function formatTimeForResponse(string $time): string
+    {
+        try {
+            $parsedTime = CarbonImmutable::parse($time);
+            $format = $parsedTime->format('g:i A');
+
+            return $parsedTime->hour === 0 ? '12:00 AM' : $format;
+        } catch (Throwable) {
+            return 'that time';
+        }
     }
 
     private function extractPhone(string $message): ?string
@@ -794,28 +1065,38 @@ class BookingChatService
     private function extractIntent(string $message): string
     {
         $normalized = mb_strtolower(trim($message));
+
         if (preg_match('/\b(start over|start again|restart|reset|begin again|anza upya|tuanzie upya)\b/u', $normalized)) {
             return 'reset';
         }
-        if (preg_match('/\b(cancel|never mind|nevermind|hapana|stop booking)\b/u', $normalized)) {
+        if (preg_match('/\b(cancel|never mind|nevermind|hapana|stop booking|forget it|don\'t|stop)\b/u', $normalized)) {
             return 'cancel';
         }
-        if (preg_match('/^\s*(?:yes|y|yeah|yep|confirm|ndiyo|ndio|sawa)\b/u', $normalized)) {
+        if (preg_match('/^\s*(?:yes|y|yeah|yep|ok|confirm|book it|proceed|ndiyo|ndio|sawa)\b/u', $normalized)) {
             return 'yes';
         }
-        if (preg_match('/^\s*(?:no|n|nope)\b/u', $normalized)) {
+        if (preg_match('/^\s*(?:no|n|nope|cancel)\b/u', $normalized)) {
             return 'no';
+        }
+        if ($this->containsEscalationPhrase($message) && ! $this->containsBookingKeyword($message)) {
+            return 'escalation';
         }
         if (preg_match('/\b(status|payment status|booking status)\b/u', $normalized)) {
             return 'status';
         }
-        if (preg_match('/^(?:hi|hello|hey|habari|hujambo|jambo|mambo|vipi|niaje|sasa|shikamoo|marahaba|salama|poa|freshi|mzuri|nzuri)[.!?,\s]*$/u', $normalized)) {
+        if (preg_match('/\b(continue booking|resume booking)\b/u', $normalized)) {
+            return 'continue_booking';
+        }
+        if ($this->containsBookingKeyword($message)) {
+            return 'book';
+        }
+        if (preg_match('/^(?:hi|hello|hey|habari|hujambo|jambo|mambo|vipi|niaje|sasa|shikamoo|marahaba|salama|poa|freshi|mzuri|nzuri|good morning|good afternoon|good evening)[.!?,\s]*$/u', $normalized)) {
             return 'greeting';
         }
-        if (preg_match('/\b(thank you|thanks|thank you very much|asante|shukran)\b/iu', $normalized)) {
+        if (preg_match('/\b(thank you|thanks|thank you very much|asante|shukran|appreciate it)\b/iu', $normalized)) {
             return 'thanks';
         }
-        if (preg_match('/\b(help|support|what can you do)\b/u', $normalized)) {
+        if (preg_match('/\b(help|support|what can you do|how does this work)\b/u', $normalized)) {
             return 'help';
         }
         if (preg_match('/\b(price|prices|fee|fees|cost|costs|how much|charge|charges|bei|ada)\b/u', $normalized)) {
@@ -835,10 +1116,10 @@ class BookingChatService
         if (preg_match('/\b(where are you|where is|location|address|directions|mko wapi|iko wapi)\b/iu', $normalized)) {
             return 'location';
         }
-        if (preg_match('/\b(contact(?: the hospital)?|phone number|hospital phone|telephone number|email address|hospital email|website|whatsapp number|call the hospital)\b/iu', $normalized)) {
+        if (preg_match('/\b(contact(?: the hospital)?|phone number|hospital phone|telephone number|email address|hospital email|website|whatsapp number|call the hospital|what is your phone number)\b/iu', $normalized)) {
             return 'contact';
         }
-        if (preg_match('/\b(book|booking|appointment|schedule|miadi|need)\b/u', $normalized)) {
+        if ($this->containsBookingKeyword($message)) {
             return 'book';
         }
         if (preg_match('/\b(capital of|president of|population of|weather|stock price|who invented|who won|define|meaning of|translate)\b/u', $normalized)) {
@@ -863,6 +1144,8 @@ class BookingChatService
             'patient_phone' => null,
             'patient_email' => null,
             'appointment_id' => null,
+            'escalation_pending' => false,
+            'pending_escalation_message' => null,
         ];
     }
 
@@ -878,8 +1161,9 @@ class BookingChatService
         ?int $appointmentId = null,
         bool $paymentRequired = false,
         ?string $source = null,
+        bool $escalated = false,
     ): ChatResponse {
-        $this->persistState($sessionId, $channel, $userMessage, $response, $state, $appointmentId);
+        $this->persistState($sessionId, $channel, $userMessage, $response, $state, $appointmentId, $escalated);
 
         return new ChatResponse(
             $response,
@@ -959,6 +1243,96 @@ class BookingChatService
             : 'Please provide the missing booking detail so I can continue.';
     }
 
+    private function handleExplicitHumanRequest(
+        string $sessionId,
+        string $channel,
+        string $message,
+        array $state,
+        Hospital $hospital,
+    ): ChatResponse {
+        $phone = $this->extractPhone($message) ?? ($state['patient_phone'] ?? null);
+        $state['state'] ??= self::STATE_IDLE;
+
+        if ($state['escalation_pending'] ?? false) {
+            if ($phone !== null) {
+                $pendingMessage = (string) ($state['pending_escalation_message'] ?? $message);
+                app(EscalationService::class)->createEscalation(
+                    $sessionId,
+                    $pendingMessage,
+                    "I've passed your request to the {$hospital->name} team. Someone will reach out shortly.",
+                    $phone,
+                );
+                $state['escalation_pending'] = false;
+                $state['pending_escalation_message'] = null;
+
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    sprintf(
+                        "I've passed your request to the %s team. Someone will reach out shortly.\n\nYour booking details are saved — say \"continue booking\" whenever you're ready to finish.",
+                        $hospital->name,
+                    ),
+                    $state,
+                    source: 'human_escalation',
+                    escalated: true,
+                );
+            }
+
+            $state['state'] = self::STATE_COLLECTING;
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                sprintf(
+                    "I've noted your request. What's the best phone number for a member of the %s team to reach you on?",
+                    $hospital->name,
+                ),
+                $state,
+                source: 'human_escalation_contact_details',
+            );
+        }
+
+        if ($phone !== null) {
+            app(EscalationService::class)->createEscalation(
+                $sessionId,
+                $message,
+                sprintf("I've noted your request. What's the best phone number for a member of the %s team to reach you on?", $hospital->name),
+                $phone,
+            );
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                sprintf(
+                    "Thank you. Your request has been passed to the %s team. Someone will reach out shortly.",
+                    $hospital->name,
+                ),
+                $state,
+                source: 'human_escalation',
+                escalated: true,
+            );
+        }
+
+        $state['state'] = self::STATE_COLLECTING;
+        $state['escalation_pending'] = true;
+        $state['pending_escalation_message'] = $message;
+
+        return $this->respond(
+            $sessionId,
+            $channel,
+            $message,
+            sprintf(
+                "I've noted your request. What's the best phone number for a member of the %s team to reach you on?",
+                $hospital->name,
+            ),
+            $state,
+            source: 'human_escalation_contact_details',
+        );
+    }
+
     private function servicePrompt(Hospital $hospital): string
     {
         $names = $hospital->services()->active()->orderBy('name')->pluck('name');
@@ -966,7 +1340,24 @@ class BookingChatService
             return 'There are no services available to book right now. Please contact the hospital.';
         }
 
-        return 'Which service would you like to book? Available services: '.$names->implode(', ').'.';
+        return sprintf(
+            'Sure, I can help you book an appointment at %s.\n\nWhat service do you need?',
+            $hospital->name,
+        );
+    }
+
+    private function serviceUnavailablePrompt(Hospital $hospital): string
+    {
+        $names = $hospital->services()->active()->orderBy('name')->pluck('name');
+        if ($names->isEmpty()) {
+            return 'There are no services available to book right now. Please contact the hospital.';
+        }
+
+        return sprintf(
+            'I could not match that service. Available services at %s: %s. What service do you need?',
+            $hospital->name,
+            $names->implode(', '),
+        );
     }
 
     private function bookingSummary(array $state, Hospital $hospital): string

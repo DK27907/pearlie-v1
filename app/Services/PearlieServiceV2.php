@@ -574,9 +574,13 @@ class PearlieServiceV2
 
         $normalized = $this->normalizeForEscalation($message);
         $bookingIntent = (bool) preg_match(
-            '/\b(book|booking|appointment|schedule|availability|available slots?|free slots?|miadi|weka\s+miadi|kuweka\s+miadi|naomba\s+miadi)\b/iu',
+            '/\b(book|booking|appointment|schedule|reserve|see\s+(?:a\s+)?doctor|i want to book|need\s+(?:an?\s+)?appointment|miadi|weka\s+miadi|kuweka\s+miadi|naomba\s+miadi)\b/iu',
             $message,
         );
+        if ($bookingIntent) {
+            return false;
+        }
+
         $keywords = config('pearlie.escalation.auto_escalate_keywords', []);
 
         if ($bookingIntent) {
