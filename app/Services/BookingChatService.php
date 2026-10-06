@@ -61,7 +61,6 @@ class BookingChatService
         $sessionId = $this->sessionId($channelId, $channel);
         $previousState = $this->persistedState($channelId, $channel);
         $state = $this->reconcilePaymentState($previousState);
-        $intent = $this->extractIntent($message);
 
         if (($previousState['state'] ?? self::STATE_IDLE) === self::STATE_PAYMENT_PENDING
             && in_array($state['state'], [self::STATE_COMPLETED, self::STATE_CANCELLED], true)
@@ -82,6 +81,44 @@ class BookingChatService
 
         if (in_array($state['state'], [self::STATE_COMPLETED, self::STATE_CANCELLED], true)) {
             $state = $this->emptyState();
+        }
+
+        $intent = $this->extractIntent($message, (string) $state['state']);
+
+        if ($state['state'] === self::STATE_PAYMENT_PENDING) {
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                'Your booking is waiting for the M-Pesa payment callback.',
+                $state,
+                $state['appointment_id'],
+                true,
+            );
+        }
+
+        if ($intent === 'reset') {
+            $state = $this->emptyState();
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                'Your booking details have been cleared. What would you like help with?',
+                $state,
+                source: 'booking_reset',
+            );
+        }
+
+        if ($intent === 'cancel') {
+            $state = $this->emptyState(self::STATE_CANCELLED);
+
+            return $this->respond($sessionId, $channel, $message, 'Your booking has been cancelled.', $state);
+        }
+
+        if ($intent === 'book') {
+            $state['escalation_pending'] = false;
+            $state['pending_escalation_message'] = null;
         }
 
         if (($state['escalation_pending'] ?? false) && $this->extractPhone($message) !== null) {
@@ -112,31 +149,6 @@ class BookingChatService
             );
         }
 
-        if ($intent === 'cancel' && $state['state'] !== self::STATE_PAYMENT_PENDING) {
-            $state = $this->emptyState(self::STATE_CANCELLED);
-
-            return $this->respond($sessionId, $channel, $message, 'Your booking has been cancelled.', $state);
-        }
-
-        if ($state['state'] === self::STATE_PAYMENT_PENDING) {
-            return $this->respond(
-                $sessionId,
-                $channel,
-                $message,
-                'Your booking is waiting for the M-Pesa payment callback.',
-                $state,
-                $state['appointment_id'],
-                true,
-            );
-        }
-
-        if ($this->containsBookingKeyword($message)
-            && $this->containsEscalationPhrase($message)
-            && ! $this->isHumanRequestAboutExistingBooking($message)
-        ) {
-            $intent = 'book';
-        }
-
         if ($intent === 'escalation') {
             return $this->handleExplicitHumanRequest($sessionId, $channel, $message, $state, $hospital);
         }
@@ -147,24 +159,23 @@ class BookingChatService
             return $this->advanceState($sessionId, $channel, $message, $hospital, $state);
         }
 
+        // Handle yes/no clarification before delegating to assistant
+        // This prevents "yes" or "no" in IDLE state from triggering escalation
+        // But skip this check if in CONFIRMING state (handled specially below)
+        if (in_array($intent, ['yes', 'no'], true) && $state['state'] !== self::STATE_CONFIRMING) {
+            $response = $state['state'] === self::STATE_COLLECTING
+                ? $this->promptForNextField($state, $hospital)
+                : 'There is no booking waiting for confirmation. Tell me what service or hospital information you need.';
+
+            return $this->respond($sessionId, $channel, $message, $response, $state, source: 'clarification');
+        }
+
         if ($this->assistant->shouldEscalateMessage($message, $sessionId)
             && ! $this->containsBookingKeyword($message)
             && ! $this->containsEscalationPhrase($message)
+            && $this->extractService($message, $hospital) === null
         ) {
             return $this->delegateToAssistant($sessionId, $channel, $message, $state);
-        }
-
-        if ($intent === 'reset') {
-            $state = $this->emptyState();
-
-            return $this->respond(
-                $sessionId,
-                $channel,
-                $message,
-                'Your booking details have been cleared. What would you like help with?',
-                $state,
-                source: 'booking_reset',
-            );
         }
 
         if ($intent === 'pricing') {
@@ -385,14 +396,6 @@ class BookingChatService
             return $this->advanceState($sessionId, $channel, $message, $hospital, $state);
         }
 
-        if (in_array($intent, ['yes', 'no'], true)) {
-            $response = $state['state'] === self::STATE_COLLECTING
-                ? $this->promptForNextField($state, $hospital)
-                : 'There is no booking waiting for confirmation. Tell me what service or hospital information you need.';
-
-            return $this->respond($sessionId, $channel, $message, $response, $state, source: 'clarification');
-        }
-
         if ($state['state'] === self::STATE_IDLE
             && ! in_array($intent, ['book'], true)
             && $this->extractService($message, $hospital) === null
@@ -464,6 +467,8 @@ class BookingChatService
             );
         }
 
+        $automaticallySelectedDoctor = null;
+
         if (! $state['doctor_id']) {
             $service = $this->serviceById((int) $state['service_id'], $hospital);
             $doctors = $this->eligibleDoctors($hospital, $service);
@@ -513,6 +518,7 @@ class BookingChatService
 
             if ($doctors->count() === 1 && $serviceNameInMessage) {
                 $state['doctor_id'] = $doctors->first()->id;
+                $automaticallySelectedDoctor = $doctors->first();
             } elseif ($doctors->isEmpty()) {
                 return $this->respond(
                     $sessionId,
@@ -543,6 +549,21 @@ class BookingChatService
                 $promptMessage = $field === 'service_id'
                     ? $this->servicePrompt($hospital)
                     : $prompt;
+
+                if ($field === 'date' && $automaticallySelectedDoctor !== null) {
+                    $promptMessage = sprintf(
+                        '%s is available for this service. What date would you prefer?',
+                        $automaticallySelectedDoctor->name,
+                    );
+                } elseif ($field === 'date' && filled($state['doctor_id'] ?? null)) {
+                    $selectedDoctor = $hospital->users()->find((int) $state['doctor_id']);
+                    if ($selectedDoctor !== null) {
+                        $promptMessage = sprintf(
+                            '%s is available for this service. What date would you prefer?',
+                            $selectedDoctor->name,
+                        );
+                    }
+                }
 
                 if ($field === 'time' && $this->looksLikeTimeAttempt($message)) {
                     $promptMessage = "I couldn't understand the time you entered. Please use a format like:\n- 9am or 9:30am\n- 14:00 or 14:30\n- 2pm or 2:30pm\n\nWhat time works for you?";
@@ -761,12 +782,6 @@ class BookingChatService
         return $this->hasExplicitHumanPhrase($message);
     }
 
-    private function isHumanRequestAboutExistingBooking(string $message): bool
-    {
-        return $this->hasExplicitHumanPhrase($message)
-            && preg_match('/\b(?:about|regarding|concerning)\s+(?:my|the)\s+(?:booking|appointment)\b/iu', $message) === 1;
-    }
-
     /**
      * @return array<string, string>
      */
@@ -776,12 +791,14 @@ class BookingChatService
             'ct' => 'CT Scan (Head/Chest/Abdomen)',
             'ct scan' => 'CT Scan (Head/Chest/Abdomen)',
             'cat scan' => 'CT Scan (Head/Chest/Abdomen)',
-            'dental cleaning' => 'Dental Cleaning',
-            'dental checkup' => 'Dental Cleaning',
-            'dental' => 'Dental Cleaning',
+            'dental cleaning' => 'Dental Checkup & Cleaning',
+            'dental checkup' => 'Dental Checkup & Cleaning',
+            'dental' => 'Dental Checkup & Cleaning',
+            'checkup' => 'Dental Checkup & Cleaning',
             'general consultation' => 'General Consultation',
             'general' => 'General Consultation',
             'consultation' => 'General Consultation',
+            'scan' => 'Ultrasound Scan (Obstetric)',
             'ultrasound' => 'Ultrasound Scan (Obstetric)',
             'ultrasound scan' => 'Ultrasound Scan (Obstetric)',
             'xray' => 'Digital X-Ray',
@@ -805,46 +822,6 @@ class BookingChatService
     {
         $normalizedMessage = $this->normalize($message);
         $services = $hospital->services()->active()->orderBy('id')->get();
-        $aliasMatches = [];
-        foreach ($this->serviceAliases() as $alias => $serviceName) {
-            $normalizedAlias = $this->normalize($alias);
-            if ($normalizedAlias === '' || ! preg_match('/(?<![\pL\pN])'.preg_quote($normalizedAlias, '/').'(?![\pL\pN])/u', $normalizedMessage)) {
-                continue;
-            }
-
-            $candidateServices = $services->filter(function (Service $candidate) use ($normalizedAlias, $serviceName): bool {
-                $normalizedCandidate = $this->normalize($candidate->name);
-                $normalizedTarget = $this->normalize($serviceName);
-
-                if ($normalizedCandidate === $normalizedTarget) {
-                    return true;
-                }
-
-                $candidateTokens = $this->meaningfulTokens($normalizedCandidate);
-                $aliasTokens = $this->meaningfulTokens($normalizedAlias);
-                if ($candidateTokens === [] || $aliasTokens === []) {
-                    return false;
-                }
-
-                return count(array_intersect($candidateTokens, $aliasTokens)) > 0
-                    || str_contains($normalizedCandidate, $normalizedAlias)
-                    || str_contains($normalizedAlias, $normalizedCandidate);
-            });
-
-            foreach ($candidateServices as $service) {
-                $aliasMatches[$service->id] = $service;
-            }
-        }
-
-        $aliasMatches = array_values($aliasMatches);
-        if (count($aliasMatches) === 1) {
-            return $aliasMatches[0];
-        }
-
-        if (count($aliasMatches) > 1) {
-            return null;
-        }
-
         $exactMatches = $services->filter(function (Service $service) use ($normalizedMessage): bool {
             $normalizedName = $this->normalize($service->name);
 
@@ -863,6 +840,84 @@ class BookingChatService
                 > mb_strlen($this->normalize($longestName[1]->name))
                 ? $longestName[0]
                 : null;
+        }
+
+        $matchedAliases = [];
+        foreach ($this->serviceAliases() as $alias => $serviceName) {
+            $normalizedAlias = $this->normalize($alias);
+            if ($normalizedAlias !== ''
+                && preg_match('/(?<![\pL\pN])'.preg_quote($normalizedAlias, '/').'(?![\pL\pN])/u', $normalizedMessage)
+            ) {
+                $matchedAliases[$normalizedAlias] = $this->normalize($serviceName);
+            }
+        }
+
+        foreach ($matchedAliases as $alias => $target) {
+            foreach ($matchedAliases as $otherAlias => $unusedTarget) {
+                if ($alias !== $otherAlias
+                    && mb_strlen($otherAlias) > mb_strlen($alias)
+                    && str_contains(' '.$otherAlias.' ', ' '.$alias.' ')
+                ) {
+                    unset($matchedAliases[$alias]);
+                    break;
+                }
+            }
+        }
+
+        $aliasMatches = [];
+        foreach ($matchedAliases as $alias => $target) {
+            $exactTargetMatches = $services->filter(
+                fn (Service $service): bool => $this->normalize($service->name) === $target,
+            );
+            if ($exactTargetMatches->isNotEmpty()) {
+                foreach ($exactTargetMatches as $service) {
+                    $aliasMatches[$service->id] = $service;
+                }
+
+                continue;
+            }
+
+            $aliasTokens = $this->meaningfulTokens($alias);
+            $aliasTokenMatches = $services->filter(function (Service $service) use ($aliasTokens): bool {
+                $serviceTokens = $this->meaningfulTokens($service->name);
+
+                return $aliasTokens !== []
+                    && count(array_intersect($aliasTokens, $serviceTokens)) === count($aliasTokens);
+            });
+            if (count($aliasTokens) === 1 && $aliasTokenMatches->count() > 1) {
+                foreach ($aliasTokenMatches as $service) {
+                    $aliasMatches[$service->id] = $service;
+                }
+
+                continue;
+            }
+            if ($aliasTokenMatches->isNotEmpty()) {
+                foreach ($aliasTokenMatches as $service) {
+                    $aliasMatches[$service->id] = $service;
+                }
+
+                continue;
+            }
+
+            $targetTokens = $this->meaningfulTokens($target);
+            $rankedMatches = $services->map(fn (Service $service): array => [
+                'service' => $service,
+                'score' => count(array_intersect($targetTokens, $this->meaningfulTokens($service->name))),
+            ]);
+            $bestScore = (int) $rankedMatches->max('score');
+            if ($bestScore > 0) {
+                foreach ($rankedMatches->where('score', $bestScore)->pluck('service') as $service) {
+                    $aliasMatches[$service->id] = $service;
+                }
+            }
+        }
+
+        if (count($aliasMatches) === 1) {
+            return array_values($aliasMatches)[0];
+        }
+
+        if (count($aliasMatches) > 1) {
+            return null;
         }
 
         $messageTokens = explode(' ', $normalizedMessage);
@@ -1075,26 +1130,26 @@ class BookingChatService
         return null;
     }
 
-    private function extractIntent(string $message): string
+    private function extractIntent(string $message, string $state): string
     {
         $normalized = mb_strtolower(trim($message));
 
-        if (preg_match('/\b(start over|start again|restart|reset|begin again|anza upya|tuanzie upya)\b/u', $normalized)) {
+        if ($state !== self::STATE_IDLE
+            && preg_match('/\b(start over|start again|restart|reset|begin again|anza upya|tuanzie upya)\b/u', $normalized)
+        ) {
             return 'reset';
         }
-        if (preg_match('/\b(cancel|never mind|nevermind|hapana|stop booking|forget it|don\'t|stop)\b/u', $normalized)) {
+        if ($state !== self::STATE_IDLE
+            && preg_match('/\b(cancel|never mind|nevermind|hapana|stop booking|forget it|don\'t|stop)\b/u', $normalized)
+        ) {
             return 'cancel';
         }
+        // Extract yes/no in all states, but handle specially based on state
         if (preg_match('/^\s*(?:yes|y|yeah|yep|ok|confirm|book it|proceed|ndiyo|ndio|sawa)\b/u', $normalized)) {
             return 'yes';
         }
-        if (preg_match('/^\s*(?:no|n|nope|cancel)\b/u', $normalized)) {
+        if (preg_match('/^\s*(?:no|n|nope)\b/u', $normalized)) {
             return 'no';
-        }
-        if ($this->containsEscalationPhrase($message)
-            || $this->isHumanRequestAboutExistingBooking($message)
-        ) {
-            return 'escalation';
         }
         if (preg_match('/\b(status|payment status|booking status)\b/u', $normalized)) {
             return 'status';
@@ -1105,14 +1160,8 @@ class BookingChatService
         if ($this->containsBookingKeyword($message)) {
             return 'book';
         }
-        if (preg_match('/^(?:hi|hello|hey|habari|hujambo|jambo|mambo|vipi|niaje|sasa|shikamoo|marahaba|salama|poa|freshi|mzuri|nzuri|good morning|good afternoon|good evening)[.!?,\s]*$/u', $normalized)) {
-            return 'greeting';
-        }
-        if (preg_match('/\b(thank you|thanks|thank you very much|asante|shukran|appreciate it)\b/iu', $normalized)) {
-            return 'thanks';
-        }
-        if (preg_match('/\b(help|support|what can you do|how does this work)\b/u', $normalized)) {
-            return 'help';
+        if ($this->containsEscalationPhrase($message)) {
+            return 'escalation';
         }
         if (preg_match('/\b(price|prices|fee|fees|cost|costs|how much|charge|charges|bei|ada)\b/u', $normalized)) {
             return 'pricing';
@@ -1134,8 +1183,16 @@ class BookingChatService
         if (preg_match('/\b(contact(?: the hospital)?|phone number|hospital phone|telephone number|email address|hospital email|website|whatsapp number|call the hospital|what is your phone number)\b/iu', $normalized)) {
             return 'contact';
         }
-        if ($this->containsBookingKeyword($message)) {
-            return 'book';
+        if ($state === self::STATE_IDLE
+            && preg_match('/^(?:hi|hello|hey|habari|hujambo|jambo|mambo|vipi|niaje|sasa|shikamoo|marahaba|salama|poa|freshi|mzuri|nzuri|good morning|good afternoon|good evening)[.!?,\s]*$/u', $normalized)
+        ) {
+            return 'greeting';
+        }
+        if (preg_match('/\b(help|support|what can you do|how does this work)\b/u', $normalized)) {
+            return 'help';
+        }
+        if (preg_match('/\b(thank you|thanks|thank you very much|asante|shukran|appreciate it)\b/iu', $normalized)) {
+            return 'thanks';
         }
         if (preg_match('/\b(capital of|president of|population of|weather|stock price|who invented|who won|define|meaning of|translate)\b/u', $normalized)) {
             return 'out_of_scope';
@@ -1356,7 +1413,7 @@ class BookingChatService
         }
 
         return sprintf(
-            'Sure, I can help you book an appointment at %s.\n\nWhat service do you need?',
+            "Sure, I can help you book an appointment at %s.\n\nWhat service do you need?",
             $hospital->name,
         );
     }
@@ -1417,10 +1474,33 @@ class BookingChatService
 
     private function specialtyDoctors(Hospital $hospital, string $specialty): Collection
     {
+        $normalizedSpecialty = $this->normalizeSpecialty($specialty);
+
         return $this->activeDoctors($hospital)
-            ->whereRaw('LOWER(TRIM(specialization)) = ?', [mb_strtolower(trim($specialty))])
-            ->orderBy('name')
-            ->get();
+            ->get()
+            ->filter(fn (User $doctor): bool => $this->specialtiesMatch(
+                $normalizedSpecialty,
+                $this->normalizeSpecialty((string) $doctor->specialization),
+            ))
+            ->sortBy('name')
+            ->values();
+    }
+
+    private function specialtiesMatch(string $requiredSpecialty, string $doctorSpecialty): bool
+    {
+        if ($requiredSpecialty === '' || $doctorSpecialty === '') {
+            return false;
+        }
+
+        return $requiredSpecialty === $doctorSpecialty
+            || str_contains($requiredSpecialty, $doctorSpecialty)
+            || str_contains($doctorSpecialty, $requiredSpecialty)
+            || substr($requiredSpecialty, 0, 4) === substr($doctorSpecialty, 0, 4);
+    }
+
+    private function normalizeSpecialty(string $specialty): string
+    {
+        return trim(mb_strtolower($specialty));
     }
 
     private function activeDoctors(Hospital $hospital): HasMany

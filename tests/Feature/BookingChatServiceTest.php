@@ -117,6 +117,18 @@ class BookingChatServiceTest extends TestCase
         $this->assertStringContainsString('Which doctor', $response->message);
     }
 
+    public function test_scan_alias_matches_ultrasound_instead_of_ct(): void
+    {
+        [, $services] = $this->createContext([
+            'CT Scan (Head/Chest/Abdomen)',
+            'Ultrasound Scan (Obstetric)',
+        ]);
+
+        app(BookingChatService::class)->handle('scan-alias', 'scan', 'web');
+
+        $this->assertSame($services[1]->id, $this->state('scan-alias')['service_id']);
+    }
+
     public function test_service_recognized_from_partial_name(): void
     {
         [$hospital, $services] = $this->createContext([
@@ -162,7 +174,10 @@ class BookingChatServiceTest extends TestCase
 
     public function test_multi_field_message_skips_matching_prompt(): void
     {
-        [, $services, $doctors] = $this->createContext();
+        [, $services, $doctors] = $this->createContext([
+            'Dental Checkup & Cleaning',
+            'Optical Eye Checkup',
+        ]);
         DoctorAvailability::query()
             ->where('doctor_id', $doctors[0]->id)
             ->update([
@@ -224,6 +239,17 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame('CANCELLED', $cancelled->state);
     }
 
+    public function test_idle_cancel_does_not_cancel_a_nonexistent_booking(): void
+    {
+        $this->createContext();
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle('idle-cancel', 'cancel', 'web');
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertStringNotContainsString('booking has been cancelled', mb_strtolower($response->message));
+    }
+
     public function test_greeting_from_idle_uses_chatbot_name(): void
     {
         [$hospital] = $this->createContext();
@@ -232,6 +258,19 @@ class BookingChatServiceTest extends TestCase
         $response = app(BookingChatService::class)->handle('idle-greeting', 'hello', 'web');
 
         $this->assertStringContainsString('Pearlie', $response->message);
+    }
+
+    public function test_greeting_during_booking_prompts_for_the_next_missing_field(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $chat->handle('active-greeting', 'Book Dental Cleaning', 'web');
+
+        $response = $chat->handle('active-greeting', 'hello', 'web');
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertStringContainsString('What date would you prefer?', $response->message);
+        $this->assertStringNotContainsString('healthcare assistant', mb_strtolower($response->message));
     }
 
     public function test_out_of_scope_stays_on_topic(): void

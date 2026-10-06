@@ -15,32 +15,50 @@ class BookingChatEscalationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_booking_intent_with_human_request_creates_an_escalation(): void
+    public function test_booking_keyword_wins_when_human_request_mentions_a_booking(): void
     {
-        $hospital = $this->createHospitalContext();
+        $this->createHospitalContext();
         Mail::fake();
         Http::preventStrayRequests();
         $sessionId = 'booking-human-escalation-session';
+        $message = 'I need a human to call me about my booking. My phone is 254748249882.';
 
         $response = app(BookingChatService::class)->handle(
             $sessionId,
-            'I need a human to call me about my booking. My phone is 254748249882.',
+            $message,
         );
 
-        $this->assertSame('human_escalation', $response->source);
-        $this->assertStringContainsString('connecting you to a health worker', $response->message);
-        $this->assertDatabaseHas('escalations', [
-            'session_id' => $sessionId,
-            'user_message' => 'I need a human to call me about my booking. My phone is 254748249882.',
-            'user_phone' => '254748249882',
-            'hospital_id' => $hospital->id,
-            'status' => Escalation::STATUS_PENDING,
-        ]);
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertStringNotContainsString('health worker', mb_strtolower($response->message));
+        $this->assertDatabaseMissing('escalations', ['session_id' => $sessionId]);
         $this->assertDatabaseHas('conversations', [
             'session_id' => $sessionId,
-            'user_message' => 'I need a human to call me about my booking. My phone is 254748249882.',
-            'escalated' => true,
+            'user_message' => $message,
+            'escalated' => false,
         ]);
+    }
+
+    public function test_booking_with_phone_clears_pending_escalation_instead_of_completing_it(): void
+    {
+        $this->createHospitalContext();
+        Mail::fake();
+        Http::preventStrayRequests();
+        $sessionId = 'booking-cancels-pending-escalation';
+        $chat = app(BookingChatService::class);
+
+        $chat->handle($sessionId, 'I need a human', 'web');
+        $response = $chat->handle(
+            $sessionId,
+            'I want to book an appointment. My phone is 254748249882.',
+            'web',
+        );
+        $state = $chat->getState($sessionId);
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertFalse($state['escalation_pending']);
+        $this->assertNull($state['pending_escalation_message']);
+        $this->assertSame('254748249882', $state['patient_phone']);
+        $this->assertDatabaseMissing('escalations', ['session_id' => $sessionId]);
     }
 
     public function test_booking_chat_collects_a_phone_before_completing_a_human_handoff(): void
@@ -52,7 +70,7 @@ class BookingChatEscalationTest extends TestCase
 
         $phonePrompt = app(BookingChatService::class)->handle(
             $sessionId,
-            'I need a human to call me about my booking.',
+            'I need a human to call me.',
         );
 
         $this->assertStringContainsString('share your phone number', $phonePrompt->message);
@@ -63,7 +81,7 @@ class BookingChatEscalationTest extends TestCase
         $this->assertSame('human_escalation', $handoff->source);
         $this->assertDatabaseHas('escalations', [
             'session_id' => $sessionId,
-            'user_message' => 'I need a human to call me about my booking.',
+            'user_message' => 'I need a human to call me.',
             'user_phone' => '254748249882',
             'hospital_id' => $hospital->id,
             'status' => Escalation::STATUS_PENDING,
@@ -80,7 +98,7 @@ class BookingChatEscalationTest extends TestCase
         $chat->handle($sessionId, 'I want to book an appointment', 'web');
         $chat->handle($sessionId, 'My name is Test Patient, phone 254748249882', 'web');
 
-        $response = $chat->handle($sessionId, 'I need a human about my appointment.', 'web');
+        $response = $chat->handle($sessionId, 'I need a human.', 'web');
         $state = $chat->getState($sessionId);
 
         $this->assertSame('human_escalation', $response->source);
