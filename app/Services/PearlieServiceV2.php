@@ -581,6 +581,12 @@ class PearlieServiceV2
             return false;
         }
 
+        if (preg_match('/\b(?:availability|available|free slots?)\b/iu', $message)
+            && ! preg_match('/\b(?:human|someone|person|health worker|call me|speak|talk)\b/iu', $message)
+        ) {
+            return false;
+        }
+
         $keywords = config('pearlie.escalation.auto_escalate_keywords', []);
 
         if ($bookingIntent) {

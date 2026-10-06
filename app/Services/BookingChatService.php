@@ -89,7 +89,10 @@ class BookingChatService
             app(EscalationService::class)->createEscalation(
                 $sessionId,
                 $pendingMessage,
-                "I'm connecting you to a health worker now. You'll get a response shortly.",
+                sprintf(
+                    "Thank you. Your request has been passed to the %s team. I'm connecting you to a health worker now; someone will reach out shortly.",
+                    $hospital->name,
+                ),
                 $this->extractPhone($message),
             );
             $state['escalation_pending'] = false;
@@ -99,7 +102,10 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                "I'm connecting you to a health worker now. You'll get a response shortly.",
+                sprintf(
+                    "Thank you. Your request has been passed to the %s team. I'm connecting you to a health worker now; someone will reach out shortly.",
+                    $hospital->name,
+                ),
                 $state,
                 source: 'human_escalation',
                 escalated: true,
@@ -126,6 +132,7 @@ class BookingChatService
 
         if ($this->containsBookingKeyword($message)
             && $this->containsEscalationPhrase($message)
+            && ! $this->isHumanRequestAboutExistingBooking($message)
         ) {
             $intent = 'book';
         }
@@ -754,6 +761,12 @@ class BookingChatService
         return $this->hasExplicitHumanPhrase($message);
     }
 
+    private function isHumanRequestAboutExistingBooking(string $message): bool
+    {
+        return $this->hasExplicitHumanPhrase($message)
+            && preg_match('/\b(?:about|regarding|concerning)\s+(?:my|the)\s+(?:booking|appointment)\b/iu', $message) === 1;
+    }
+
     /**
      * @return array<string, string>
      */
@@ -1078,7 +1091,9 @@ class BookingChatService
         if (preg_match('/^\s*(?:no|n|nope|cancel)\b/u', $normalized)) {
             return 'no';
         }
-        if ($this->containsEscalationPhrase($message) && ! $this->containsBookingKeyword($message)) {
+        if ($this->containsEscalationPhrase($message)
+            || $this->isHumanRequestAboutExistingBooking($message)
+        ) {
             return 'escalation';
         }
         if (preg_match('/\b(status|payment status|booking status)\b/u', $normalized)) {
@@ -1286,7 +1301,7 @@ class BookingChatService
                 $channel,
                 $message,
                 sprintf(
-                    "I've noted your request. What's the best phone number for a member of the %s team to reach you on?",
+                    "I've noted your request. Please share your phone number — what's the best phone number for a member of the %s team to reach you on?",
                     $hospital->name,
                 ),
                 $state,
@@ -1298,7 +1313,7 @@ class BookingChatService
             app(EscalationService::class)->createEscalation(
                 $sessionId,
                 $message,
-                sprintf("I've noted your request. What's the best phone number for a member of the %s team to reach you on?", $hospital->name),
+                sprintf("I've noted your request. Please share your phone number — what's the best phone number for a member of the %s team to reach you on?", $hospital->name),
                 $phone,
             );
 
@@ -1307,7 +1322,7 @@ class BookingChatService
                 $channel,
                 $message,
                 sprintf(
-                    "Thank you. Your request has been passed to the %s team. Someone will reach out shortly.",
+                    "Thank you. Your request has been passed to the %s team. I'm connecting you to a health worker now; someone will reach out shortly.",
                     $hospital->name,
                 ),
                 $state,
@@ -1325,7 +1340,7 @@ class BookingChatService
             $channel,
             $message,
             sprintf(
-                "I've noted your request. What's the best phone number for a member of the %s team to reach you on?",
+                "I've noted your request. Please share your phone number — what's the best phone number for a member of the %s team to reach you on?",
                 $hospital->name,
             ),
             $state,
