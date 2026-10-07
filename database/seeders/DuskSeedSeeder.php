@@ -4,9 +4,12 @@ namespace Database\Seeders;
 
 use App\Models\AppointmentRequest;
 use App\Models\Hospital;
+use App\Models\MpesaPayment;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 class DuskSeedSeeder extends Seeder
@@ -29,6 +32,8 @@ class DuskSeedSeeder extends Seeder
                 'chatbot_name' => 'Pearlie',
                 'subscription_plan' => 'enterprise',
                 'subscription_status' => 'active',
+                'auto_confirm_paid_appointments' => true,
+                'settings' => ['auto_confirm_paid_appointments' => true],
                 'is_active' => true,
             ])->save();
 
@@ -84,51 +89,88 @@ class DuskSeedSeeder extends Seeder
                 ->keyBy('name');
 
             $appointmentDate = CarbonImmutable::now()->next(CarbonImmutable::MONDAY)->toDateString();
-            $hospital->appointments()->updateOrCreate(
-                ['session_id' => 'browser-smoke-pending'],
-                [
-                    'patient_id' => $patient->id,
-                    'name' => $patient->name,
-                    'phone' => '254748249882',
-                    'mpesa_phone' => '254748249882',
-                    'email' => $patient->email,
-                    'preferred_date' => $appointmentDate,
-                    'reason' => 'Dental checkup browser smoke test',
-                    'raw_message' => 'Browser smoke-test appointment: pending.',
-                    'status' => AppointmentRequest::STATUS_PENDING,
-                    'booking_fee' => 2500,
-                    'payment_amount' => 2500,
-                    'payment_status' => 'pending',
-                    'doctor_id' => $doctorOne->id,
-                    'service_id' => $services['Dental Checkup & Cleaning']->id,
-                    'slot_start_time' => '09:00',
-                    'slot_end_time' => '09:30',
-                    'status_updated_at' => now(),
-                ],
-            );
-            $hospital->appointments()->updateOrCreate(
-                ['session_id' => 'browser-smoke-confirmed'],
-                [
-                    'patient_id' => $patient->id,
-                    'name' => $patient->name,
-                    'phone' => '254748249882',
-                    'mpesa_phone' => '254748249882',
-                    'email' => $patient->email,
-                    'preferred_date' => $appointmentDate,
-                    'reason' => 'General consultation browser smoke test',
-                    'raw_message' => 'Browser smoke-test appointment: confirmed.',
-                    'status' => AppointmentRequest::STATUS_CONFIRMED,
-                    'booking_fee' => 1500,
-                    'payment_amount' => 1500,
-                    'payment_status' => 'paid',
-                    'paid_at' => now(),
-                    'doctor_id' => $doctorTwo->id,
-                    'service_id' => $services['General Consultation']->id,
-                    'slot_start_time' => '10:00',
-                    'slot_end_time' => '10:30',
-                    'status_updated_at' => now(),
-                ],
-            );
+            Model::unguarded(function () use (
+                $appointmentDate,
+                $doctorOne,
+                $doctorTwo,
+                $hospital,
+                $patient,
+                $services,
+            ): void {
+                $hospital->appointments()->updateOrCreate(
+                    ['session_id' => 'browser-smoke-pending'],
+                    [
+                        'id' => 14,
+                        'patient_id' => $patient->id,
+                        'name' => $patient->name,
+                        'phone' => '254748249882',
+                        'mpesa_phone' => '254748249882',
+                        'email' => $patient->email,
+                        'preferred_date' => $appointmentDate,
+                        'reason' => 'Dental cleaning browser smoke test',
+                        'raw_message' => 'Browser smoke-test appointment: pending.',
+                        'status' => AppointmentRequest::STATUS_PENDING,
+                        'booking_fee' => 2500,
+                        'payment_amount' => 2500,
+                        'payment_status' => 'pending',
+                        'doctor_id' => $doctorOne->id,
+                        'service_id' => $services['Dental Checkup & Cleaning']->id,
+                        'slot_start_time' => '09:00',
+                        'slot_end_time' => '09:30',
+                        'status_updated_at' => now(),
+                    ],
+                );
+                $confirmedAppointment = $hospital->appointments()->updateOrCreate(
+                    ['session_id' => 'browser-smoke-confirmed'],
+                    [
+                        'id' => 15,
+                        'patient_id' => $patient->id,
+                        'name' => $patient->name,
+                        'phone' => '254748249882',
+                        'mpesa_phone' => '254748249882',
+                        'email' => $patient->email,
+                        'preferred_date' => $appointmentDate,
+                        'reason' => 'General consultation browser smoke test',
+                        'raw_message' => 'Browser smoke-test appointment: confirmed.',
+                        'status' => AppointmentRequest::STATUS_CONFIRMED,
+                        'booking_fee' => 1500,
+                        'payment_amount' => 1500,
+                        'payment_status' => 'paid',
+                        'paid_at' => now(),
+                        'doctor_id' => $doctorTwo->id,
+                        'service_id' => $services['General Consultation']->id,
+                        'slot_start_time' => '10:00',
+                        'slot_end_time' => '10:30',
+                        'status_updated_at' => now(),
+                    ],
+                );
+
+                $payment = $hospital->mpesaPayments()->updateOrCreate(
+                    ['mpesa_receipt' => 'UJ1DF8SEEP'],
+                    [
+                        'appointment_request_id' => $confirmedAppointment->id,
+                        'checkout_request_id' => 'ws_CO_PRESERVED_UJ1DF8SEEP',
+                        'merchant_request_id' => (string) Str::uuid(),
+                        'phone' => '254712345678',
+                        'amount' => 1,
+                        'status' => MpesaPayment::STATUS_COMPLETED,
+                        'result_code' => 0,
+                        'result_description' => 'The service request is processed successfully.',
+                        'processed_at' => now(),
+                    ],
+                );
+
+                $payment->events()->updateOrCreate(
+                    ['event' => 'payment_completed'],
+                    [
+                        'hospital_id' => $hospital->id,
+                        'payload' => [
+                            'receipt' => 'UJ1DF8SEEP',
+                            'restored_at' => now()->toIso8601String(),
+                        ],
+                    ],
+                );
+            });
 
         } finally {
             if ($previousHospital) {

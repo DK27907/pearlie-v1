@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\DoctorAvailability;
 use App\Models\Hospital;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -135,16 +136,22 @@ class DoctorUserSeeder extends Seeder
                 foreach ($seededDoctors as $doctor) {
                     foreach (range(0, 6) as $dayOfWeek) {
                         $isAvailable = $slug !== 'pearl' || $dayOfWeek !== 0;
-                        $doctor->availabilities()->updateOrCreate(
-                            ['day_of_week' => $dayOfWeek],
-                            [
-                                'start_time' => '08:00',
-                                'end_time' => '17:00',
-                                'slot_duration_minutes' => $hospital->slot_duration_minutes,
-                                'max_patients_per_slot' => 1,
-                                'is_active' => $isAvailable,
-                            ],
-                        );
+                        $availability = DoctorAvailability::query()
+                            ->withoutGlobalScope('hospital')
+                            ->updateOrCreate(
+                                [
+                                    'doctor_id' => $doctor->id,
+                                    'day_of_week' => $dayOfWeek,
+                                ],
+                                [
+                                    'start_time' => '08:00',
+                                    'end_time' => '17:00',
+                                    'slot_duration_minutes' => $hospital->slot_duration_minutes,
+                                    'max_patients_per_slot' => 1,
+                                    'is_active' => $isAvailable,
+                                ],
+                            );
+                        $availability->forceFill(['hospital_id' => $hospital->id])->save();
                     }
                 }
             }

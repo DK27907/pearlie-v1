@@ -12,7 +12,7 @@
 
 @section('content')
     <header class="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <nav class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+        <nav class="mx-auto flex max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
             <a href="{{ $homeRoute }}" class="flex items-center gap-3">
                 @if ($branding['logo_url'])
                     <img class="h-11 w-11 rounded-xl object-contain" src="{{ $branding['logo_url'] }}" alt="">
@@ -59,7 +59,7 @@
 
     <main>
         <section class="bg-gradient-to-br from-white to-slate-100">
-            <div class="mx-auto grid max-w-7xl items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:px-8 lg:py-24">
+            <div class="mx-auto grid max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:px-8 lg:py-24">
                 <div>
                     <p class="inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-sky-700">Healthcare made simple</p>
                     <h1 class="mt-6 text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">
@@ -99,11 +99,16 @@
             </div>
         </section>
 
-        <section id="services" class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <section id="services" class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 py-16 sm:px-6 lg:px-8">
             <div class="mb-8 flex items-end justify-between gap-4">
                 <div>
                     <p class="text-sm font-bold uppercase tracking-[0.2em] text-sky-700">Services</p>
                     <h2 class="mt-2 text-3xl font-extrabold text-slate-900">Care designed around your needs</h2>
+                    <p class="mt-2 text-sm text-slate-600">
+                        A standard booking deposit of
+                        <span class="font-semibold text-slate-800">KSh {{ number_format((float) $hospital->deposit_amount, 2) }}</span>
+                        applies when booking without a service. Service-specific prices are listed below.
+                    </p>
                 </div>
             </div>
             @if ($catalogServices->isNotEmpty())
@@ -141,7 +146,7 @@
         </section>
 
         <section id="doctors" class="bg-slate-900 py-16 text-white">
-            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 sm:px-6 lg:px-8">
                 <div class="mb-8">
                     <p class="text-sm font-bold uppercase tracking-[0.2em] text-sky-300">Doctors</p>
                     <h2 class="mt-2 text-3xl font-extrabold">Meet our care team</h2>
@@ -172,7 +177,7 @@
             </div>
         </section>
 
-        <section id="hours" class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <section id="hours" class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 py-16 sm:px-6 lg:px-8">
             <div class="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
                 <p class="text-sm font-bold uppercase tracking-[0.2em] text-sky-700">Hours</p>
                 <h2 class="mt-2 text-3xl font-extrabold text-slate-900">When to visit or call</h2>
@@ -193,7 +198,7 @@
             </div>
         </section>
 
-        <section id="how-it-works" class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <section id="how-it-works" class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 py-16 sm:px-6 lg:px-8">
             <h2 class="text-center text-3xl font-extrabold text-slate-900">How it works</h2>
             <div class="mt-10 grid gap-6 md:grid-cols-4">
                 @foreach(['Ask', 'Choose', 'Book', 'Confirm'] as $step)
@@ -215,7 +220,7 @@
             </div>
         </section>
 
-        <section id="contact" class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <section id="contact" class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 py-16 sm:px-6 lg:px-8">
             <div class="grid gap-6 lg:grid-cols-2">
                 <div class="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
                     <p class="text-sm font-bold uppercase tracking-[0.2em] text-sky-700">Contact</p>
@@ -251,7 +256,7 @@
     </main>
 
     <footer class="border-t border-slate-200 bg-white">
-        <div class="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 text-sm text-slate-600 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+        <div class="mx-auto flex max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] flex-col gap-3 px-4 py-6 text-sm text-slate-600 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
             <div>
                 <p class="font-bold text-slate-900">{{ $branding['footer_text'] }}</p>
                 <p class="text-xs">Powered by MediDesk AI · By AxiomForge Digital Solutions</p>

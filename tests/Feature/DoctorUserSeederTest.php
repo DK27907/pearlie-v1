@@ -8,6 +8,7 @@ use App\Models\User;
 use Database\Seeders\DoctorUserSeeder;
 use Database\Seeders\HospitalSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class DoctorUserSeederTest extends TestCase
@@ -43,6 +44,26 @@ class DoctorUserSeederTest extends TestCase
             'is_doctor' => true,
             'role' => 'doctor',
         ]);
+        $existingDoctor = User::factory()->create([
+            'hospital_id' => $hospital->id,
+            'name' => 'Dr. Amina Njeri',
+            'email' => 'doctor1@pearl.test',
+            'specialization' => 'Dentist',
+            'is_doctor' => true,
+            'role' => 'doctor',
+        ]);
+        DB::table('doctor_availabilities')->insert([
+            'doctor_id' => $existingDoctor->id,
+            'day_of_week' => 1,
+            'start_time' => '08:00',
+            'end_time' => '17:00',
+            'slot_duration_minutes' => 30,
+            'max_patients_per_slot' => 1,
+            'is_active' => true,
+            'hospital_id' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
         $genericDoctor = User::factory()->create([
             'hospital_id' => $hospital->id,
             'name' => 'Doctor One',
@@ -70,6 +91,15 @@ class DoctorUserSeederTest extends TestCase
         $this->assertDatabaseMissing('users', ['id' => $genericDoctor->id]);
         $this->assertSame('Dr. Amina Njeri', $namedDoctor->name);
         $this->assertSame($namedDoctor->id, $appointment->fresh()->doctor_id);
+        $this->assertDatabaseHas('doctor_availabilities', [
+            'doctor_id' => $namedDoctor->id,
+            'day_of_week' => 1,
+            'hospital_id' => $hospital->id,
+        ]);
+        $this->assertSame(
+            7,
+            DB::table('doctor_availabilities')->where('doctor_id', $namedDoctor->id)->count(),
+        );
         $this->assertDatabaseHas('users', [
             'email' => 'doctor1@pearlhospital.co.ke',
             'is_active' => false,
