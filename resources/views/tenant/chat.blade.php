@@ -1,0 +1,448 @@
+@extends('layouts.tenant-chat')
+
+@php($branding = hospital_branding())
+@section('title', 'Chat with '.$branding['header_text'].' | MediDesk AI')
+
+@push('styles')
+<style>
+        .chat-page {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100dvh;
+            padding: 16px;
+        }
+
+        /* ── Chat Container ── */
+        .chat-container {
+            width: 100%;
+            max-width: 720px;
+            background: #ffffff;
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 85vh;
+            max-height: 750px;
+            transition: all 0.2s ease;
+        }
+
+        /* ── Header ── */
+        .chat-header {
+            background: linear-gradient(135deg, var(--tenant-primary), var(--tenant-secondary));
+            color: #fff;
+            padding: 20px 24px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-shrink: 0;
+        }
+
+        .chat-header .logo {
+            font-size: 28px;
+            line-height: 1;
+        }
+
+        .chat-header .title {
+            font-weight: 700;
+            font-size: 1.3rem;
+            letter-spacing: -0.3px;
+        }
+
+        .chat-header .subtitle {
+            font-weight: 400;
+            font-size: 0.8rem;
+            opacity: 0.8;
+            margin-top: 2px;
+        }
+
+        .chat-header .badge {
+            margin-left: auto;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 4px 12px;
+            border-radius: 30px;
+            font-size: 0.7rem;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+        }
+
+        /* ── Messages Area ── */
+        .chat-messages {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+            background: #f9fbfd;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 12px 18px;
+            border-radius: 18px;
+            line-height: 1.6;
+            font-size: 0.95rem;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            animation: fadeIn 0.25s ease;
+        }
+
+        .message.ai {
+            background: #ffffff;
+            color: #1a1a2e;
+            align-self: flex-start;
+            border: 1px solid #e9edf4;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message.user {
+            background: var(--tenant-primary);
+            color: #ffffff;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message .meta {
+            font-size: 0.7rem;
+            opacity: 0.6;
+            margin-top: 6px;
+            display: block;
+        }
+
+        /* ── Typing Indicator ── */
+        .typing-indicator {
+            display: none;
+            align-self: flex-start;
+            background: #e9edf4;
+            margin: 0 24px 12px;
+            padding: 12px 18px;
+            border-radius: 30px;
+            font-size: 0.9rem;
+            color: #555;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .typing-indicator .dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #888;
+            border-radius: 50%;
+            animation: pulse 1.2s infinite ease-in-out;
+        }
+
+        .typing-indicator .dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .typing-indicator .dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes pulse {
+            0%,
+            60%,
+            100% {
+                opacity: 0.3;
+                transform: scale(0.9);
+            }
+            30% {
+                opacity: 1;
+                transform: scale(1.1);
+            }
+        }
+
+        /* ── Input Area ── */
+        .chat-input {
+            display: flex;
+            gap: 10px;
+            padding: 14px 20px 20px;
+            background: #ffffff;
+            border-top: 1px solid #edf1f7;
+            flex-shrink: 0;
+        }
+
+        .quick-replies {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 0 20px 14px;
+            background: #f9fbfd;
+        }
+
+        .quick-reply {
+            border: 1px solid #d5e1ea;
+            border-radius: 999px;
+            background: #fff;
+            padding: 8px 12px;
+            color: var(--tenant-primary);
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+
+        .quick-reply:hover {
+            border-color: var(--tenant-secondary);
+            background: #eff8fc;
+        }
+
+        .language-select {
+            margin-left: auto;
+            max-width: 140px;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+            padding: 7px 10px;
+            color: #fff;
+            font-size: 0.8rem;
+        }
+
+        .language-select option {
+            color: var(--tenant-primary);
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 12px 18px;
+            border: 1px solid #dce2ec;
+            border-radius: 40px;
+            font-size: 1rem;
+            outline: none;
+            transition: border 0.2s ease;
+            background: #f7f9fc;
+        }
+
+        .chat-input input:focus {
+            border-color: var(--tenant-secondary);
+            background: #ffffff;
+        }
+
+        .chat-input input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .chat-input button {
+            padding: 12px 28px;
+            background: var(--tenant-primary);
+            color: #fff;
+            border: none;
+            border-radius: 40px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.1s ease;
+            white-space: nowrap;
+        }
+
+        .chat-input button:hover {
+            background: var(--tenant-secondary);
+        }
+
+        .chat-input button:active {
+            transform: scale(0.96);
+        }
+
+        .chat-input button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* ── Footer ── */
+        .chat-footer {
+            text-align: center;
+            padding: 10px 16px;
+            font-size: 0.7rem;
+            color: #aab;
+            background: #ffffff;
+            border-top: 1px solid #f0f3f8;
+            flex-shrink: 0;
+        }
+
+        .chat-footer a {
+            color: var(--tenant-secondary);
+            text-decoration: none;
+        }
+
+        /* ── Animations ── */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ── Scrollbar ── */
+        .chat-messages::-webkit-scrollbar {
+            width: 5px;
+        }
+        .chat-messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #d0d8e5;
+            border-radius: 10px;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 600px) {
+            .chat-page {
+                min-height: 100dvh;
+                padding: 0;
+            }
+            .chat-container {
+                height: 100dvh;
+                max-height: none;
+                border-radius: 0;
+                margin: 0;
+            }
+            .chat-messages {
+                padding: 16px;
+            }
+            .chat-header .title {
+                font-size: 1.1rem;
+            }
+            .message {
+                max-width: 90%;
+                font-size: 0.9rem;
+                padding: 10px 14px;
+            }
+            .chat-input {
+                padding: 10px 16px 16px;
+                gap: 8px;
+                position: sticky;
+                bottom: 0;
+            }
+            .quick-replies {
+                padding: 0 16px 12px;
+            }
+            .chat-input input {
+                padding: 10px 14px;
+                font-size: 0.95rem;
+            }
+            .chat-input button {
+                padding: 10px 18px;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+@endpush
+
+@section('content')
+<section class="chat-page">
+
+    <div class="chat-container">
+
+        <!-- ─── Header ─── -->
+        <div class="chat-header">
+            @if ($branding['logo_url'])
+                <img
+                    class="logo h-9 w-9 rounded-md bg-white object-contain p-1"
+                    src="{{ $branding['logo_url'] }}"
+                    alt="{{ $branding['header_text'] }} logo"
+                />
+            @else
+                <span class="logo" aria-hidden="true">🏥</span>
+            @endif
+            <div>
+                <div class="title">{{ $aiName }} AI Assistant</div>
+                <div class="subtitle">{{ $branding['header_text'] }}@if ($hospital->address) &bull; {{ $hospital->address }}@endif</div>
+            </div>
+            <label class="sr-only" for="languageToggle">Chat language</label>
+            <select id="languageToggle" class="language-select" aria-label="Chat language">
+                <option value="en" @selected(pearlie_config('ai.default_language', 'en') === 'en')>English</option>
+                <option value="sw" @selected(pearlie_config('ai.default_language', 'en') === 'sw')>Kiswahili</option>
+            </select>
+            <span class="badge">AI</span>
+        </div>
+
+        @if ($services->isNotEmpty())
+            <div class="border-b border-slate-200 bg-white px-5 py-3">
+                <div>
+                    <label for="bookingService" class="block text-sm font-semibold text-slate-700">Choose a service (optional)</label>
+                    <select id="bookingService" data-service-select class="mt-1 block w-full rounded-lg border-slate-300 text-sm focus:border-cyan-600 focus:ring-cyan-600">
+                        <option value="" disabled @selected($selectedServiceId === null)>Select a service</option>
+                        @foreach ($services as $service)
+                            <option value="{{ $service->id }}" data-price="{{ number_format((float) $service->price, 2, '.', '') }}" data-duration="{{ $service->duration_minutes }}" @selected($selectedServiceId === $service->id)>
+                                {{ $service->name }} — KSh {{ number_format((float) $service->price, 2) }} ({{ $service->duration_minutes }} min)
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+        @endif
+
+        <!-- ─── Messages ─── -->
+        <div class="chat-messages" id="messages">
+            <div class="message ai"
+                data-welcome-en="👋 Hello! I'm {{ $aiName }}, {{ $hospital->name }}'s healthcare assistant. How can I help you today?"
+                data-welcome-sw="👋 Habari! Mimi ni {{ $aiName }}, msaidizi wa afya wa {{ $hospital->name }}. Naweza kukusaidia vipi leo?"></div>
+        </div>
+
+        <div class="quick-replies" aria-label="Suggested questions">
+            <button type="button" class="quick-reply" data-message-en="I want to book an appointment" data-message-sw="Ninataka kuweka miadi" data-label-en="Book Appointment" data-label-sw="Weka Miadi"></button>
+            <button type="button" class="quick-reply" data-message-en="What services do you offer?" data-message-sw="Huduma zenu ni zipi?" data-label-en="Our Services" data-label-sw="Huduma"></button>
+            <button type="button" class="quick-reply" data-message-en="I need emergency help" data-message-sw="Nina dharura" data-label-en="Emergency" data-label-sw="Dharura"></button>
+            <button type="button" class="quick-reply" data-message-en="Where are you located?" data-message-sw="Mko wapi?" data-label-en="Location" data-label-sw="Mahali"></button>
+        </div>
+
+        <!-- ─── Typing Indicator ─── -->
+        <div class="typing-indicator" id="typingIndicator" role="status" aria-live="polite">
+            <span data-label-en="{{ $aiName }} is thinking" data-label-sw="{{ $aiName }} anafikiria">{{ $aiName }} is thinking</span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+        </div>
+
+        <!-- ─── Input ─── -->
+        <form
+            id="chatForm"
+            class="chat-input"
+            data-chat-url="{{ route('tenant.chat.post', ['slug' => $hospital->slug]) }}"
+            data-reset-url="{{ route('tenant.chat.reset', ['slug' => $hospital->slug]) }}"
+        >
+            <input
+                type="text"
+                id="userInput"
+                placeholder="Ask me anything about {{ $hospital->name }}..."
+                data-placeholder-en="Ask me anything about {{ $hospital->name }}..."
+                data-placeholder-sw="Uliza chochote kuhusu {{ $hospital->name }}..."
+                autocomplete="off"
+                autofocus
+            />
+            <button id="sendBtn" type="submit" aria-label="Send message">Send</button>
+        </form>
+
+        <!-- ─── Footer ─── -->
+        <div class="chat-footer">
+            @if ($hospital->emergency_phone)
+                For emergencies, call <a href="tel:{{ $hospital->emergency_phone }}">{{ $hospital->emergency_phone }}</a>
+                <span class="mx-1" aria-hidden="true">·</span>
+            @endif
+            <a href="#" id="resetChat">New Chat</a>
+            <span class="mx-1" aria-hidden="true">·</span>
+            <a href="{{ route('tenant.home', ['slug' => $hospital->slug]) }}">Back to homepage</a>
+            <span class="mx-1" aria-hidden="true">·</span>
+            <span>{{ $branding['footer_text'] }}</span>
+            <span class="mx-1" aria-hidden="true">·</span>
+            <span>Powered by MediDesk AI</span>
+        </div>
+
+    </div>
+
+    </section>
+@endsection
+
+@push('scripts')
+    @vite('resources/js/pearlie.js')
+@endpush

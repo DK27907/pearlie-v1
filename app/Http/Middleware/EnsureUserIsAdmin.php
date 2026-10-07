@@ -18,21 +18,20 @@ class EnsureUserIsAdmin
             abort(403, 'Unauthorized - admin access required');
         }
 
-        // Allow either is_admin flag or spatie role 'admin'. If roles table isn't present, treat as not having the role.
-        $isAdminFlag = $user->is_admin ?? false;
-        $hasAdminRole = false;
-
-        try {
-            $hasAdminRole = method_exists($user, 'hasRole') ? $user->hasRole('admin') : false;
-        } catch (\Throwable $e) {
-            // Roles table or spatie not available in this environment — assume not admin by role
-            \Illuminate\Support\Facades\Log::info('EnsureUserIsAdmin: role check failed: ' . $e->getMessage());
-            $hasAdminRole = false;
-        }
-
-        if (! $isAdminFlag && ! $hasAdminRole) {
-            abort(403, 'Unauthorized - admin access required');
-        }
+        $isImpersonating = $user->isSuperAdmin()
+            && $request->hasSession()
+            && $request->session()->has('impersonating_hospital_id');
+        abort_unless(
+            $isImpersonating || ($user->isAdmin() && ! $user->isSuperAdmin()),
+            403,
+            'Hospital administrator access required.',
+        );
+        abort_if(
+            ! $isImpersonating
+                && (! hospital() || (int) $user->hospital_id !== (int) hospital()->id),
+            403,
+            'You cannot access another hospital.',
+        );
 
         return $next($request);
     }

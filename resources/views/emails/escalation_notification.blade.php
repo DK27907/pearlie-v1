@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Pearlie Escalation Notification</title>
+    <title>MediDesk AI escalation notification</title>
 </head>
 <body>
-    <h2>New Pearlie Escalation (#{{ $escalation->id }})</h2>
+    <h2>New MediDesk AI escalation (#{{ $escalation->id }})</h2>
     <p><strong>Session ID:</strong> {{ $escalation->session_id }}</p>
     <p><strong>Submitted:</strong> {{ $escalation->created_at }}</p>
 
@@ -23,7 +23,8 @@
     @endif
 
     <p>Please follow up with the patient as soon as possible.</p>
+    <p><a href="{{ $meta['url'] ?? route('admin.escalations.show', $escalation->id) }}">Open escalation #{{ $escalation->id }}</a></p>
 
-    <p>— Pearlie Assistant</p>
+    <p>— MediDesk AI Health Assistant</p>
 </body>
 </html>

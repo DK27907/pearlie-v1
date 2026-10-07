@@ -2,434 +2,390 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
+use App\Models\Hospital;
 use App\Models\KnowledgeBase;
+use Illuminate\Database\Seeder;
 
 class KnowledgeBaseSeeder extends Seeder
 {
     public function run(): void
     {
-        $entries = [
+        $pearl = Hospital::query()->where('slug', 'pearl')->firstOrFail();
+        app()->instance('currentHospital', $pearl);
+        $hospitalName = (string) $pearl->name;
+        $assistantName = $pearl->chatbotName();
+        $hospitalLocation = (string) $pearl->address;
+        $hospitalEmail = (string) $pearl->email;
+        $appointmentPhone = (string) $pearl->phone;
+        $emergencyPhone = (string) $pearl->emergency_phone;
+        $emergencyHours = (string) $pearl->hours_emergency;
+        $outpatientHours = (string) $pearl->hours_outpatient;
+        $website = (string) $pearl->website;
+        $depositAmount = number_format((float) $pearl->deposit_amount, 0);
+        $source = $hospitalName.' Administration';
 
-            // ──────────────────────────────────────────────
-            // 1. LOCATION & CONTACT
-            // ──────────────────────────────────────────────
-            [
-                'category' => 'location',
-                'subcategory' => 'address',
-                'keywords' => json_encode([
-                    'where', 'location', 'address', 'find', 'directions', 'map',
-                    'pearl hospital located', 'pearl hospital address', 'pearl hospital location',
-                    'vin plaza', 'nyahururu-nyeri road', 'nyahururu town', 'laikipia county',
-                ]),
-                'question' => 'Where is Pearl Hospital located?',
-                'answer' => 'Pearl Hospital is located at Vin Plaza, along Nyahururu-Nyeri Road, in Nyahururu Town, Laikipia County, Kenya. It is situated in the central business district, easily accessible by public and private transport. Google Maps directions are available upon request.',
-                'source' => 'Pearl Hospital Administration',
-                'last_updated' => now(),
-            ],
-            [
-                'category' => 'location',
-                'subcategory' => 'contact',
-                'keywords' => json_encode([
-                    'phone', 'phone number', 'contact', 'call', 'telephone', 'mobile', 'reach',
-                    'pearl hospital phone', 'hospital contact', 'front desk', 'reception',
-                    'appointment phone', 'emergency number', 'hotline',
-                ]),
-                'question' => 'How can I contact Pearl Hospital?',
-                'answer' => 'You can reach Pearl Hospital through the following channels: Phone: 0700000000 (Main Line), Emergency Hotline: 0712345678, Email: info@pearlhospital.co.ke, WhatsApp: 0700000000. Our reception desk is available 24/7 at Vin Plaza, Nyahururu.',
-                'source' => 'Pearl Hospital Administration',
-                'last_updated' => now(),
-            ],
-            [
-                'category' => 'location',
-                'subcategory' => 'parking',
-                'keywords' => json_encode([
-                    'parking', 'car park', 'vehicle', 'drive', 'drop off',
-                    'where to park', 'parking space', 'parking available',
-                ]),
-                'question' => 'Is parking available at Pearl Hospital?',
-                'answer' => 'Yes, Pearl Hospital offers secure parking for patients, visitors, and staff. There is designated parking at Vin Plaza with 24/7 security surveillance. Drop-off areas are available at the main entrance for patients with mobility challenges.',
-                'source' => 'Pearl Hospital Administration',
-                'last_updated' => now(),
-            ],
-
-            // ──────────────────────────────────────────────
-            // 2. SERVICES & DEPARTMENTS
-            // ──────────────────────────────────────────────
+        $records = [
             [
                 'category' => 'services',
-                'subcategory' => 'general',
-                'keywords' => json_encode([
-                    'services', 'departments', 'specialties',
-                    'what services', 'what departments', 'hospital services',
-                    'pearl hospital services', 'specialties offered',
-                ]),
-                'question' => 'What services does Pearl Hospital offer?',
-                'answer' => 'Pearl Hospital is a multi-specialty healthcare facility offering a wide range of services including:
-        • Emergency Medicine (24/7)
-        • Oncology (Cancer Care)
-        • Cardiology (Heart Care)
-        • Radiology & Diagnostic Imaging (X-ray, Ultrasound, CT, MRI)
-        • Outpatient & Inpatient Services
-        • Maternity & Child Health
-        • General Surgery
-        • Orthopedics
-        • Internal Medicine
-        • Laboratory Services
-        • Pharmacy Services
-        • Physiotherapy & Rehabilitation
-        • Mental Health & Wellness
-        • Dental and ENT Services',
-                'source' => 'Pearl Hospital Medical Director',
-                'last_updated' => now(),
+                'subcategory' => 'services_overview',
+                'keywords' => ['services', 'what services do you offer', 'what services are available', 'service list', 'offer services', 'all services', 'services offered', 'huduma', 'huduma zenu'],
+                'question' => 'What services do you offer?',
+                'answer' => $hospitalName.' offers outpatient care, inpatient care, surgery, dialysis, oncology, IVF and fertility care, specialist clinics, physiotherapy, radiology and imaging, laboratory services, maternity and child healthcare, family planning, wellness screening, dental, optical, pharmacy, and emergency services.',
             ],
             [
                 'category' => 'services',
-                'subcategory' => 'emergency',
-                'keywords' => json_encode([
-                    'emergency', 'accident', 'urgent', 'casualty', 'immediate',
-                    'emergency services', 'emergency care', 'emergency room',
-                    'accident and emergency', 'trauma', 'critical care',
-                ]),
-                'question' => 'What emergency services does Pearl Hospital provide?',
-                'answer' => 'Pearl Hospital offers 24/7 Emergency Services with a dedicated Emergency Department staffed by experienced doctors, nurses, and paramedics. We handle all types of emergencies including:
-        • Trauma & Accidents
-        • Cardiac Emergencies (Heart Attacks)
-        • Stroke Management
-        • Breathing Difficulties
-        • Severe Allergic Reactions
-        • Poisoning and Overdose
-        • Pediatric Emergencies
-        • Obstetric & Gynecological Emergencies
-        • Psychiatric Emergencies
-        Our emergency team is trained in Advanced Cardiac Life Support (ACLS) and Trauma Life Support (ATLS).',
-                'source' => 'Pearl Hospital Emergency Department',
-                'last_updated' => now(),
+                'subcategory' => 'outpatient',
+                'keywords' => ['outpatient', 'opd', 'clinic', 'consultation', 'general doctor', 'triage', 'clinical officer', 'walk-in'],
+                'question' => 'What outpatient services are available?',
+                'answer' => 'Out-patient hours: '.$outpatientHours.'. Services include general consultations and triage; call '.$appointmentPhone.' to confirm current availability.',
             ],
             [
                 'category' => 'services',
-                'subcategory' => 'radiology',
-                'keywords' => json_encode([
-                    'radiology', 'x-ray', 'ultrasound', 'scan', 'imaging',
-                    'diagnostic imaging', 'radiology services', 'imaging services',
-                    'ultrasound services',
-                ]),
-                'question' => 'What radiology and imaging services are available at Pearl Hospital?',
-                'answer' => 'Pearl Hospital has a fully equipped Radiology Department offering:
-        • Digital X-Ray
-        • Ultrasound (2D, 3D, and Doppler)
-        • CT Scan (Computed Tomography)
-        • MRI (Magnetic Resonance Imaging)
-        • Mammography
-        • Fluoroscopy
-        • Bone Densitometry
-        All imaging services are performed by certified radiographers and interpreted by experienced radiologists.',
-                'source' => 'Pearl Hospital Radiology Department',
-                'last_updated' => now(),
+                'subcategory' => 'inpatient',
+                'keywords' => ['inpatient', 'admission', 'ward', 'admitted', 'stay', 'bed', 'nursing'],
+                'question' => 'What inpatient services are available?',
+                'answer' => 'Comprehensive admission care with modern comfortable wards and 24-hour dedicated nursing monitoring.',
             ],
             [
                 'category' => 'services',
-                'subcategory' => 'pharmacy',
-                'keywords' => json_encode([
-                    'pharmacy', 'medication', 'medicine', 'prescription', 'chemist',
-                    'medicines', 'pharmaceutical', 'drug store',
-                ]),
-                'question' => 'Does Pearl Hospital have a pharmacy?',
-                'answer' => 'Yes, Pearl Hospital has a fully stocked 24/7 Pharmacy offering:
-        • Prescription Medications
-        • Over-the-Counter Drugs
-        • Chronic Disease Medications (Hypertension, Diabetes, Asthma)
-        • Antibiotics and Pain Relievers
-        • Vaccines and Immunizations
-        • Nutritional Supplements
-        Our pharmacists are available to counsel patients on proper medication use, side effects, and drug interactions.',
-                'source' => 'Pearl Hospital Pharmacy Department',
-                'last_updated' => now(),
+                'subcategory' => 'surgery',
+                'keywords' => ['surgery', 'surgical', 'theatre', 'operation', 'theater', 'minor surgery', 'major surgery', 'obstetric surgery'],
+                'question' => 'What surgical services are available?',
+                'answer' => $hospitalName.' Surgical Services include minor, major, elective, emergency, and obstetric surgeries in a fully equipped theatre. Call '.$appointmentPhone.' to confirm service availability.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'dialysis',
+                'keywords' => ['dialysis', 'hemodialysis', 'kidney treatment', 'kidney', 'renal', 'renal failure', 'kidney failure', 'figo'],
+                'question' => 'What dialysis care is available?',
+                'answer' => $hospitalName.' Dialysis Care Unit provides hemodialysis sessions, regular lab monitoring, and pre-dialysis screening. Contact '.$appointmentPhone.' to schedule.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'oncology',
+                'keywords' => ['oncology', 'cancer', 'chemotherapy', 'chemo', 'tumor', 'cancer treatment', 'staging', 'saratani'],
+                'question' => 'What oncology services are available?',
+                'answer' => $hospitalName.' Oncology Services provide cancer care including diagnosis, staging, chemotherapy administration, and supportive care. Contact '.$appointmentPhone.' for service information.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'ivf-fertility',
+                'keywords' => ['ivf', 'fertility', 'infertile', 'conceive', 'pregnancy help', 'reproductive', 'fertility clinic'],
+                'question' => 'What IVF and fertility services are available?',
+                'answer' => $hospitalName.' IVF and Fertility Clinic offers confidential fertility diagnostics, reproductive assistance, and counseling. Contact '.$appointmentPhone.' to enquire or book.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'specialist-clinics',
+                'keywords' => ['specialist', 'consultant', 'physician', 'surgeon', 'oncologist', 'gynecologist', 'obstetrician', 'pediatrician', 'orthopedics', 'urologist', 'ENT', 'psychiatrist'],
+                'question' => 'Which specialist consultant clinics are available?',
+                'answer' => $hospitalName.' hosts specialist clinics for Physicians, Surgeons, Oncologists, OB/GYNs, Pediatricians, Orthopedic Surgeons, Urologists, ENT, and Psychiatrists. Call '.$appointmentPhone.' to confirm a specialist clinic day.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'physiotherapy',
+                'keywords' => ['physiotherapy', 'physio', 'physical therapy', 'rehab', 'rehabilitation'],
+                'question' => 'What physiotherapy services are available?',
+                'answer' => $hospitalName.' Physiotherapy Unit provides physical therapy and rehabilitation to support recovery and mobility. Call '.$appointmentPhone.' to confirm availability.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'ct-scan',
+                'keywords' => ['ct scan', 'ct', 'ctpa', 'ct pulmonary', 'ct angiography', 'head scan', 'chest scan', 'pelvis scan', 'abdomen scan'],
+                'question' => 'What CT scan services are available?',
+                'answer' => $hospitalName.' Radiology and Imaging offers CT scans, digital X-rays, ultrasound, MRI, mammography, and fluoroscopy. Contact '.$appointmentPhone.' to confirm which services are currently available.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'xray-fluoroscopy',
+                'keywords' => ['x-ray', 'xray', 'fluoroscopy', 'hsg', 'mcu', 'barium', 'dye imaging'],
+                'question' => 'What X-ray and fluoroscopy services are available?',
+                'answer' => $hospitalName.' offers digital X-rays and fluoroscopy. Call '.$appointmentPhone.' to confirm available imaging and make arrangements.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'ultrasound',
+                'keywords' => ['ultrasound', 'scan', 'sonography', 'doppler', 'color doppler', '3d scan', '4d scan', 'pregnancy scan'],
+                'question' => 'What ultrasound scanning services are available?',
+                'answer' => $hospitalName.' provides ultrasound imaging, including 2D, 3D/4D, and Doppler scans. Contact '.$appointmentPhone.' to confirm availability.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'biopsies',
+                'keywords' => ['biopsy', 'fna', 'fine needle aspiration', 'core biopsy', 'tissue biopsy'],
+                'question' => 'What biopsy services are available?',
+                'answer' => $hospitalName.' provides biopsy services. Contact '.$appointmentPhone.' to confirm the available biopsy procedures and booking arrangements.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'cardio-neuro-diagnostics',
+                'keywords' => ['ecg', 'ekg', 'echo', 'echocardiogram', 'eeg', 'electrocardiogram', 'electroencephalogram', 'heart test', 'brain test'],
+                'question' => 'What cardio and neuro diagnostic tests are available?',
+                'answer' => $hospitalName.' offers ECG, ECHO, and EEG diagnostic tests. Contact '.$appointmentPhone.' to confirm availability.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'endoscopy-colonoscopy',
+                'keywords' => ['endoscopy', 'colonoscopy', 'gastroscopy', 'camera test', 'gi exam'],
+                'question' => 'What endoscopy services are available?',
+                'answer' => $hospitalName.' offers endoscopy and colonoscopy services. Contact '.$appointmentPhone.' to confirm availability and preparation instructions.',
             ],
             [
                 'category' => 'services',
                 'subcategory' => 'laboratory',
-                'keywords' => json_encode([
-                    'laboratory', 'lab', 'tests', 'pathology', 'blood', 'urine',
-                    'lab services', 'laboratory services', 'pathology services',
-                    'blood test', 'urine test', 'stool test', 'culture',
-                ]),
-                'question' => 'What laboratory services are available at Pearl Hospital?',
-                'answer' => 'Pearl Hospital operates a modern, ISO-compliant laboratory offering:
-        • Hematology (Blood Counts, Coagulation)
-        • Clinical Chemistry (Liver, Kidney, Thyroid, Lipid Profiles)
-        • Microbiology (Bacterial, Fungal, Parasitic Cultures)
-        • Serology & Immunology (HIV, Hepatitis, Syphilis)
-        • Urinalysis & Stool Analysis
-        • Histopathology & Cytology
-        • Blood Banking & Transfusion Services
-        • PCR and Molecular Testing (Coming Soon)
-        Results are available within 24–72 hours depending on the test.',
-                'source' => 'Pearl Hospital Laboratory Department',
-                'last_updated' => now(),
+                'keywords' => ['lab', 'laboratory', 'blood test', 'urine test', 'test', 'hematology', 'biochemistry', 'diagnostics'],
+                'question' => 'What laboratory services are available?',
+                'answer' => $hospitalName.' Laboratory offers hematology, biochemistry, microbiology, serology, urinalysis, and histopathology. Contact '.$appointmentPhone.' to confirm test availability and result timelines.',
             ],
-
-            // ──────────────────────────────────────────────
-            // 3. APPOINTMENTS
-            // ──────────────────────────────────────────────
+            [
+                'category' => 'services',
+                'subcategory' => 'maternity-child-health',
+                'keywords' => ['maternity', 'antenatal', 'prenatal', 'delivery', 'postnatal', 'baby clinic', 'well-baby', 'maternal', 'pregnancy'],
+                'question' => 'What maternity and child healthcare services are available?',
+                'answer' => $hospitalName.' Maternity and Child Healthcare includes antenatal clinics, delivery care, postnatal support, and well-baby clinics. Contact '.$appointmentPhone.' for details.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'family-planning',
+                'keywords' => ['family planning', 'contraception', 'birth control', 'reproductive health'],
+                'question' => 'What family planning services are available?',
+                'answer' => $hospitalName.' offers family-planning counseling and contraception options. Contact '.$appointmentPhone.' for details.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'wellness-screening',
+                'keywords' => ['wellness', 'screening', 'check-up', 'annual checkup', 'well-woman', 'well-man'],
+                'question' => 'What wellness and screening services are available?',
+                'answer' => $hospitalName.' offers routine wellness screenings, including Well-Woman and Well-Man check-ups. Contact '.$appointmentPhone.' to confirm available screening services.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'dental',
+                'keywords' => ['dental', 'dentist', 'teeth', 'tooth', 'cleaning', 'extraction', 'filling', 'cosmetic dental', 'mno', 'menoni'],
+                'question' => 'What dental services are available?',
+                'answer' => $hospitalName.' Dental Unit offers routine check-ups, cleaning and scaling, cosmetic procedures, extractions, fillings for adults and children, and emergency dental care. To book, call '.$appointmentPhone.' or ask me to book a dental appointment.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'optical',
+                'keywords' => ['optical', 'eye', 'vision', 'glasses', 'eyewear', 'glaucoma', 'cataract', 'eye test'],
+                'question' => 'What optical services are available?',
+                'answer' => $hospitalName.' Optical Clinic offers vision tests, glaucoma and cataract screening, and prescription eyewear. Contact '.$appointmentPhone.' to confirm availability.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'emergency',
+                'keywords' => ['emergency', 'urgent', 'ambulance', 'accident', 'casualty', '24 hour', 'dharura'],
+                'question' => 'What emergency services are available?',
+                'answer' => $hospitalName.' provides emergency services. Emergency hours: '.$emergencyHours.'. Call '.$emergencyPhone.' immediately for urgent help.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'radiology',
+                'keywords' => ['radiology', 'x-ray', 'xray', 'ultrasound', 'scan', 'imaging', 'ct', 'ct scan', 'fluoroscopy'],
+                'question' => 'What imaging services are available at '.$hospitalName.'?',
+                'answer' => $hospitalName.' Radiology and Imaging includes Digital X-Ray, Ultrasound (2D/3D/4D), CT Scan, MRI, Mammography, and Fluoroscopy. Contact '.$appointmentPhone.' to confirm current availability.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'pharmacy',
+                'keywords' => ['pharmacy', 'medication', 'medicine', 'prescription', 'chemist'],
+                'question' => 'Is pharmacy service available?',
+                'answer' => 'Please call '.$appointmentPhone.' to ask whether pharmacy service is currently available at '.$hospitalName.'.',
+            ],
+            [
+                'category' => 'location',
+                'subcategory' => 'contact',
+                'keywords' => ['contact', 'phone', 'phone number', 'call', 'reach', 'whatsapp', 'email', 'telephone'],
+                'question' => 'How can I contact '.$hospitalName.'?',
+                'answer' => 'Phone and WhatsApp: '.$appointmentPhone.'. Email: '.$hospitalEmail.'. Location: '.$hospitalLocation.'. Website: '.$website.'.',
+            ],
+            [
+                'category' => 'location',
+                'subcategory' => 'parking',
+                'keywords' => ['parking', 'car park', 'vehicle', 'where to park'],
+                'question' => 'Is parking available at '.$hospitalName.'?',
+                'answer' => 'Please call '.$appointmentPhone.' for current parking arrangements and directions.',
+            ],
+            [
+                'category' => 'doctors',
+                'subcategory' => 'general',
+                'keywords' => ['doctors', 'specialist', 'physician', 'surgeon', 'consultant', 'medical staff', 'doctor schedule'],
+                'question' => 'Which specialists are available at '.$hospitalName.'?',
+                'answer' => $hospitalName.' hosts specialist clinics for Physicians, Surgeons, Oncologists, OB/GYNs, Pediatricians, Orthopedic Surgeons, Urologists, ENT, and Psychiatrists. Call '.$appointmentPhone.' to confirm a specialist clinic day.',
+            ],
+            [
+                'category' => 'hours',
+                'subcategory' => 'outpatient',
+                'keywords' => ['hours', 'open', 'opening', 'time', 'when', 'closed', 'working hours', 'outpatient hours'],
+                'question' => 'What are the opening hours at '.$hospitalName.'?',
+                'answer' => 'Emergency hours: '.$emergencyHours.'. Routine outpatient hours: '.$outpatientHours.'. Call '.$appointmentPhone.' to confirm clinic availability.',
+            ],
+            [
+                'category' => 'location',
+                'subcategory' => 'address',
+                'keywords' => ['location', 'where', 'address', 'directions', 'maps', 'located', 'find you'],
+                'question' => 'Where is '.$hospitalName.' located?',
+                'answer' => $hospitalName.' is located at '.$hospitalLocation.'.',
+            ],
             [
                 'category' => 'appointments',
                 'subcategory' => 'booking',
-                'keywords' => json_encode([
-                    'appointment', 'book', 'schedule', 'consultation',
-                    'book appointment', 'schedule appointment', 'appointment booking',
-                    'see a doctor', 'consult a doctor', 'visit doctor',
-                ]),
-                'question' => 'How do I book an appointment at Pearl Hospital?',
-                'answer' => 'You can book an appointment at Pearl Hospital through the following ways:
-        1. Call us at 0700000000 (Monday to Saturday, 8:00 AM – 6:00 PM)
-        2. WhatsApp us at 0700000000
-        3. Visit our reception desk at Vin Plaza (8:00 AM – 6:00 PM, Monday to Saturday)
-        4. Email us at appointments@pearlhospital.co.ke
-        5. Walk-in consultations are available (pre-booking recommended to reduce waiting time)
-        For specialist consultations, please provide your full name, phone number, preferred date, and reason for visit.',
-                'source' => 'Pearl Hospital Administration',
-                'last_updated' => now(),
+                'keywords' => ['appointment', 'book', 'schedule', 'consultation', 'book appointment', 'schedule appointment', 'see a doctor', 'visit doctor'],
+                'question' => 'How do I book an appointment at '.$hospitalName.'?',
+                'answer' => 'I can help you request an appointment. Please share your full name, phone number, preferred date, the service you need, and your preferred time if you have one. You can also call '.$appointmentPhone.'.',
             ],
             [
                 'category' => 'appointments',
                 'subcategory' => 'cancellation',
-                'keywords' => json_encode([
-                    'cancel appointment', 'change appointment', 'reschedule',
-                    'appointment cancellation', 'cancel booking',
-                ]),
-                'question' => 'What is the cancellation policy for appointments?',
-                'answer' => 'To cancel or reschedule an appointment, please contact us at least 24 hours in advance. You can call 0700000000 or WhatsApp 0700000000. Repeated no-shows may result in a consultation fee being charged. We appreciate your cooperation to help us serve all patients efficiently.',
-                'source' => 'Pearl Hospital Administration',
-                'last_updated' => now(),
+                'keywords' => ['cancel appointment', 'change appointment', 'reschedule', 'appointment cancellation', 'cancel booking'],
+                'question' => 'How can I cancel or reschedule an appointment?',
+                'answer' => 'To cancel or reschedule an appointment, please call '.$appointmentPhone.' so the team can assist you.',
             ],
-
-            // ──────────────────────────────────────────────
-            // 4. HOURS OF OPERATION
-            // ──────────────────────────────────────────────
-            [
-                'category' => 'hours',
-                'subcategory' => 'outpatient',
-                'keywords' => json_encode([
-                    'hours', 'open', 'operating', 'working', 'schedule',
-                    'operating hours', 'open hours', 'working hours',
-                    'outpatient hours', 'consultation hours',
-                ]),
-                'question' => 'What are Pearl Hospital\'s operating hours?',
-                'answer' => 'Pearl Hospital operates as follows:
-        • Emergency Department: 24/7 (including all public holidays)
-        • Outpatient Clinic: 8:00 AM – 6:00 PM, Monday to Saturday
-        • Pharmacy: 24/7
-        • Laboratory: 24/7
-        • Radiology/Imaging: 8:00 AM – 6:00 PM, Monday to Saturday (emergency scans available 24/7)
-        • Inpatient Wards: 24/7
-        We are closed on Sundays for outpatient services, but emergencies are handled 24/7.',
-                'source' => 'Pearl Hospital Administration',
-                'last_updated' => now(),
-            ],
-
-            // ──────────────────────────────────────────────
-            // 5. VISITING HOURS
-            // ──────────────────────────────────────────────
-            [
-                'category' => 'visiting',
-                'subcategory' => 'general',
-                'keywords' => json_encode([
-                    'visiting hours', 'visit patient', 'visitors', 'family',
-                    'when can I visit', 'visiting time', 'hospital visiting',
-                ]),
-                'question' => 'What are the visiting hours at Pearl Hospital?',
-                'answer' => 'Visiting hours at Pearl Hospital are:
-        • General Wards: 3:00 PM – 6:00 PM daily
-        • ICU (Intensive Care Unit): 4:00 PM – 5:00 PM daily (restricted to 1 visitor at a time)
-        • Maternity Ward: 2:00 PM – 6:00 PM daily
-        • Pediatric Ward: 2:00 PM – 6:00 PM daily (parents/guardians allowed 24/7)
-        • Visiting may be restricted during outbreaks or emergencies.
-        We recommend a maximum of 2 visitors per patient at a time to ensure patient comfort.',
-                'source' => 'Pearl Hospital Administration',
-                'last_updated' => now(),
-            ],
-
-            // ──────────────────────────────────────────────
-            // 6. PAYMENT & INSURANCE
-            // ──────────────────────────────────────────────
             [
                 'category' => 'payment',
                 'subcategory' => 'methods',
-                'keywords' => json_encode([
-                    'payment', 'pay', 'cost', 'fees', 'consultation fee',
-                    'how much', 'price', 'charges', 'medical bill',
-                ]),
-                'question' => 'What payment methods does Pearl Hospital accept?',
-                'answer' => 'Pearl Hospital accepts the following payment methods:
-        • M-Pesa (Paybill: 123456, Account: Your Patient ID/Visit Number)
-        • Cash (KES)
-        • Bank Transfers
-        • Visa and MasterCard (at the reception)
-        • Medical Insurance (NHIF, AAR, CIC, Jubilee, and most major insurance providers)
-        For insurance claims, please carry your insurance card and a valid ID. Consultation fees range from KES 1,500 to KES 5,000 depending on the specialist.',
-                'source' => 'Pearl Hospital Finance Department',
-                'last_updated' => now(),
+                'keywords' => ['payment', 'pay', 'cost', 'fees', 'deposit', 'price', 'charges', 'medical bill'],
+                'question' => 'How do I pay an appointment deposit?',
+                'answer' => 'The appointment deposit is KSh '.$depositAmount.'. For an appointment booked through '.$assistantName.', an M-Pesa payment prompt is sent to your phone. Call '.$appointmentPhone.' for other payment questions.',
             ],
             [
                 'category' => 'payment',
                 'subcategory' => 'insurance',
-                'keywords' => json_encode([
-                    'insurance', 'cover', 'NHIF', 'private insurance',
-                    'accepted insurance', 'health insurance', 'AAR', 'CIC', 'Jubilee',
-                ]),
-                'question' => 'What insurance providers are accepted at Pearl Hospital?',
-                'answer' => 'Pearl Hospital accepts a wide range of insurance providers including:
-        • NHIF (National Hospital Insurance Fund)
-        • AAR Insurance
-        • CIC Insurance
-        • Jubilee Insurance
-        • APA Insurance
-        • Pioneer Insurance
-        • UAP Old Mutual
-        • Britam
-        • Madison Insurance
-        • Corporate and Group Medical Schemes
-        Please confirm coverage with your insurance provider before your visit. For direct billing, present your insurance card and valid ID at reception.',
-                'source' => 'Pearl Hospital Finance Department',
-                'last_updated' => now(),
+                'keywords' => ['insurance', 'cover', 'accepted insurance', 'health insurance', 'NHIF', 'SHA'],
+                'question' => 'Which insurance providers are accepted?',
+                'answer' => 'Please call '.$appointmentPhone.' to confirm current insurance coverage before your visit.',
             ],
-
-            // ──────────────────────────────────────────────
-            // 7. DOCTORS & SPECIALISTS
-            // ──────────────────────────────────────────────
             [
-                'category' => 'doctors',
+                'category' => 'visiting',
                 'subcategory' => 'general',
-                'keywords' => json_encode([
-                    'doctors', 'specialist', 'physician', 'surgeon', 'consultant',
-                    'medical staff', 'doctor schedule', 'available doctors',
-                ]),
-                'question' => 'What specialists are available at Pearl Hospital?',
-                'answer' => 'Pearl Hospital has a team of highly qualified specialists including:
-        • General Surgeons
-        • Gynecologists & Obstetricians
-        • Pediatricians
-        • Cardiologists
-        • Oncologists
-        • Orthopedic Surgeons
-        • Neurologists
-        • Radiologists
-        • Pathologists
-        • Internal Medicine Physicians
-        • Emergency Medicine Specialists
-        • Psychiatrists
-        • ENT Specialists
-        • Ophthalmologists
-        • Dentists
-        All our specialists are registered with the Kenya Medical Practitioners and Dentists Council (KMPDC).',
-                'source' => 'Pearl Hospital Medical Director',
-                'last_updated' => now(),
+                'keywords' => ['visiting hours', 'visit patient', 'visitors', 'family', 'visiting time'],
+                'question' => 'What are the hospital visiting hours?',
+                'answer' => 'Please call '.$appointmentPhone.' for current visiting guidance.',
             ],
-
-            // ──────────────────────────────────────────────
-            // 8. AMENITIES
-            // ──────────────────────────────────────────────
             [
                 'category' => 'amenities',
                 'subcategory' => 'food',
-                'keywords' => json_encode([
-                    'food', 'cafeteria', 'restaurant', 'eat', 'meal', 'canteen',
-                    'where to eat', 'hospital food',
-                ]),
-                'question' => 'Is there a cafeteria at Pearl Hospital?',
-                'answer' => 'Yes, Pearl Hospital has a cafeteria located on the ground floor. It offers:
-        • Affordable meals for patients, visitors, and staff
-        • Breakfast, lunch, and dinner options
-        • Special dietary meals for patients (e.g., diabetic, soft diet)
-        • Snacks and beverages
-        Opening hours: 7:00 AM – 8:00 PM daily. Clean and comfortable seating area available.',
-                'source' => 'Pearl Hospital Administration',
-                'last_updated' => now(),
+                'keywords' => ['food', 'cafeteria', 'restaurant', 'meal', 'canteen'],
+                'question' => 'Is there a cafeteria?',
+                'answer' => 'Please call '.$appointmentPhone.' for current cafeteria and meal information.',
             ],
-
-            // ──────────────────────────────────────────────
-            // 9. PATIENT RESOURCES
-            // ──────────────────────────────────────────────
             [
                 'category' => 'resources',
                 'subcategory' => 'admission',
-                'keywords' => json_encode([
-                    'admission', 'admitted', 'hospitalized', 'inpatient',
-                    'admission process', 'what to bring', 'patient admission',
-                ]),
-                'question' => 'What is the admission process at Pearl Hospital?',
-                'answer' => 'The admission process at Pearl Hospital is as follows:
-        1. Registration at reception with your ID and insurance card
-        2. Triage and assessment by a nurse
-        3. Consultation with a doctor (General or Specialist)
-        4. If needed, admission to the appropriate ward
-        5. Informed consent and treatment plan discussion
-        6. Billing and payment (cash, M-Pesa, or insurance)
-        7. Admission to your room or bed
-        Please bring your ID/Passport, insurance card, and any relevant medical records.
-        We also offer emergency admission 24/7 for urgent cases.',
-                'source' => 'Pearl Hospital Administration',
-                'last_updated' => now(),
+                'keywords' => ['admission', 'admitted', 'inpatient', 'what to bring', 'patient admission'],
+                'question' => 'How can I get information about admission?',
+                'answer' => 'For admission information and requirements, please contact '.$hospitalName.' at '.$appointmentPhone.'.',
             ],
             [
                 'category' => 'resources',
                 'subcategory' => 'discharge',
-                'keywords' => json_encode([
-                    'discharge', 'leave hospital', 'going home',
-                    'discharge process', 'hospital discharge',
-                ]),
-                'question' => 'What is the discharge process at Pearl Hospital?',
-                'answer' => 'The discharge process includes:
-        1. Doctor\'s approval for discharge
-        2. Nursing handover with discharge instructions
-        3. Medication reconciliation and prescriptions
-        4. Final billing and payment settlement
-        5. Follow-up appointment scheduling (if needed)
-        6. Patient discharge and care instructions
-        Please ask for a discharge summary and all relevant medical reports.',
-                'source' => 'Pearl Hospital Administration',
-                'last_updated' => now(),
-            ],
-
-            // ──────────────────────────────────────────────
-            // 10. GREETINGS & GENERAL
-            // ──────────────────────────────────────────────
-            [
-                'category' => 'greeting',
-                'subcategory' => 'hello',
-                'keywords' => json_encode([
-                    'hello', 'hi', 'hey', 'greetings', 'good morning',
-                    'good afternoon', 'good evening', 'how are you',
-                ]),
-                'question' => 'Greeting',
-                'answer' => 'Hello! I\'m Pearlie, your healthcare assistant at Pearl Hospital. I\'m here to help you with information about our hospital, services, appointments, and more. How can I assist you today?',
-                'source' => 'Pearl Hospital Administration',
-                'last_updated' => now(),
+                'keywords' => ['discharge', 'leave hospital', 'going home', 'discharge process'],
+                'question' => 'How can I get information about discharge?',
+                'answer' => 'Please speak with your care team for discharge instructions and follow-up arrangements.',
             ],
             [
                 'category' => 'general',
                 'subcategory' => 'feedback',
-                'keywords' => json_encode([
-                    'feedback', 'complaint', 'suggestion', 'praise',
-                    'report a problem', 'complain', 'suggest',
-                ]),
-                'question' => 'How do I provide feedback to Pearl Hospital?',
-                'answer' => 'We value your feedback! You can provide feedback through:
-        1. Suggestion boxes located at the reception, cafeteria, and ward entrances
-        2. Email us at feedback@pearlhospital.co.ke
-        3. Call our Customer Care desk at 0700000000
-        4. WhatsApp us at 0700000000
-        5. Speak to our Customer Care representative at reception
-        Your feedback helps us improve our services and patient experience.',
-                'source' => 'Pearl Hospital Administration',
-                'last_updated' => now(),
+                'keywords' => ['feedback', 'complaint', 'suggestion', 'praise', 'report a problem'],
+                'question' => 'How can I provide feedback?',
+                'answer' => 'You can share feedback with '.$hospitalName.' by calling '.$appointmentPhone.' or emailing '.$hospitalEmail.'.',
             ],
-
+            [
+                'category' => 'doctors',
+                'subcategory' => 'availability',
+                'keywords' => ['doctor availability', 'available appointment times', 'doctor slots', 'when can i see a doctor', 'available doctors'],
+                'question' => 'How can I check doctor availability?',
+                'answer' => 'Tell me the date you would like to visit and, if you have a preference, the doctor or specialty. I can check available appointment times.',
+            ],
+            [
+                'category' => 'greeting',
+                'subcategory' => 'hello',
+                'keywords' => ['hello', 'hi', 'hey', 'greetings', 'good morning', 'good afternoon', 'good evening', 'how are you'],
+                'question' => 'Greeting',
+                'answer' => 'Hello! I’m '.$assistantName.', '.$hospitalName.'’s healthcare assistant. How can I help you today?',
+            ],
+            [
+                'category' => 'greeting',
+                'subcategory' => 'swahili',
+                'keywords' => ['habari', 'hujambo', 'sijambo', 'jambo', 'mambo', 'vipi', 'niaje', 'sasa', 'shikamoo', 'salama', 'poa'],
+                'question' => 'Salamu kwa Kiswahili',
+                'answer' => 'Habari! Mimi ni '.$assistantName.', msaidizi wa afya wa '.$hospitalName.'. Naweza kukusaidia vipi leo?',
+            ],
+            [
+                'category' => 'location',
+                'subcategory' => 'swahili',
+                'keywords' => ['mko wapi', 'mahali', 'anwani', 'wapi'],
+                'question' => 'Hospitali iko wapi?',
+                'answer' => $this->swahiliHospitalName($hospitalName).' iko '.$hospitalLocation.'.',
+            ],
+            [
+                'category' => 'hours',
+                'subcategory' => 'swahili',
+                'keywords' => ['mnafanya kazi saa ngapi', 'saa za kazi', 'muda'],
+                'question' => 'Hospitali inafunguliwa saa ngapi?',
+                'answer' => 'Saa za dharura: '.$emergencyHours.'. Saa za wagonjwa wa nje: '.$outpatientHours.'. Piga '.$appointmentPhone.' kuthibitisha upatikanaji wa huduma.',
+            ],
+            [
+                'category' => 'appointments',
+                'subcategory' => 'swahili',
+                'keywords' => ['kuweka miadi', 'miadi', 'naomba miadi', 'miadi ya daktari'],
+                'question' => 'Ninawezaje kuweka miadi?',
+                'answer' => 'Naweza kukusaidia kuweka miadi. Tafadhali nipe jina lako kamili, namba ya simu, tarehe unayopendelea, na huduma unayohitaji.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'emergency-swahili',
+                'keywords' => ['dharura', 'maumivu ya kifua', 'shida kupumua', 'damu nyingi', 'kiharusi', 'haraka', 'ajali', 'nimeumia vibaya', 'msaada wa haraka', 'msada wa haraka'],
+                'question' => 'Nifanye nini wakati wa dharura?',
+                'answer' => 'Kwa dharura, piga '.$emergencyPhone.' sasa. Ninakuunganisha na mhudumu wa afya.',
+            ],
+            [
+                'category' => 'location',
+                'subcategory' => 'contact-swahili',
+                'keywords' => ['namba ya simu', 'wasiliana', 'piga simu', 'barua pepe'],
+                'question' => 'Ninawezaje kuwasiliana na hospitali?',
+                'answer' => 'Unaweza kuwasiliana nasi kwa '.$appointmentPhone.' (simu na WhatsApp) au barua pepe '.$hospitalEmail.'.',
+            ],
+            [
+                'category' => 'services',
+                'subcategory' => 'complete-service-list-swahili',
+                'keywords' => ['huduma', 'mnafanya nini', 'huduma zenu'],
+                'question' => 'Hospitali inatoa huduma gani?',
+                'answer' => $hospitalName.' inatoa huduma za wagonjwa wa nje, kulazwa, upasuaji, dialysis, oncology, IVF na uzazi, kliniki za wataalamu, physiotherapy, radiology na imaging, maabara, uzazi na afya ya watoto, family planning, uchunguzi wa afya, huduma za meno na macho, pharmacy, na huduma za dharura.',
+            ],
         ];
 
-        foreach ($entries as $entry) {
-            KnowledgeBase::create($entry);
+        foreach ($records as $record) {
+            $identity = [
+                'category' => $record['category'],
+                'subcategory' => $record['subcategory'],
+            ];
+            $attributes = [
+                'keywords' => json_encode($record['keywords'], JSON_THROW_ON_ERROR),
+                'question' => $record['question'],
+                'answer' => $record['answer'],
+                'source' => $source,
+                'last_updated' => now(),
+            ];
+            $existingRecords = KnowledgeBase::query()
+                ->where($identity)
+                ->orderBy('id')
+                ->get();
+
+            if ($existingRecords->isEmpty()) {
+                KnowledgeBase::query()->create([...$identity, ...$attributes]);
+
+                continue;
+            }
+
+            $existingRecords->first()->update($attributes);
+            $existingRecords->slice(1)->each->delete();
         }
+    }
+
+    private function swahiliHospitalName(string $hospitalName): string
+    {
+        return 'Hospitali ya '.$hospitalName;
     }
 }

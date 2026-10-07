@@ -3,44 +3,38 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Escalation;
-use App\Models\Conversation;
-use Illuminate\Validation\Rule;
 use App\Services\EscalationService;
+use App\Services\EscalationConflictException;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\Response;
 
 class EscalationController extends Controller
 {
-    protected EscalationService $escalationService;
+    public function __construct(private readonly EscalationService $escalationService) {}
 
-    public function __construct(EscalationService $escalationService)
+    public function index(Request $request): View|Response
     {
-        $this->escalationService = $escalationService;
+        $filters = $request->validate([
+            'q' => ['nullable', 'string', 'max:255'],
+            'status' => ['nullable', Rule::in(['all', ...Escalation::statuses()])],
+        ]);
+        $filters['status'] = ($filters['status'] ?? 'all') === 'all' ? null : $filters['status'];
+
+        $data = [
+            'escalations' => $this->escalationService->queue($filters),
+            'queueRoutePrefix' => 'admin',
+        ];
+
+        return $request->boolean('_partial')
+            ? response()->view('escalations.queue', $data)
+            : view('escalations.index', $data);
     }
 
-    public function index(Request $request)
-    {
-        $query = Escalation::query();
-
-        if ($q = $request->input('q')) {
-            $query->where('user_message', 'like', '%' . $q . '%');
-        }
-
-        if ($status = $request->input('status')) {
-            $query->where('status', $status);
-        }
-
-        $sort = $request->input('sort', 'created_at');
-        $sort = in_array($sort, ['id', 'status', 'created_at'], true) ? $sort : 'created_at';
-        $direction = $request->input('dir', 'desc');
-        $direction = in_array($direction, ['asc', 'desc'], true) ? $direction : 'desc';
-
-        $escalations = $query->orderBy($sort, $direction)->paginate(20)->appends($request->except('page'));
-
-        return view('admin.escalations.index', compact('escalations'));
-    }
-
-    public function exportCsv()
+    public function exportCsv(): Response
     {
         $items = Escalation::orderBy('created_at','desc')->get();
         $handle = fopen('php://temp', 'r+');
@@ -58,70 +52,137 @@ class EscalationController extends Controller
         ]);
     }
 
-    public function show(int $id)
+    public function show(int $id): View
     {
         $esc = Escalation::findOrFail($id);
+        $esc->load(['assignedWorker', 'resolvedBy', 'latestAppointment', 'latestConversation', 'latestScoredConversation']);
 
-        // Get recent conversation context
-        $conversation = Conversation::where('session_id', $esc->session_id)
-            ->orderBy('id', 'desc')
-            ->limit(20)
-            ->get()
-            ->reverse();
-
-        return view('admin.escalations.show', compact('esc', 'conversation'));
-    }
-
-    public function updateStatus(Request $request, int $id)
-    {
-        $request->validate([
-            'status' => 'required|string|in:pending,in_progress,resolved,closed',
+        return view('escalations.show', [
+            'escalation' => $esc,
+            'conversation' => $this->escalationService->conversation($esc),
+            'queueRoutePrefix' => 'admin',
         ]);
-
-        $esc = Escalation::findOrFail($id);
-        $esc->status = $request->input('status');
-        $esc->save();
-
-        return redirect()->route('admin.escalations.show', $esc->id)->with('status', 'Escalation status updated.');
     }
 
-    public function resend(int $id)
+    public function claim(Request $request, int $id): RedirectResponse
     {
-        $esc = Escalation::findOrFail($id);
+        $escalation = Escalation::findOrFail($id);
 
         try {
-            $this->escalationService->resendEscalationNotification($esc);
-            return redirect()->route('admin.escalations.show', $esc->id)->with('status', 'Notification resend queued.');
-        } catch (\Throwable $e) {
-            return redirect()->route('admin.escalations.show', $esc->id)->with('error', 'Failed to resend notification: ' . $e->getMessage());
+            $result = $this->escalationService->claim($escalation, $request->user());
+        } catch (EscalationConflictException $exception) {
+            return back()->with('error', $exception->getMessage());
         }
+
+        $message = $result['patient_notified']
+            ? 'Escalation claimed. The patient has been notified.'
+            : 'Escalation claimed. No patient phone is available, or messaging could not be delivered.';
+
+        return redirect()->route('admin.escalations.show', $id)->with('status', $message);
     }
 
-    public function bulkAction(Request $request)
+    public function resolve(Request $request, int $id): RedirectResponse
     {
-        $request->validate([
+        $this->escalationService->resolve(Escalation::findOrFail($id), $request->user());
+
+        return redirect()->route('admin.escalations.show', $id)->with('status', 'Escalation resolved.');
+    }
+
+    public function reply(Request $request, int $id): RedirectResponse
+    {
+        $validated = $request->validate([
+            'message' => ['required', 'string', 'max:1000'],
+            'channel' => ['required', Rule::in(['whatsapp', 'sms'])],
+        ]);
+
+        try {
+            $this->escalationService->reply(
+                Escalation::findOrFail($id),
+                $request->user(),
+                $validated['message'],
+                $validated['channel'],
+            );
+        } catch (\RuntimeException $exception) {
+            return back()->withErrors(['message' => $exception->getMessage()]);
+        }
+
+        return redirect()->route('admin.escalations.show', $id)->with('status', 'Reply sent to the patient.');
+    }
+
+    public function updateStatus(Request $request, int $id): RedirectResponse
+    {
+        $validated = $request->validate([
+            'status' => ['required', Rule::in(Escalation::statuses())],
+        ]);
+        $escalation = Escalation::findOrFail($id);
+
+        if ($validated['status'] === Escalation::STATUS_IN_PROGRESS) {
+            return $this->claim($request, $id);
+        }
+
+        if ($validated['status'] === Escalation::STATUS_RESOLVED) {
+            return $this->resolve($request, $id);
+        }
+
+        $escalation->forceFill([
+            'status' => $validated['status'],
+            'assigned_worker_id' => null,
+            'claimed_at' => null,
+            'resolved_by_id' => null,
+            'resolved_at' => null,
+        ])->save();
+
+        return redirect()->route('admin.escalations.show', $id)->with('status', 'Escalation status updated.');
+    }
+
+    public function resend(int $id): RedirectResponse
+    {
+        $escalation = Escalation::findOrFail($id);
+        $this->escalationService->resendEscalationNotification($escalation);
+
+        return redirect()->route('admin.escalations.show', $id)->with('status', 'Escalation notifications were queued.');
+    }
+
+    public function bulkAction(Request $request): Response|RedirectResponse
+    {
+        $validated = $request->validate([
             'action' => 'required|string|in:update_status,delete,export',
             'ids' => ['required', 'array', 'min:1'],
             'ids.*' => ['integer', 'exists:escalations,id'],
             'status' => ['required_if:action,update_status', Rule::in(Escalation::statuses())],
         ]);
 
-        $ids = $request->input('ids');
-        $action = $request->input('action');
+        $ids = $validated['ids'];
+        $action = $validated['action'];
 
         if ($action === 'update_status') {
-            $status = $request->input('status');
-            Escalation::whereIn('id', $ids)->update(['status' => $status]);
+            foreach (Escalation::query()->whereIn('id', $ids)->get() as $escalation) {
+                if ($validated['status'] === Escalation::STATUS_IN_PROGRESS) {
+                    $this->escalationService->claim($escalation, $request->user());
+                } elseif ($validated['status'] === Escalation::STATUS_RESOLVED) {
+                    $this->escalationService->resolve($escalation, $request->user());
+                } else {
+                    $escalation->forceFill([
+                        'status' => $validated['status'],
+                        'assigned_worker_id' => null,
+                        'claimed_at' => null,
+                        'resolved_by_id' => null,
+                        'resolved_at' => null,
+                    ])->save();
+                }
+            }
+
             return redirect()->back()->with('status', 'Statuses updated.');
         }
 
         if ($action === 'delete') {
-            \App\Models\Escalation::whereIn('id', $ids)->delete();
+            Escalation::query()->whereIn('id', $ids)->delete();
+
             return redirect()->back()->with('status', 'Selected escalations deleted.');
         }
 
         if ($action === 'export') {
-            $items = \App\Models\Escalation::whereIn('id', $ids)->get();
+            $items = Escalation::query()->whereIn('id', $ids)->get();
             $handle = fopen('php://temp', 'r+');
             fputcsv($handle, ['id', 'session_id', 'user_message', 'ai_response', 'status', 'created_at']);
             foreach ($items as $i) {

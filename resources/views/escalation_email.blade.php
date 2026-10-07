@@ -1,11 +1,12 @@
 <!doctype html>
+@php($botName = hospital()?->chatbotName() ?? 'Assistant')
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Pearlie Escalation Notification</title>
+    <title>{{ $botName }} Escalation Notification</title>
 </head>
 <body>
-    <h2>New Pearlie Escalation (#{{ $escalation->id }})</h2>
+    <h2>New {{ $botName }} Escalation (#{{ $escalation->id }})</h2>
     <p><strong>Session ID:</strong> {{ $escalation->session_id }}</p>
     <p><strong>Submitted:</strong> {{ $escalation->created_at }}</p>
 
@@ -19,6 +20,6 @@
 
     <p>Please follow up with the patient as soon as possible. You can view escalations in the admin dashboard (if available) or contact the patient through the session context.</p>
 
-    <p>— Pearlie Assistant</p>
+    <p>— {{ $botName }} Assistant</p>
 </body>
 </html>

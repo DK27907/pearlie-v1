@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\PearlieServiceV2 as PearlieService;
+use App\Services\PearlieService;
 use Illuminate\Http\Request;
 
 class PearlieController extends Controller

@@ -23,7 +23,8 @@ class EscalationNotification extends Mailable implements ShouldQueue
 
     public function build()
     {
-        $subject = sprintf('New Pearlie Escalation #%d', $this->escalation->id);
+        $subject = sprintf('MediDesk AI escalation #%d', $this->escalation->id);
+        $this->meta['url'] ??= route('admin.escalations.show', $this->escalation->id);
 
         return $this->subject($subject)
             ->view('emails.escalation_notification')

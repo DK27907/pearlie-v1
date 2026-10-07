@@ -3,7 +3,30 @@ const inputEl = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
 const typingEl = document.getElementById('typingIndicator');
 const resetBtn = document.getElementById('resetChat');
+const languageToggle = document.getElementById('languageToggle');
+const quickReplyButtons = document.querySelectorAll('.quick-reply');
+const welcomeEl = messagesEl.querySelector('[data-welcome-en]');
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+
+function updateLanguage() {
+    const language = languageToggle.value === 'sw' ? 'sw' : 'en';
+    const welcome = language === 'sw' ? welcomeEl.dataset.welcomeSw : welcomeEl.dataset.welcomeEn;
+
+    if (messagesEl.children.length === 1) {
+        welcomeEl.textContent = welcome;
+    }
+
+    inputEl.placeholder = language === 'sw'
+        ? inputEl.dataset.placeholderSw
+        : inputEl.dataset.placeholderEn;
+    sendBtn.textContent = language === 'sw' ? 'Tuma' : 'Send';
+    resetBtn.textContent = language === 'sw' ? 'Anza upya' : 'New Chat';
+    typingEl.querySelector('span').textContent = language === 'sw' ? 'Pearlie anafikiria' : 'Pearlie is thinking';
+
+    quickReplyButtons.forEach((button) => {
+        button.textContent = language === 'sw' ? button.dataset.labelSw : button.dataset.labelEn;
+    });
+}
 
 function appendMessage(text, type) {
     const div = document.createElement('div');
@@ -23,13 +46,14 @@ function hideTyping() {
 }
 
 function resetChat() {
-    messagesEl.innerHTML = `<div class="message ai">👋 Hello! I'm Pearlie, your healthcare assistant at Pearl Hospital. How can I help you today?</div>`;
+    messagesEl.replaceChildren(welcomeEl);
+    updateLanguage();
     inputEl.value = '';
     inputEl.focus();
 }
 
-async function sendMessage() {
-    const message = inputEl.value.trim();
+async function sendMessage(suggestedMessage = null) {
+    const message = (suggestedMessage ?? inputEl.value).trim();
 
     if (!message) {
         return;
@@ -42,7 +66,7 @@ async function sendMessage() {
     showTyping();
 
     try {
-        const response = await fetch('/pearlie/chat', {
+        const response = await fetch(messages.dataset.chatUrl || '/pearlie/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -72,6 +96,12 @@ async function sendMessage() {
 }
 
 sendBtn.addEventListener('click', sendMessage);
+languageToggle.addEventListener('change', updateLanguage);
+quickReplyButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+        sendMessage(languageToggle.value === 'sw' ? button.dataset.messageSw : button.dataset.messageEn);
+    });
+});
 resetBtn.addEventListener('click', (event) => {
     event.preventDefault();
     resetChat();
@@ -82,4 +112,5 @@ inputEl.addEventListener('keydown', (event) => {
         sendMessage();
     }
 });
+updateLanguage();
 inputEl.focus();
