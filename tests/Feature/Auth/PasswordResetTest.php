@@ -7,6 +7,7 @@ use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Contracts\Mail\Factory as MailFactory;
 use Illuminate\Contracts\Mail\Mailer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
@@ -33,9 +34,11 @@ class PasswordResetTest extends TestCase
 
         $this->post('/forgot-password', ['email' => $user->email])
             ->assertRedirect()
-            ->assertSessionHas('status');
+            ->assertSessionHas('status', __(Password::RESET_LINK_SENT))
+            ->assertSessionHasNoErrors();
 
         Notification::assertSentTo($user, ResetPassword::class);
+        $this->assertDatabaseHas('password_reset_tokens', ['email' => $user->email]);
     }
 
     public function test_mail_delivery_failure_returns_the_non_enumerating_success_response(): void
@@ -67,6 +70,8 @@ class PasswordResetTest extends TestCase
             ->assertRedirect()
             ->assertSessionHas('status', __(Password::RESET_LINK_SENT))
             ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseMissing('password_reset_tokens', ['email' => 'unknown@example.test']);
     }
 
     public function test_reset_password_screen_can_be_rendered(): void
@@ -90,7 +95,9 @@ class PasswordResetTest extends TestCase
     {
         Notification::fake();
 
-        $user = User::factory()->create();
+        $user = User::factory()->create([
+            'password' => Hash::make('old-password'),
+        ]);
 
         $this->post('/forgot-password', ['email' => $user->email]);
 
@@ -98,13 +105,73 @@ class PasswordResetTest extends TestCase
             $response = $this->post('/reset-password', [
                 'token' => $notification->token,
                 'email' => $user->email,
-                'password' => 'password',
-                'password_confirmation' => 'password',
+                'password' => 'new-password',
+                'password_confirmation' => 'new-password',
             ]);
 
             $response
                 ->assertSessionHasNoErrors()
                 ->assertRedirect(route('login'));
+            $this->assertDatabaseMissing('password_reset_tokens', ['email' => $user->email]);
+
+            $this->assertFalse(Hash::check('old-password', $user->fresh()->password));
+            $this->post('/login', [
+                'email' => $user->email,
+                'password' => 'old-password',
+            ])->assertSessionHasErrors('email');
+            $this->assertGuest();
+
+            $this->post('/login', [
+                'email' => $user->email,
+                'password' => 'new-password',
+            ])->assertRedirect(route('dashboard', absolute: false));
+            $this->assertAuthenticatedAs($user);
+
+            return true;
+        });
+    }
+
+    public function test_password_reset_rejects_a_tampered_token(): void
+    {
+        Notification::fake();
+
+        $user = User::factory()->create();
+
+        $this->post('/forgot-password', ['email' => $user->email]);
+
+        Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($user) {
+            $this->post('/reset-password', [
+                'token' => $notification->token.'tampered',
+                'email' => $user->email,
+                'password' => 'new-password',
+                'password_confirmation' => 'new-password',
+            ])->assertSessionHasErrors('email');
+
+            $this->assertTrue(Hash::check('password', $user->fresh()->password));
+
+            return true;
+        });
+    }
+
+    public function test_password_reset_rejects_an_expired_token(): void
+    {
+        Notification::fake();
+
+        $user = User::factory()->create();
+
+        $this->post('/forgot-password', ['email' => $user->email]);
+
+        Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($user) {
+            $this->travel(61)->minutes();
+
+            $this->post('/reset-password', [
+                'token' => $notification->token,
+                'email' => $user->email,
+                'password' => 'new-password',
+                'password_confirmation' => 'new-password',
+            ])->assertSessionHasErrors('email');
+
+            $this->assertTrue(Hash::check('password', $user->fresh()->password));
 
             return true;
         });

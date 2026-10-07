@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Console\Commands\MpesaHealthCheck;
 use App\Console\Commands\ReconcileMpesaPayments;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -59,6 +60,11 @@ class MpesaHealthCheckTest extends TestCase
     {
         $this->configureMpesa();
         $this->recordHeartbeat(now()->subMinutes(11));
+        Cache::put(
+            MpesaHealthCheck::SCHEDULER_HEARTBEAT_CACHE_KEY,
+            now()->timestamp,
+            600,
+        );
 
         $this->artisan('mpesa:health-check')
             ->assertExitCode(2);
@@ -108,6 +114,11 @@ class MpesaHealthCheckTest extends TestCase
             ReconcileMpesaPayments::HEARTBEAT_CACHE_KEY,
             $ranAt->timestamp,
             now()->addMinutes(15),
+        );
+        Cache::put(
+            MpesaHealthCheck::SCHEDULER_HEARTBEAT_CACHE_KEY,
+            $ranAt->timestamp,
+            600,
         );
     }
 }

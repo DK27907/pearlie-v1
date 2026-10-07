@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\Schema;
 #[Description('Check M-Pesa configuration, reconciliation, and queue health')]
 class MpesaHealthCheck extends Command
 {
+    public const SCHEDULER_HEARTBEAT_CACHE_KEY = 'scheduler:last_run';
+
     public function handle(): int
     {
         $checks = [];
@@ -55,6 +57,19 @@ class MpesaHealthCheck extends Command
             $reconciliationDescription,
         ];
         $warned = $warned || ! $reconciliationIsRecent;
+
+        $lastSchedulerTimestamp = Cache::get(self::SCHEDULER_HEARTBEAT_CACHE_KEY);
+        $schedulerIsRecent = is_int($lastSchedulerTimestamp)
+            && $lastSchedulerTimestamp >= now()->subMinutes(5)->timestamp;
+        $schedulerDescription = is_int($lastSchedulerTimestamp)
+            ? 'last successful scheduled task at '.CarbonImmutable::createFromTimestamp($lastSchedulerTimestamp)->toDateTimeString()
+            : 'no successful scheduled task heartbeat found in the last 5 minutes';
+        $checks[] = [
+            'Scheduler heartbeat',
+            $schedulerIsRecent ? 'PASS' : 'FAIL',
+            $schedulerDescription,
+        ];
+        $failed = $failed || ! $schedulerIsRecent;
 
         if (Schema::hasTable('failed_jobs')) {
             $recentFailures = DB::table('failed_jobs')

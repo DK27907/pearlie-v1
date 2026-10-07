@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Services\NotificationService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class NotificationServiceFallbackTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_send_sms_uses_africastalking_and_falls_back_to_twilio_on_failure()
     {
         config([

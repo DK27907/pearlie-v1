@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Services\NotificationService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class NotificationServiceRetryTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_africastalking_retries_then_succeeds_and_skips_twilio()
     {
         config([

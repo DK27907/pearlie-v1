@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Services\NotificationService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class NotificationServiceIntegrationTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_send_whatsapp_when_credentials_present()
     {
         config([

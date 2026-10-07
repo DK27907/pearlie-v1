@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\NotificationLog;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use RuntimeException;
 
 class NotificationService
 {
@@ -12,21 +12,30 @@ class NotificationService
     {
         $smsTo = $to;
         $smsConfig = $this->smsConfig();
+        $httpStatus = null;
+        $providerResponse = null;
+        $failureCode = 'delivery_failed';
+        $lastProvider = null;
         $provider = (string) ($smsConfig['provider'] ?? (
             filled($smsConfig['username'] ?? null) && filled($smsConfig['api_key'] ?? null)
                 ? 'africastalking'
                 : 'twilio'
         ));
         if (! in_array($provider, ['africastalking', 'twilio'], true)) {
-            throw new RuntimeException("SMS provider {$provider} is not configured for this hospital.");
+            $this->recordDelivery('sms', $provider, 'not_configured', null, null, 'unsupported_provider');
+
+            return false;
         }
+        $lastProvider = $provider;
 
         // Africa's Talking
         $atUser = $provider === 'africastalking' ? ($smsConfig['username'] ?? null) : null;
         $atKey = $provider === 'africastalking' ? ($smsConfig['api_key'] ?? null) : null;
         $atFrom = $provider === 'africastalking' ? ($smsConfig['sender_id'] ?? null) : null;
         if ($provider === 'africastalking' && (blank($atUser) || blank($atKey))) {
-            throw new RuntimeException("SMS provider {$provider} is not configured for this hospital.");
+            $this->recordDelivery('sms', $provider, 'not_configured', null, null, 'credentials_missing');
+
+            return false;
         }
 
         if ($provider === 'africastalking') {
@@ -45,20 +54,29 @@ class NotificationService
                 $maxAttempts = config('pearlie.notification_retry_attempts', 3);
                 $baseBackoffMs = config('pearlie.notification_backoff_ms', 500); // milliseconds
 
-                $sent = false;
                 for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
                     try {
                         $resp = Http::withHeaders([
                             'apiKey' => $atKey,
                             'Content-Type' => 'application/x-www-form-urlencoded',
                         ])->connectTimeout(3)->timeout(10)->asForm()->post($url, $payload);
+                        $httpStatus = $resp->status();
+                        $providerResponse = $resp->body();
 
                         Log::info('AfricaTalking SMS attempt', ['status' => $resp->status(), 'attempt' => $attempt]);
 
                         if ($resp->successful()) {
-                            $sent = true;
-                            break;
+                            $this->recordDelivery(
+                                'sms',
+                                'africastalking',
+                                'sent',
+                                $httpStatus,
+                                $this->responseMessageId($providerResponse, 'SMSMessageData.Recipients.0.messageId'),
+                            );
+
+                            return true;
                         }
+                        $failureCode = 'http_'.$httpStatus;
 
                         // Non-2xx response; consider transient and retry unless last attempt
                         if ($attempt < $maxAttempts) {
@@ -70,6 +88,7 @@ class NotificationService
                         }
 
                     } catch (\Throwable $e) {
+                        $failureCode = 'transport_error';
                         Log::error('AfricaTalking SMS attempt exception: '.$e->getMessage(), ['attempt' => $attempt]);
                         if ($attempt < $maxAttempts) {
                             $sleepMs = $baseBackoffMs * (2 ** ($attempt - 1));
@@ -78,10 +97,6 @@ class NotificationService
                             continue;
                         }
                     }
-                }
-
-                if ($sent) {
-                    return true;
                 }
 
                 Log::warning('AfricaTalking SMS not successful after retries; falling back to Twilio');
@@ -119,11 +134,14 @@ class NotificationService
             || blank($from)
             || (! filled($token) && (! filled($apiKey) || ! filled($apiSecret)))
         )) {
-            throw new RuntimeException("SMS provider {$provider} is not configured for this hospital.");
+            $this->recordDelivery('sms', $provider, 'not_configured', null, null, 'credentials_missing');
+
+            return false;
         }
 
         if ($sid && (($apiKey && $apiSecret) || $token) && $from) {
             try {
+                $lastProvider = 'twilio';
                 $url = sprintf('https://api.twilio.com/2010-04-01/Accounts/%s/Messages.json', $sid);
 
                 $maxAttempts = config('pearlie.notification_retry_attempts', 3);
@@ -143,12 +161,23 @@ class NotificationService
                                 'To' => $smsTo,
                                 'Body' => $message,
                             ]);
+                        $httpStatus = $resp->status();
+                        $providerResponse = $resp->body();
 
                         Log::info('Twilio SMS attempt', ['status' => $resp->status(), 'attempt' => $attempt]);
 
                         if ($resp->successful()) {
+                            $this->recordDelivery(
+                                'sms',
+                                'twilio',
+                                'sent',
+                                $httpStatus,
+                                $this->responseMessageId($providerResponse, 'sid'),
+                            );
+
                             return true;
                         }
+                        $failureCode = 'http_'.$httpStatus;
 
                         if ($attempt < $maxAttempts) {
                             $sleepMs = $baseBackoffMs * (2 ** ($attempt - 1));
@@ -159,6 +188,7 @@ class NotificationService
                         }
 
                     } catch (\Throwable $e) {
+                        $failureCode = 'transport_error';
                         Log::error('Twilio SMS attempt exception: '.$e->getMessage(), ['attempt' => $attempt]);
                         if ($attempt < $maxAttempts) {
                             $sleepMs = $baseBackoffMs * (2 ** ($attempt - 1));
@@ -193,6 +223,15 @@ class NotificationService
         }
 
         Log::warning('No SMS provider configured; unable to send the message.');
+        $this->recordDelivery(
+            'sms',
+            $lastProvider ?? $provider,
+            'failed',
+            $httpStatus,
+            null,
+            $failureCode,
+            $providerResponse,
+        );
 
         return false;
     }
@@ -203,6 +242,9 @@ class NotificationService
         $waId = $whatsappConfig['phone_number_id'] ?? null;
         $waToken = $whatsappConfig['access_token'] ?? null;
         $smsTo = $to;
+        $httpStatus = null;
+        $providerResponse = null;
+        $failureCode = 'delivery_failed';
 
         if ($waId && $waToken) {
             try {
@@ -224,12 +266,23 @@ class NotificationService
                             'Authorization' => 'Bearer '.$waToken,
                             'Content-Type' => 'application/json',
                         ])->connectTimeout(3)->timeout(10)->post($waUrl, $waPayload);
+                        $httpStatus = $waResp->status();
+                        $providerResponse = $waResp->body();
 
                         Log::info('WhatsApp attempt', ['status' => $waResp->status(), 'attempt' => $attempt]);
 
                         if ($waResp->successful()) {
+                            $this->recordDelivery(
+                                'whatsapp',
+                                'meta_whatsapp',
+                                'sent',
+                                $httpStatus,
+                                $this->responseMessageId($providerResponse, 'messages.0.id'),
+                            );
+
                             return true;
                         }
+                        $failureCode = 'http_'.$httpStatus;
 
                         if ($attempt < $maxAttempts) {
                             $sleepMs = $baseBackoffMs * (2 ** ($attempt - 1));
@@ -240,6 +293,7 @@ class NotificationService
                         }
 
                     } catch (\Throwable $e) {
+                        $failureCode = 'transport_error';
                         Log::error('WhatsApp attempt exception: '.$e->getMessage(), ['attempt' => $attempt]);
                         if ($attempt < $maxAttempts) {
                             $sleepMs = $baseBackoffMs * (2 ** ($attempt - 1));
@@ -269,13 +323,66 @@ class NotificationService
                 Log::info('metric.notification_failure', ['provider' => 'whatsapp']);
 
             } catch (\Throwable $e) {
+                $failureCode = 'transport_error';
                 Log::error('WhatsApp send failed: '.$e->getMessage());
             }
+            $this->recordDelivery(
+                'whatsapp',
+                'meta_whatsapp',
+                'failed',
+                $httpStatus,
+                null,
+                $failureCode,
+                $providerResponse,
+            );
+        } else {
+            $this->recordDelivery(
+                'whatsapp',
+                'meta_whatsapp',
+                'not_configured',
+                null,
+                null,
+                'credentials_missing',
+            );
+            Log::info('No WhatsApp credentials configured; skipping the message.');
         }
 
-        Log::info('No WhatsApp credentials configured; skipping the message.');
-
         return false;
+    }
+
+    private function recordDelivery(
+        string $channel,
+        string $provider,
+        string $status,
+        ?int $httpStatus = null,
+        ?string $providerMessageId = null,
+        ?string $failureCode = null,
+        ?string $providerResponse = null,
+    ): void {
+        NotificationLog::query()->create([
+            'hospital_id' => hospital()?->id,
+            'channel' => $channel,
+            'provider' => $provider,
+            'status' => $status,
+            'http_status' => $httpStatus,
+            'provider_message_id' => $providerMessageId,
+            'failure_code' => $failureCode,
+            'provider_response' => $status === 'failed' ? $providerResponse : null,
+        ]);
+    }
+
+    private function messageId(mixed $messageId): ?string
+    {
+        return is_scalar($messageId) ? (string) $messageId : null;
+    }
+
+    private function responseMessageId(string $body, string $key): ?string
+    {
+        $payload = json_decode($body, true);
+
+        return is_array($payload)
+            ? $this->messageId(data_get($payload, $key))
+            : null;
     }
 
     /**
