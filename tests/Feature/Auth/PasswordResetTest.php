@@ -176,4 +176,23 @@ class PasswordResetTest extends TestCase
             return true;
         });
     }
+
+    public function test_live_password_reset_delivery_is_opt_in(): void
+    {
+        if (filter_var(env('PASSWORD_RESET_LIVE_TEST', false), FILTER_VALIDATE_BOOL) !== true) {
+            $this->markTestSkipped('Set PASSWORD_RESET_LIVE_TEST=true and provide a verified PASSWORD_RESET_LIVE_EMAIL.');
+        }
+
+        $email = (string) env('PASSWORD_RESET_LIVE_EMAIL', '');
+        $this->assertNotFalse(
+            filter_var($email, FILTER_VALIDATE_EMAIL),
+            'PASSWORD_RESET_LIVE_EMAIL must be a valid, provider-approved address.',
+        );
+        $user = User::factory()->create(['email' => $email]);
+
+        $status = Password::sendResetLink(['email' => $user->email]);
+
+        $this->assertSame(Password::RESET_LINK_SENT, $status);
+        $this->assertDatabaseHas('password_reset_tokens', ['email' => $user->email]);
+    }
 }
