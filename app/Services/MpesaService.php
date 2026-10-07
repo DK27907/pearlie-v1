@@ -307,28 +307,37 @@ class MpesaService
                         return null;
                     }
 
-                    $phone = $appointment->mpesa_phone ?: $appointment->phone;
-                    if (! $phone) {
-                        Log::error('M-Pesa callback matched an appointment without a payment phone number.', [
-                            'appointment_id' => $appointment->id,
-                            'checkout_request_id' => $checkoutRequestId,
-                        ]);
+                    $payment = MpesaPayment::query()
+                        ->where('checkout_request_id', $checkoutRequestId)
+                        ->lockForUpdate()
+                        ->first();
 
-                        return null;
+                    if (! $payment) {
+                        $phone = $appointment->mpesa_phone ?: $appointment->phone;
+                        if (! $phone) {
+                            Log::error('M-Pesa callback matched an appointment without a payment phone number.', [
+                                'appointment_id' => $appointment->id,
+                                'checkout_request_id' => $checkoutRequestId,
+                            ]);
+
+                            return null;
+                        }
+
+                        $payment = MpesaPayment::withoutEvents(fn (): MpesaPayment => MpesaPayment::query()
+                            ->forceCreate([
+                                'hospital_id' => $appointment->hospital_id,
+                                'appointment_request_id' => $appointment->id,
+                                'checkout_request_id' => $checkoutRequestId,
+                                'merchant_request_id' => $callback['MerchantRequestID'] ?? null,
+                                'phone' => $phone,
+                                'amount' => $appointment->payment_amount
+                                    ?? $appointment->booking_fee
+                                    ?? pearlie_config('appointment.deposit_amount'),
+                                'account_reference' => null,
+                                'transaction_desc' => null,
+                                'status' => MpesaPayment::STATUS_PENDING,
+                            ]));
                     }
-
-                    $payment = MpesaPayment::query()->create([
-                        'appointment_request_id' => $appointment->id,
-                        'checkout_request_id' => $checkoutRequestId,
-                        'merchant_request_id' => $callback['MerchantRequestID'] ?? null,
-                        'phone' => $phone,
-                        'amount' => $appointment->payment_amount
-                            ?? $appointment->booking_fee
-                            ?? pearlie_config('appointment.deposit_amount'),
-                        'account_reference' => null,
-                        'transaction_desc' => null,
-                        'status' => MpesaPayment::STATUS_PENDING,
-                    ]);
                 }
 
                 if ($payment->isCompleted()

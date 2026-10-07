@@ -206,12 +206,12 @@ class PaymentLifecycleService
 
     public function recordEvent(MpesaPayment $payment, string $event, array $payload = []): void
     {
-        PaymentEvent::query()->create([
+        PaymentEvent::withoutEvents(fn (): PaymentEvent => PaymentEvent::query()->forceCreate([
             'hospital_id' => $payment->hospital_id,
             'payment_id' => $payment->id,
             'event' => $event,
             'payload' => $payload,
-        ]);
+        ]));
     }
 
     public function cancelAppointmentAfterFailedInitiation(int $appointmentId): void

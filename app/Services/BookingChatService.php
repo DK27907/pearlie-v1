@@ -12,6 +12,7 @@ use App\Support\DateParser;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
@@ -59,6 +60,26 @@ class BookingChatService
         }
 
         $sessionId = $this->sessionId($channelId, $channel);
+
+        return Cache::lock(
+            'booking-chat-state:'.hash('sha256', implode(':', [$hospital->id, $channel, $sessionId])),
+            120,
+        )->block(10, fn (): ChatResponse => $this->handleWithinSessionLock(
+            $channelId,
+            $sessionId,
+            $message,
+            $channel,
+            $hospital,
+        ));
+    }
+
+    private function handleWithinSessionLock(
+        string $channelId,
+        string $sessionId,
+        string $message,
+        string $channel,
+        Hospital $hospital,
+    ): ChatResponse {
         $previousState = $this->persistedState($channelId, $channel);
         $state = $this->reconcilePaymentState($previousState);
 
@@ -540,6 +561,41 @@ class BookingChatService
 
         $state['state'] = self::STATE_COLLECTING;
 
+        if (filled($state['time'] ?? null) && $this->isTimeOutsideHospitalHours((string) $state['time'])) {
+            $requestedTime = (string) $state['time'];
+            $doctor = $hospital->users()->find((int) $state['doctor_id']);
+            $doctorName = $doctor?->name ?? 'the doctor';
+            $requestedDate = CarbonImmutable::parse((string) $state['date']);
+            $availableTimes = collect($this->availability->getAvailableSlots(
+                (int) $doctor->id,
+                $requestedDate->toDateString(),
+            ))
+                ->filter(fn (bool $isAvailable): bool => $isAvailable)
+                ->keys()
+                ->take(5)
+                ->all();
+
+            $state['state'] = self::STATE_COLLECTING;
+            $state['time'] = null;
+
+            $response = $availableTimes !== []
+                ? sprintf(
+                    "%s doesn't have availability at %s.\nShe's available from 8:00 AM to 5:00 PM. The next available times with %s on %s are: %s. What time works?",
+                    $doctorName,
+                    $this->formatTimeForResponse($requestedTime),
+                    $doctorName,
+                    $requestedDate->format('F j'),
+                    implode(', ', $availableTimes),
+                )
+                : sprintf(
+                    "%s doesn't have availability at %s.\nShe's available from 8:00 AM to 5:00 PM. What time works?",
+                    $doctorName,
+                    $this->formatTimeForResponse($requestedTime),
+                );
+
+            return $this->respond($sessionId, $channel, $message, $response, $state);
+        }
+
         foreach (self::FIELD_PROMPTS as $field => $prompt) {
             if ($field === 'doctor_id' && $state[$field]) {
                 continue;
@@ -571,41 +627,6 @@ class BookingChatService
 
                 return $this->respond($sessionId, $channel, $message, $promptMessage, $state);
             }
-        }
-
-        $requestedTime = (string) $state['time'];
-        if ($this->isTimeOutsideHospitalHours($requestedTime)) {
-            $doctor = $hospital->users()->find((int) $state['doctor_id']);
-            $doctorName = $doctor?->name ?? 'Dr. Amina';
-            $requestedDate = CarbonImmutable::parse((string) $state['date']);
-            $availableTimes = collect($this->availability->getAvailableSlots(
-                (int) $doctor->id,
-                $requestedDate->toDateString(),
-            ))
-                ->filter(fn (bool $isAvailable): bool => $isAvailable)
-                ->keys()
-                ->take(5)
-                ->all();
-
-            $state['state'] = self::STATE_COLLECTING;
-            $state['time'] = null;
-
-            $response = $availableTimes !== []
-                ? sprintf(
-                    "%s doesn't have availability at %s.\nShe's available from 8:00 AM to 5:00 PM. The next available times with %s on %s are: %s. What time works?",
-                    $doctorName,
-                    $this->formatTimeForResponse($requestedTime),
-                    $doctorName,
-                    $requestedDate->format('F j'),
-                    implode(', ', $availableTimes),
-                )
-                : sprintf(
-                    "%s doesn't have availability at %s.\nShe's available from 8:00 AM to 5:00 PM. What time works?",
-                    $doctorName,
-                    $this->formatTimeForResponse($requestedTime),
-                );
-
-            return $this->respond($sessionId, $channel, $message, $response, $state);
         }
 
         if (! $this->availability->isSlotAvailable(

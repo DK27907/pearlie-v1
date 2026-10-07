@@ -2,9 +2,11 @@
 
 namespace App\Console\Commands;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -33,27 +35,22 @@ class MpesaHealthCheck extends Command
         ] as $key) {
             $value = config('mpesa.'.$key);
             $configured = is_scalar($value) && trim((string) $value) !== '';
-            $description = $configured
-                ? $key.'='.substr((string) $value, 0, 3).'***'
-                : $key.' is missing';
+            $description = $configured ? 'configured' : 'missing';
             $checks[] = ['Config '.$key, $configured ? 'PASS' : 'FAIL', $description];
             $failed = $failed || ! $configured;
         }
 
-        $reconciliationExists = Schema::hasTable('payment_events');
-        $lastReconciliation = $reconciliationExists
-            ? DB::table('payment_events')
-                ->where('event', 'reconciliation_result')
-                ->latest('created_at')
-                ->value('created_at')
+        $lastReconciliationTimestamp = Cache::get(ReconcileMpesaPayments::HEARTBEAT_CACHE_KEY);
+        $lastReconciliation = is_int($lastReconciliationTimestamp)
+            ? CarbonImmutable::createFromTimestamp($lastReconciliationTimestamp)
             : null;
         $reconciliationIsRecent = $lastReconciliation !== null
-            && $lastReconciliation >= now()->subMinutes(10)->toDateTimeString();
+            && $lastReconciliation->greaterThanOrEqualTo(now()->subMinutes(10));
         $reconciliationDescription = $lastReconciliation === null
-            ? 'no reconciliation event found in the last 10 minutes'
-            : 'last reconciliation event at '.$lastReconciliation;
+            ? 'no valid reconciliation command heartbeat found in the last 10 minutes'
+            : 'last reconciliation command at '.$lastReconciliation->toDateTimeString();
         $checks[] = [
-            'Scheduler heartbeat',
+            'Reconciliation command heartbeat',
             $reconciliationIsRecent ? 'PASS' : 'WARN',
             $reconciliationDescription,
         ];

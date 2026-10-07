@@ -35,6 +35,13 @@ class CleanupSlotHolds extends Command
                             ->chunkById(100, function ($holds) use (&$deleted): void {
                                 foreach ($holds as $staleHold) {
                                     $deleted += DB::transaction(function () use ($staleHold): int {
+                                        $appointment = $staleHold->appointment_request_id === null
+                                            ? null
+                                            : AppointmentRequest::query()
+                                                ->whereKey($staleHold->appointment_request_id)
+                                                ->lockForUpdate()
+                                                ->first();
+
                                         $hold = SlotHold::query()
                                             ->whereKey($staleHold->id)
                                             ->lockForUpdate()
@@ -44,7 +51,6 @@ class CleanupSlotHolds extends Command
                                             return 0;
                                         }
 
-                                        $appointment = $hold->appointment;
                                         if ($appointment?->status === AppointmentRequest::STATUS_PENDING) {
                                             $appointment->forceFill([
                                                 'status' => AppointmentRequest::STATUS_EXPIRED,

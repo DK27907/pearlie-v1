@@ -13,7 +13,9 @@ use App\Models\User;
 use App\Services\BookingChatService;
 use App\Services\MpesaService;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -1184,6 +1186,40 @@ class BookingChatServiceTest extends TestCase
 
         $this->assertSame('COLLECTING', $chat->getState('persistence-first')['state']);
         $this->assertSame('IDLE', $chat->getState('persistence-second')['state']);
+    }
+
+    public function test_concurrent_messages_wait_for_the_same_session_lock(): void
+    {
+        [$hospital] = $this->createContext();
+        $this->travelBack();
+        $sessionId = 'concurrent-booking-session';
+        $lockKey = 'booking-chat-state:'.hash('sha256', implode(':', [
+            $hospital->id,
+            'web',
+            $sessionId,
+        ]));
+        $lock = Cache::lock($lockKey, 120);
+        $this->assertTrue($lock->get());
+
+        try {
+            $exception = null;
+
+            try {
+                app(BookingChatService::class)->handle($sessionId, 'Book Dental Cleaning', 'web');
+            } catch (LockTimeoutException $lockTimeoutException) {
+                $exception = $lockTimeoutException;
+            }
+
+            $this->assertInstanceOf(LockTimeoutException::class, $exception);
+            $this->assertDatabaseMissing('conversations', ['session_id' => $sessionId]);
+        } finally {
+            $lock->release();
+        }
+
+        $response = app(BookingChatService::class)->handle($sessionId, 'Book Dental Cleaning', 'web');
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertNotNull($response->collectedFields['service_id']);
     }
 
     /**

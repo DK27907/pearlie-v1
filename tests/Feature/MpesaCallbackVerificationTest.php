@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\SendPaymentNotification;
 use App\Models\AppointmentRequest;
 use App\Models\Hospital;
 use App\Models\MpesaPayment;
@@ -9,6 +10,7 @@ use App\Services\MpesaService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Queue;
 use Mockery;
 use RuntimeException;
 use Tests\TestCase;
@@ -248,6 +250,64 @@ class MpesaCallbackVerificationTest extends TestCase
             'status' => AppointmentRequest::STATUS_CONFIRMED,
         ]);
         $this->assertNotNull($appointment->fresh()->paid_at);
+    }
+
+    public function test_legacy_callback_preserves_the_appointment_hospital_without_tenant_context(): void
+    {
+        $this->configureLocalSandbox();
+        Http::preventStrayRequests();
+        Queue::fake([SendPaymentNotification::class]);
+        $hospital = Hospital::query()->create([
+            'name' => 'Callback Tenant',
+            'slug' => 'callback-tenant',
+            'subscription_plan' => 'professional',
+            'subscription_status' => 'active',
+            'is_active' => true,
+            'settings' => ['auto_confirm_paid_appointments' => true],
+        ]);
+        app()->instance('currentHospital', $hospital);
+
+        $appointment = AppointmentRequest::query()->create([
+            'session_id' => 'legacy-callback-tenant',
+            'name' => 'Jane Doe',
+            'phone' => '0712345678',
+            'mpesa_phone' => '0712345678',
+            'mpesa_checkout_request_id' => 'checkout-legacy-tenant',
+            'preferred_date' => now()->addDay()->toDateString(),
+            'reason' => 'Consultation',
+            'raw_message' => 'Book an appointment',
+            'status' => AppointmentRequest::STATUS_PENDING,
+            'booking_fee' => 500,
+            'payment_amount' => 500,
+            'payment_status' => 'pending',
+        ]);
+        app()->instance('currentHospital', null);
+
+        $payment = app(MpesaService::class)->handleCallback(
+            $this->makeCallback('checkout-legacy-tenant'),
+        );
+
+        $this->assertNotNull($payment);
+        $this->assertDatabaseHas('mpesa_payments', [
+            'id' => $payment->id,
+            'hospital_id' => $hospital->id,
+            'appointment_request_id' => $appointment->id,
+            'status' => MpesaPayment::STATUS_COMPLETED,
+        ]);
+        $this->assertDatabaseHas('payment_events', [
+            'hospital_id' => $hospital->id,
+            'payment_id' => $payment->id,
+            'event' => 'payment_completed',
+        ]);
+
+        $replayedPayment = app(MpesaService::class)->handleCallback(
+            $this->makeCallback('checkout-legacy-tenant'),
+        );
+
+        $this->assertSame($payment->id, $replayedPayment?->id);
+        $this->assertDatabaseCount('mpesa_payments', 1);
+        $this->assertDatabaseCount('payment_events', 1);
+        Queue::assertPushed(SendPaymentNotification::class, 1);
     }
 
     public function test_successful_callback_without_receipt_still_completes_payment(): void
