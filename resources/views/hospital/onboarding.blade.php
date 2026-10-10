@@ -49,7 +49,7 @@
                 </div>
             </section>
             <section class="space-y-4 border-t border-slate-100 pt-6">
-                    <div><h3 class="font-bold text-slate-900">WhatsApp Business integration</h3><p class="mt-1 text-sm text-slate-500">Credentials are encrypted at rest. Configure the tenant webhook URL <code class="rounded bg-slate-100 px-1">{{ url('/api/whatsapp/webhook/'.$hospital->slug) }}</code>.</p></div>
+                    <div><h3 class="font-bold text-slate-900">WhatsApp Business integration</h3><p class="mt-1 text-sm text-slate-500">Credentials are encrypted at rest. Configure the tenant webhook URL <code class="rounded bg-slate-100 px-1 text-slate-700">{{ url('/api/whatsapp/webhook/'.$hospital->slug) }}</code>.</p></div>
                     <div class="grid gap-5 sm:grid-cols-2">
                         <label class="space-y-1 text-sm font-semibold text-slate-700">Business phone number ID<input name="whatsapp_phone_number_id" value="{{ old('whatsapp_phone_number_id', $hospital->whatsapp_phone_number_id) }}" class="w-full rounded-xl border-slate-300 font-normal"></label>
                         <label class="space-y-1 text-sm font-semibold text-slate-700">Graph API version<input name="whatsapp_api_version" value="{{ old('whatsapp_api_version', $hospital->whatsapp_api_version ?: 'v20.0') }}" required class="w-full rounded-xl border-slate-300 font-normal"></label>

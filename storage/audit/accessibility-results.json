@@ -1,0 +1,3517 @@
+{
+  "pages": 84,
+  "serious_critical_violations": 0,
+  "horizontal_overflow": 0,
+  "console_errors": [],
+  "keyboard": [
+    {
+      "role": "superadmin",
+      "path": "/superadmin/dashboard",
+      "focusableCount": 9,
+      "visitedCount": 9,
+      "missingFocusCount": 0,
+      "focusChecks": [
+        {
+          "targetIndex": 0,
+          "tag": "A",
+          "label": "MediDesk AI",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 1,
+          "tag": "A",
+          "label": "Hospitals",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 2,
+          "tag": "BUTTON",
+          "label": "Log out",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 3,
+          "tag": "A",
+          "label": "Add hospital",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 4,
+          "tag": "A",
+          "label": "Manage hospitals",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 5,
+          "tag": "A",
+          "label": "Nairobi Medical Centre",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 6,
+          "tag": "BUTTON",
+          "label": "View as",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 7,
+          "tag": "A",
+          "label": "Pearl Hospital",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 8,
+          "tag": "BUTTON",
+          "label": "View as",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "role": "superadmin",
+      "path": "/dashboard",
+      "focusableCount": 17,
+      "visitedCount": 17,
+      "missingFocusCount": 0,
+      "focusChecks": [
+        {
+          "targetIndex": 0,
+          "tag": "A",
+          "label": "🏥\n                                \n                    MediDesk AI\n                    Vin Plaza, N",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 1,
+          "tag": "A",
+          "label": "Home",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 2,
+          "tag": "A",
+          "label": "Chat with Assistant",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 3,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 4,
+          "tag": "A",
+          "label": "Platform Admin",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 5,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 6,
+          "tag": "A",
+          "label": "info@pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 7,
+          "tag": "A",
+          "label": "https://www.pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 8,
+          "tag": "A",
+          "label": "Chat with Assistant",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 9,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 10,
+          "tag": "A",
+          "label": "Our Services",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 11,
+          "tag": "A",
+          "label": "WhatsApp",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 12,
+          "tag": "A",
+          "label": "Contact Us",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 13,
+          "tag": "A",
+          "label": "Privacy Policy",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 14,
+          "tag": "A",
+          "label": "Terms of Service",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 15,
+          "tag": "A",
+          "label": "Patient Rights",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 16,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/dashboard",
+      "focusableCount": 34,
+      "visitedCount": 34,
+      "missingFocusCount": 0,
+      "focusChecks": [
+        {
+          "targetIndex": 0,
+          "tag": "A",
+          "label": "🏥\n                                \n                    Pearl Hospital\n                    Vin Plaza",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 1,
+          "tag": "A",
+          "label": "Home",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 2,
+          "tag": "A",
+          "label": "Chat with Pearlie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 3,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 4,
+          "tag": "A",
+          "label": "Admin Dashboard",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 5,
+          "tag": "A",
+          "label": "Dashboard",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 6,
+          "tag": "A",
+          "label": "Appointments",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 7,
+          "tag": "A",
+          "label": "Doctors",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 8,
+          "tag": "A",
+          "label": "Service catalog",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 9,
+          "tag": "A",
+          "label": "Service answers",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 10,
+          "tag": "A",
+          "label": "Knowledge base",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 11,
+          "tag": "A",
+          "label": "Conversations",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 12,
+          "tag": "A",
+          "label": "Escalations",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 13,
+          "tag": "A",
+          "label": "Payments",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 14,
+          "tag": "A",
+          "label": "Notification logs",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 15,
+          "tag": "A",
+          "label": "Reports",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 16,
+          "tag": "A",
+          "label": "Settings",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 17,
+          "tag": "A",
+          "label": "Hospital setup",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 18,
+          "tag": "A",
+          "label": "View all",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 19,
+          "tag": "A",
+          "label": "View all",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 20,
+          "tag": "A",
+          "label": "Patricia Wanjiku · #14\n                                pending\n                            \n        ",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 21,
+          "tag": "A",
+          "label": "Patricia Wanjiku · #15\n                                confirmed\n                            \n      ",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 22,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 23,
+          "tag": "A",
+          "label": "info@pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 24,
+          "tag": "A",
+          "label": "https://www.pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 25,
+          "tag": "A",
+          "label": "Chat with Pearlie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 26,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 27,
+          "tag": "A",
+          "label": "Our Services",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 28,
+          "tag": "A",
+          "label": "WhatsApp",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 29,
+          "tag": "A",
+          "label": "Contact Us",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 30,
+          "tag": "A",
+          "label": "Privacy Policy",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 31,
+          "tag": "A",
+          "label": "Terms of Service",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 32,
+          "tag": "A",
+          "label": "Patient Rights",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 33,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/dashboard",
+      "focusableCount": 17,
+      "visitedCount": 17,
+      "missingFocusCount": 0,
+      "focusChecks": [
+        {
+          "targetIndex": 0,
+          "tag": "A",
+          "label": "🏥\n                                \n                    Pearl Hospital\n                    Vin Plaza",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 1,
+          "tag": "A",
+          "label": "Home",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 2,
+          "tag": "A",
+          "label": "Chat with Pearlie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 3,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 4,
+          "tag": "A",
+          "label": "Admin Dashboard",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 5,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 6,
+          "tag": "A",
+          "label": "info@pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 7,
+          "tag": "A",
+          "label": "https://www.pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 8,
+          "tag": "A",
+          "label": "Chat with Pearlie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 9,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 10,
+          "tag": "A",
+          "label": "Our Services",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 11,
+          "tag": "A",
+          "label": "WhatsApp",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 12,
+          "tag": "A",
+          "label": "Contact Us",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 13,
+          "tag": "A",
+          "label": "Privacy Policy",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 14,
+          "tag": "A",
+          "label": "Terms of Service",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 15,
+          "tag": "A",
+          "label": "Patient Rights",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 16,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/dashboard",
+      "focusableCount": 31,
+      "visitedCount": 31,
+      "missingFocusCount": 0,
+      "focusChecks": [
+        {
+          "targetIndex": 0,
+          "tag": "A",
+          "label": "🏥\n                                \n                    Nairobi Medical Centre\n                    N",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 1,
+          "tag": "A",
+          "label": "Home",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 2,
+          "tag": "A",
+          "label": "Chat with Nairobiie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 3,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 4,
+          "tag": "A",
+          "label": "Admin Dashboard",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 5,
+          "tag": "A",
+          "label": "Dashboard",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 6,
+          "tag": "A",
+          "label": "Appointments",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 7,
+          "tag": "A",
+          "label": "Doctors",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 8,
+          "tag": "A",
+          "label": "Service catalog",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 9,
+          "tag": "A",
+          "label": "Service answers",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 10,
+          "tag": "A",
+          "label": "Knowledge base",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 11,
+          "tag": "A",
+          "label": "Conversations",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 12,
+          "tag": "A",
+          "label": "Payments",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 13,
+          "tag": "A",
+          "label": "Notification logs",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 14,
+          "tag": "A",
+          "label": "Reports",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 15,
+          "tag": "A",
+          "label": "Settings",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 16,
+          "tag": "A",
+          "label": "Hospital setup",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 17,
+          "tag": "A",
+          "label": "View all",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 18,
+          "tag": "A",
+          "label": "View all",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 19,
+          "tag": "A",
+          "label": "0700000010",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 20,
+          "tag": "A",
+          "label": "info@demohospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 21,
+          "tag": "A",
+          "label": "https://www.pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 22,
+          "tag": "A",
+          "label": "Chat with Nairobiie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 23,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 24,
+          "tag": "A",
+          "label": "Our Services",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 25,
+          "tag": "A",
+          "label": "WhatsApp",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 26,
+          "tag": "A",
+          "label": "Contact Us",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 27,
+          "tag": "A",
+          "label": "Privacy Policy",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 28,
+          "tag": "A",
+          "label": "Terms of Service",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 29,
+          "tag": "A",
+          "label": "Patient Rights",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 30,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "role": "demo_admin",
+      "path": "/dashboard",
+      "focusableCount": 17,
+      "visitedCount": 17,
+      "missingFocusCount": 0,
+      "focusChecks": [
+        {
+          "targetIndex": 0,
+          "tag": "A",
+          "label": "🏥\n                                \n                    Nairobi Medical Centre\n                    N",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 1,
+          "tag": "A",
+          "label": "Home",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 2,
+          "tag": "A",
+          "label": "Chat with Nairobiie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 3,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 4,
+          "tag": "A",
+          "label": "Admin Dashboard",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 5,
+          "tag": "A",
+          "label": "0700000010",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 6,
+          "tag": "A",
+          "label": "info@demohospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 7,
+          "tag": "A",
+          "label": "https://www.pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 8,
+          "tag": "A",
+          "label": "Chat with Nairobiie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 9,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 10,
+          "tag": "A",
+          "label": "Our Services",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 11,
+          "tag": "A",
+          "label": "WhatsApp",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 12,
+          "tag": "A",
+          "label": "Contact Us",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 13,
+          "tag": "A",
+          "label": "Privacy Policy",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 14,
+          "tag": "A",
+          "label": "Terms of Service",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 15,
+          "tag": "A",
+          "label": "Patient Rights",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 16,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "role": "doctor",
+      "path": "/doctor/dashboard",
+      "focusableCount": 28,
+      "visitedCount": 28,
+      "missingFocusCount": 0,
+      "focusChecks": [
+        {
+          "targetIndex": 0,
+          "tag": "A",
+          "label": "🏥\n                                \n                    Pearl Hospital\n                    Vin Plaza",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 1,
+          "tag": "A",
+          "label": "Home",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 2,
+          "tag": "A",
+          "label": "Chat with Pearlie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 3,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 4,
+          "tag": "A",
+          "label": "My Dashboard",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 5,
+          "tag": "A",
+          "label": "+\n            Pearl Hospital",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 6,
+          "tag": "A",
+          "label": "Dashboard",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 7,
+          "tag": "A",
+          "label": "Appointments",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 8,
+          "tag": "A",
+          "label": "My Patients",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 9,
+          "tag": "A",
+          "label": "Availability",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 10,
+          "tag": "A",
+          "label": "Escalations",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 11,
+          "tag": "A",
+          "label": "Change Password",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 12,
+          "tag": "BUTTON",
+          "label": "Sign out",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 13,
+          "tag": "A",
+          "label": "Open escalation queue →",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true
+        },
+        {
+          "targetIndex": 14,
+          "tag": "A",
+          "label": "View schedule →",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 15,
+          "tag": "A",
+          "label": "Manage availability →",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 16,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 17,
+          "tag": "A",
+          "label": "info@pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 18,
+          "tag": "A",
+          "label": "https://www.pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 19,
+          "tag": "A",
+          "label": "Chat with Pearlie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 20,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 21,
+          "tag": "A",
+          "label": "Our Services",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 22,
+          "tag": "A",
+          "label": "WhatsApp",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 23,
+          "tag": "A",
+          "label": "Contact Us",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 24,
+          "tag": "A",
+          "label": "Privacy Policy",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 25,
+          "tag": "A",
+          "label": "Terms of Service",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 26,
+          "tag": "A",
+          "label": "Patient Rights",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 27,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "role": "doctor",
+      "path": "/dashboard",
+      "focusableCount": 17,
+      "visitedCount": 17,
+      "missingFocusCount": 0,
+      "focusChecks": [
+        {
+          "targetIndex": 0,
+          "tag": "A",
+          "label": "🏥\n                                \n                    Pearl Hospital\n                    Vin Plaza",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 1,
+          "tag": "A",
+          "label": "Home",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 2,
+          "tag": "A",
+          "label": "Chat with Pearlie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 3,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 4,
+          "tag": "A",
+          "label": "My Dashboard",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 5,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 6,
+          "tag": "A",
+          "label": "info@pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 7,
+          "tag": "A",
+          "label": "https://www.pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 8,
+          "tag": "A",
+          "label": "Chat with Pearlie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 9,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 10,
+          "tag": "A",
+          "label": "Our Services",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 11,
+          "tag": "A",
+          "label": "WhatsApp",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 12,
+          "tag": "A",
+          "label": "Contact Us",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 13,
+          "tag": "A",
+          "label": "Privacy Policy",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 14,
+          "tag": "A",
+          "label": "Terms of Service",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 15,
+          "tag": "A",
+          "label": "Patient Rights",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 16,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "role": "patient",
+      "path": "/dashboard",
+      "focusableCount": 17,
+      "visitedCount": 17,
+      "missingFocusCount": 0,
+      "focusChecks": [
+        {
+          "targetIndex": 0,
+          "tag": "A",
+          "label": "🏥\n                                \n                    Pearl Hospital\n                    Vin Plaza",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 1,
+          "tag": "A",
+          "label": "Home",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 2,
+          "tag": "A",
+          "label": "Chat with Pearlie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 3,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 4,
+          "tag": "A",
+          "label": "My Appointments",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 5,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 6,
+          "tag": "A",
+          "label": "info@pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 7,
+          "tag": "A",
+          "label": "https://www.pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 8,
+          "tag": "A",
+          "label": "Chat with Pearlie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 9,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 10,
+          "tag": "A",
+          "label": "Our Services",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 11,
+          "tag": "A",
+          "label": "WhatsApp",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 12,
+          "tag": "A",
+          "label": "Contact Us",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 13,
+          "tag": "A",
+          "label": "Privacy Policy",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 14,
+          "tag": "A",
+          "label": "Terms of Service",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 15,
+          "tag": "A",
+          "label": "Patient Rights",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 16,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "role": "patient",
+      "path": "/h/pearl/chat",
+      "focusableCount": 10,
+      "visitedCount": 10,
+      "missingFocusCount": 0,
+      "focusChecks": [
+        {
+          "targetIndex": 6,
+          "tag": "BUTTON",
+          "label": "Send message",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 7,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 8,
+          "tag": "A",
+          "label": "New Chat",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 9,
+          "tag": "A",
+          "label": "Back to homepage",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 0,
+          "tag": "SELECT",
+          "label": "Chat language",
+          "outlineStyle": "solid",
+          "outlineWidth": "2px",
+          "boxShadow": "rgb(255, 255, 255) 0px 0px 0px 0px, rgb(37, 99, 235) 0px 0px 0px 1px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true
+        },
+        {
+          "targetIndex": 1,
+          "tag": "BUTTON",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 2,
+          "tag": "BUTTON",
+          "label": "Our Services",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 3,
+          "tag": "BUTTON",
+          "label": "Emergency",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 4,
+          "tag": "BUTTON",
+          "label": "Location",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 5,
+          "tag": "INPUT",
+          "label": "Message the hospital assistant",
+          "outlineStyle": "none",
+          "outlineWidth": "3px",
+          "boxShadow": "rgb(255, 255, 255) 0px 0px 0px 0px, rgb(37, 99, 235) 0px 0px 0px 1px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "role": "guest",
+      "path": "/login",
+      "focusableCount": 24,
+      "visitedCount": 24,
+      "missingFocusCount": 0,
+      "focusChecks": [
+        {
+          "targetIndex": 7,
+          "tag": "INPUT",
+          "label": "",
+          "outlineStyle": "solid",
+          "outlineWidth": "2px",
+          "boxShadow": "rgb(255, 255, 255) 0px 0px 0px 0px, rgb(99, 102, 241) 0px 0px 0px 1px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true
+        },
+        {
+          "targetIndex": 8,
+          "tag": "INPUT",
+          "label": "",
+          "outlineStyle": "solid",
+          "outlineWidth": "2px",
+          "boxShadow": "rgb(255, 255, 255) 0px 0px 0px 2px, rgb(99, 102, 241) 0px 0px 0px 4px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true
+        },
+        {
+          "targetIndex": 9,
+          "tag": "A",
+          "label": "Forgot your password?",
+          "outlineStyle": "solid",
+          "outlineWidth": "2px",
+          "boxShadow": "rgb(255, 255, 255) 0px 0px 0px 2px, rgb(99, 102, 241) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true
+        },
+        {
+          "targetIndex": 10,
+          "tag": "BUTTON",
+          "label": "Sign in",
+          "outlineStyle": "solid",
+          "outlineWidth": "2px",
+          "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true
+        },
+        {
+          "targetIndex": 11,
+          "tag": "A",
+          "label": "Return to chat",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 12,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 13,
+          "tag": "A",
+          "label": "info@pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 14,
+          "tag": "A",
+          "label": "https://www.pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 15,
+          "tag": "A",
+          "label": "Chat with Pearlie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 16,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 17,
+          "tag": "A",
+          "label": "Our Services",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 18,
+          "tag": "A",
+          "label": "WhatsApp",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 19,
+          "tag": "A",
+          "label": "Contact Us",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 20,
+          "tag": "A",
+          "label": "Privacy Policy",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 21,
+          "tag": "A",
+          "label": "Terms of Service",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 22,
+          "tag": "A",
+          "label": "Patient Rights",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 23,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 0,
+          "tag": "A",
+          "label": "🏥\n                                \n                    Pearl Hospital\n                    Vin Plaza",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 1,
+          "tag": "A",
+          "label": "Home",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 2,
+          "tag": "A",
+          "label": "Chat with Pearlie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 3,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 4,
+          "tag": "A",
+          "label": "Login",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 5,
+          "tag": "A",
+          "label": "Register",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 6,
+          "tag": "INPUT",
+          "label": "",
+          "outlineStyle": "solid",
+          "outlineWidth": "2px",
+          "boxShadow": "rgb(255, 255, 255) 0px 0px 0px 0px, rgb(99, 102, 241) 0px 0px 0px 1px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "role": "guest",
+      "path": "/register",
+      "focusableCount": 26,
+      "visitedCount": 26,
+      "missingFocusCount": 0,
+      "focusChecks": [
+        {
+          "targetIndex": 7,
+          "tag": "INPUT",
+          "label": "",
+          "outlineStyle": "solid",
+          "outlineWidth": "2px",
+          "boxShadow": "rgb(255, 255, 255) 0px 0px 0px 0px, rgb(99, 102, 241) 0px 0px 0px 1px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true
+        },
+        {
+          "targetIndex": 8,
+          "tag": "INPUT",
+          "label": "",
+          "outlineStyle": "solid",
+          "outlineWidth": "2px",
+          "boxShadow": "rgb(255, 255, 255) 0px 0px 0px 0px, rgb(99, 102, 241) 0px 0px 0px 1px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true
+        },
+        {
+          "targetIndex": 9,
+          "tag": "INPUT",
+          "label": "",
+          "outlineStyle": "solid",
+          "outlineWidth": "2px",
+          "boxShadow": "rgb(255, 255, 255) 0px 0px 0px 0px, rgb(99, 102, 241) 0px 0px 0px 1px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true
+        },
+        {
+          "targetIndex": 10,
+          "tag": "INPUT",
+          "label": "",
+          "outlineStyle": "solid",
+          "outlineWidth": "2px",
+          "boxShadow": "rgb(255, 255, 255) 0px 0px 0px 0px, rgb(99, 102, 241) 0px 0px 0px 1px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true
+        },
+        {
+          "targetIndex": 11,
+          "tag": "A",
+          "label": "Already registered?",
+          "outlineStyle": "solid",
+          "outlineWidth": "2px",
+          "boxShadow": "rgb(255, 255, 255) 0px 0px 0px 2px, rgb(99, 102, 241) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true
+        },
+        {
+          "targetIndex": 12,
+          "tag": "BUTTON",
+          "label": "Register",
+          "outlineStyle": "solid",
+          "outlineWidth": "2px",
+          "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true
+        },
+        {
+          "targetIndex": 13,
+          "tag": "A",
+          "label": "Return to chat",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 14,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 15,
+          "tag": "A",
+          "label": "info@pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 16,
+          "tag": "A",
+          "label": "https://www.pearlhospital.co.ke",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 17,
+          "tag": "A",
+          "label": "Chat with Pearlie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 18,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 19,
+          "tag": "A",
+          "label": "Our Services",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 20,
+          "tag": "A",
+          "label": "WhatsApp",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 21,
+          "tag": "A",
+          "label": "Contact Us",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 22,
+          "tag": "A",
+          "label": "Privacy Policy",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 23,
+          "tag": "A",
+          "label": "Terms of Service",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 24,
+          "tag": "A",
+          "label": "Patient Rights",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 25,
+          "tag": "A",
+          "label": "0707799114",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 0,
+          "tag": "A",
+          "label": "🏥\n                                \n                    Pearl Hospital\n                    Vin Plaza",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 1,
+          "tag": "A",
+          "label": "Home",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 2,
+          "tag": "A",
+          "label": "Chat with Pearlie",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 3,
+          "tag": "A",
+          "label": "Book Appointment",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 4,
+          "tag": "A",
+          "label": "Login",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 5,
+          "tag": "A",
+          "label": "Register",
+          "outlineStyle": "auto",
+          "outlineWidth": "1px",
+          "boxShadow": "none",
+          "visible": true
+        },
+        {
+          "targetIndex": 6,
+          "tag": "INPUT",
+          "label": "",
+          "outlineStyle": "solid",
+          "outlineWidth": "2px",
+          "boxShadow": "rgb(255, 255, 255) 0px 0px 0px 0px, rgb(99, 102, 241) 0px 0px 0px 1px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true
+        }
+      ]
+    }
+  ],
+  "results": [
+    {
+      "role": "superadmin",
+      "path": "/superadmin/dashboard",
+      "route_name": "superadmin.dashboard",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": "superadmin-superadmin-dashboard.png"
+    },
+    {
+      "role": "superadmin",
+      "path": "/superadmin/hospitals",
+      "route_name": "superadmin.hospitals.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "superadmin",
+      "path": "/superadmin/hospitals/create",
+      "route_name": "superadmin.hospitals.create",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "superadmin",
+      "path": "/superadmin/hospitals/1",
+      "route_name": "superadmin.hospitals.show",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "superadmin",
+      "path": "/superadmin/hospitals/1/edit",
+      "route_name": "superadmin.hospitals.edit",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "superadmin",
+      "path": "/profile",
+      "route_name": "profile.edit",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "superadmin",
+      "path": "/settings/profile",
+      "route_name": "settings.profile",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "superadmin",
+      "path": "/dashboard",
+      "route_name": "dashboard",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": "superadmin-dashboard.png"
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/appointments",
+      "route_name": "admin.appointments.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/appointments/14",
+      "route_name": "admin.appointments.show",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/conversations",
+      "route_name": "admin.conversations.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/dashboard",
+      "route_name": "admin.dashboard",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": "pearl_admin-admin-dashboard.png"
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/doctors",
+      "route_name": "admin.doctors.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/doctors/create",
+      "route_name": "admin.doctors.create",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/doctors/5/edit",
+      "route_name": "admin.doctors.edit",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/escalations",
+      "route_name": "admin.escalations.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/integration-settings",
+      "route_name": "admin.integration-settings.edit",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/invites",
+      "route_name": "admin.invites.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/knowledge-base",
+      "route_name": "admin.knowledge-base.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/knowledge-base/create",
+      "route_name": "admin.knowledge-base.create",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/knowledge-base/1/edit",
+      "route_name": "admin.knowledge-base.edit",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/knowledge-services",
+      "route_name": "admin.knowledge-services.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/knowledge-services/create",
+      "route_name": "admin.knowledge-services.create",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/notification-logs",
+      "route_name": "admin.notification-logs.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/payments",
+      "route_name": "admin.payments.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/permissions",
+      "route_name": "admin.permissions.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/reports",
+      "route_name": "admin.reports.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/roles",
+      "route_name": "admin.roles.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/services",
+      "route_name": "admin.services.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/services/create",
+      "route_name": "admin.services.create",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/services/1/edit",
+      "route_name": "admin.services.edit",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/settings",
+      "route_name": "admin.settings",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/hospital/onboarding",
+      "route_name": "hospital.onboarding",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/profile",
+      "route_name": "profile.edit",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/settings/profile",
+      "route_name": "settings.profile",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/dashboard",
+      "route_name": "dashboard",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": "pearl_admin-dashboard.png"
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/h/pearl/chat",
+      "route_name": "tenant.chat.page.pearl",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/appointments",
+      "route_name": "admin.appointments.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/conversations",
+      "route_name": "admin.conversations.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/dashboard",
+      "route_name": "admin.dashboard",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": "demo_admin-admin-dashboard.png"
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/doctors",
+      "route_name": "admin.doctors.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/doctors/create",
+      "route_name": "admin.doctors.create",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/doctors/10/edit",
+      "route_name": "admin.doctors.edit",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/integration-settings",
+      "route_name": "admin.integration-settings.edit",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/invites",
+      "route_name": "admin.invites.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/knowledge-base",
+      "route_name": "admin.knowledge-base.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/knowledge-base/create",
+      "route_name": "admin.knowledge-base.create",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/knowledge-base/1/edit",
+      "route_name": "admin.knowledge-base.edit",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/knowledge-services",
+      "route_name": "admin.knowledge-services.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/knowledge-services/create",
+      "route_name": "admin.knowledge-services.create",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/notification-logs",
+      "route_name": "admin.notification-logs.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/payments",
+      "route_name": "admin.payments.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/permissions",
+      "route_name": "admin.permissions.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/reports",
+      "route_name": "admin.reports.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/roles",
+      "route_name": "admin.roles.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/services",
+      "route_name": "admin.services.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/services/create",
+      "route_name": "admin.services.create",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/services/11/edit",
+      "route_name": "admin.services.edit",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/settings",
+      "route_name": "admin.settings",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/hospital/onboarding",
+      "route_name": "hospital.onboarding",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/profile",
+      "route_name": "profile.edit",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/settings/profile",
+      "route_name": "settings.profile",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "demo_admin",
+      "path": "/dashboard",
+      "route_name": "dashboard",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": "demo_admin-dashboard.png"
+    },
+    {
+      "role": "demo_admin",
+      "path": "/h/demo/chat",
+      "route_name": "tenant.chat.page.demo",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "doctor",
+      "path": "/doctor/appointments",
+      "route_name": "doctor.appointments",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "doctor",
+      "path": "/doctor/appointments/14",
+      "route_name": "doctor.appointments.show",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "doctor",
+      "path": "/doctor/availability",
+      "route_name": "doctor.availability",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "doctor",
+      "path": "/doctor/dashboard",
+      "route_name": "doctor.dashboard",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": "doctor-doctor-dashboard.png"
+    },
+    {
+      "role": "doctor",
+      "path": "/doctor/escalations",
+      "route_name": "doctor.escalations.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "doctor",
+      "path": "/doctor/patients",
+      "route_name": "doctor.patients.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "doctor",
+      "path": "/doctor/profile",
+      "route_name": "doctor.profile",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "doctor",
+      "path": "/profile",
+      "route_name": "profile.edit",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "doctor",
+      "path": "/settings/profile",
+      "route_name": "settings.profile",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "doctor",
+      "path": "/dashboard",
+      "route_name": "dashboard",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": "doctor-dashboard.png"
+    },
+    {
+      "role": "doctor",
+      "path": "/h/pearl/chat",
+      "route_name": "tenant.chat.page.pearl",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "patient",
+      "path": "/appointments",
+      "route_name": "appointments.index",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "patient",
+      "path": "/appointments/14",
+      "route_name": "appointments.show",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "patient",
+      "path": "/appointments/14/reschedule",
+      "route_name": "appointments.reschedule.create",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "patient",
+      "path": "/profile",
+      "route_name": "profile.edit",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "patient",
+      "path": "/settings/profile",
+      "route_name": "settings.profile",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "patient",
+      "path": "/dashboard",
+      "route_name": "dashboard",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": "patient-dashboard.png"
+    },
+    {
+      "role": "patient",
+      "path": "/h/pearl/chat",
+      "route_name": "tenant.chat.page.pearl",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "guest",
+      "path": "/login",
+      "route_name": "",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    },
+    {
+      "role": "guest",
+      "path": "/register",
+      "route_name": "",
+      "status": "loaded",
+      "violations": [],
+      "serious_critical": 0,
+      "dimensions": {
+        "viewportWidth": 7680,
+        "documentWidth": 7680,
+        "bodyFontSize": 20
+      },
+      "screenshot": ""
+    }
+  ]
+}

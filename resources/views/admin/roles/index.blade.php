@@ -30,16 +30,16 @@
             <form method="POST" action="{{ route('admin.roles.assign') }}">
                 @csrf
                 <div class="form-group">
-                    <label>User</label>
-                    <select name="user_id" class="form-control">
+                    <label for="assign-role-user">User</label>
+                    <select id="assign-role-user" name="user_id" class="form-control">
                         @foreach($users as $u)
                             <option value="{{ $u->id }}">{{ $u->name }} ({{ $u->email }})</option>
                         @endforeach
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Role</label>
-                    <select name="role" class="form-control">
+                    <label for="assign-role-name">Role</label>
+                    <select id="assign-role-name" name="role" class="form-control">
                         @foreach($roles as $r)
                             <option value="{{ $r->name }}">{{ $r->name }}</option>
                         @endforeach
@@ -66,16 +66,16 @@
             <form method="POST" action="{{ route('admin.roles.remove') }}">
                 @csrf
                 <div class="form-group">
-                    <label>User</label>
-                    <select name="user_id" class="form-control">
+                    <label for="remove-role-user">User</label>
+                    <select id="remove-role-user" name="user_id" class="form-control">
                         @foreach($users as $u)
                             <option value="{{ $u->id }}">{{ $u->name }} ({{ $u->email }})</option>
                         @endforeach
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Role</label>
-                    <select name="role" class="form-control">
+                    <label for="remove-role-name">Role</label>
+                    <select id="remove-role-name" name="role" class="form-control">
                         @foreach($roles as $r)
                             <option value="{{ $r->name }}">{{ $r->name }}</option>
                         @endforeach

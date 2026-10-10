@@ -102,7 +102,7 @@
                     <label class="grid gap-1.5 text-sm font-medium text-slate-700">Date
                         <input type="date" name="date" min="{{ now()->toDateString() }}" value="{{ old('date') }}" required class="rounded-lg border-slate-300 text-sm focus:border-cyan-600 focus:ring-cyan-600">
                     </label>
-                    <label class="grid gap-1.5 text-sm font-medium text-slate-700">Reason <span class="font-normal text-slate-400">(optional)</span>
+                    <label class="grid gap-1.5 text-sm font-medium text-slate-700">Reason <span class="font-normal text-slate-600">(optional)</span>
                         <input type="text" name="reason" value="{{ old('reason') }}" maxlength="255" placeholder="e.g. Annual leave" class="rounded-lg border-slate-300 text-sm focus:border-cyan-600 focus:ring-cyan-600">
                     </label>
                     <button type="submit" class="mt-1 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-cyan-600 hover:text-cyan-800">Add unavailable date</button>

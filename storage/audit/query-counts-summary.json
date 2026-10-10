@@ -1,0 +1,58 @@
+{
+  "pages": 104,
+  "pages_over_50": 0,
+  "status_failures": 0,
+  "failures": [],
+  "top_five": [
+    {
+      "role": "patient",
+      "path": "/appointments/14/reschedule",
+      "route_name": "appointments.reschedule.create",
+      "query_count": 34,
+      "status": 200,
+      "location": "",
+      "transport_error": "",
+      "body_preview": "<!DOCTYPE html> <html lang=\"en\"> <head> <meta charset=\"utf-8\"> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <meta name=\"csrf-token\" content=\"0HifWcLeVy3JbD0IeYzQk8dsbE7N2VXwhrKq3aTk\"> <meta name=\"description\" content=\"Pearl Hospital in Vin Plaza, Nyeri - Nyahururu Rd, Nyahururu, Kenya. Chat with Pearlie or book an appointmen"
+    },
+    {
+      "role": "doctor",
+      "path": "/doctor/dashboard",
+      "route_name": "doctor.dashboard",
+      "query_count": 17,
+      "status": 200,
+      "location": "",
+      "transport_error": "",
+      "body_preview": "<!DOCTYPE html> <html lang=\"en\"> <head> <meta charset=\"utf-8\"> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <meta name=\"csrf-token\" content=\"ryeVm6obmDmvh094iPXVMyw504Rl8e3NBAxQhRdL\"> <meta name=\"description\" content=\"Pearl Hospital in Vin Plaza, Nyeri - Nyahururu Rd, Nyahururu, Kenya. Chat with Pearlie or book an appointmen"
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/roles",
+      "route_name": "admin.roles.index",
+      "query_count": 16,
+      "status": 200,
+      "location": "",
+      "transport_error": "",
+      "body_preview": "<!DOCTYPE html> <html lang=\"en\"> <head> <meta charset=\"utf-8\"> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <meta name=\"csrf-token\" content=\"BealDiwJSEWctboDcn48h2wGv4kHEa4JGTDj5hFG\"> <meta name=\"description\" content=\"Pearl Hospital in Vin Plaza, Nyeri - Nyahururu Rd, Nyahururu, Kenya. Chat with Pearlie or book an appointmen"
+    },
+    {
+      "role": "pearl_admin",
+      "path": "/admin/dashboard",
+      "route_name": "admin.dashboard",
+      "query_count": 13,
+      "status": 200,
+      "location": "",
+      "transport_error": "",
+      "body_preview": "<!DOCTYPE html> <html lang=\"en\"> <head> <meta charset=\"utf-8\"> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <meta name=\"csrf-token\" content=\"BealDiwJSEWctboDcn48h2wGv4kHEa4JGTDj5hFG\"> <meta name=\"description\" content=\"Pearl Hospital in Vin Plaza, Nyeri - Nyahururu Rd, Nyahururu, Kenya. Chat with Pearlie or book an appointmen"
+    },
+    {
+      "role": "demo_admin",
+      "path": "/admin/dashboard",
+      "route_name": "admin.dashboard",
+      "query_count": 13,
+      "status": 200,
+      "location": "",
+      "transport_error": "",
+      "body_preview": "<!DOCTYPE html> <html lang=\"en\"> <head> <meta charset=\"utf-8\"> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <meta name=\"csrf-token\" content=\"dQ1prAMlGlecwXdoBP5HxLP874xM1cBj5bg5GTSH\"> <meta name=\"description\" content=\"Nairobi Medical Centre in Nairobi, Kenya. Chat with Nairobiie or book an appointment.\"> <meta name=\"theme-co"
+    }
+  ]
+}

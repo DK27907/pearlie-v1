@@ -23,8 +23,8 @@
             <form method="POST" action="{{ route('admin.permissions.store') }}">
                 @csrf
                 <div class="form-group">
-                    <label>Name</label>
-                    <input name="name" class="form-control" required />
+                    <label for="permission-name">Name</label>
+                    <input id="permission-name" name="name" class="form-control" required />
                 </div>
                 <button class="btn btn-primary">Create</button>
             </form>
@@ -35,16 +35,16 @@
             <form method="POST" action="{{ route('admin.permissions.assign') }}">
                 @csrf
                 <div class="form-group">
-                    <label>Role</label>
-                    <select name="role" class="form-control">
+                    <label for="assign-permission-role">Role</label>
+                    <select id="assign-permission-role" name="role" class="form-control">
                         @foreach($roles as $r)
                             <option value="{{ $r->name }}">{{ $r->name }}</option>
                         @endforeach
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Permission</label>
-                    <select name="permission" class="form-control">
+                    <label for="assign-permission-permission">Permission</label>
+                    <select id="assign-permission-permission" name="permission" class="form-control">
                         @foreach($permissions as $p)
                             <option value="{{ $p->name }}">{{ $p->name }}</option>
                         @endforeach
@@ -59,16 +59,16 @@
             <form method="POST" action="{{ route('admin.permissions.revoke') }}">
                 @csrf
                 <div class="form-group">
-                    <label>Role</label>
-                    <select name="role" class="form-control">
+                    <label for="revoke-permission-role">Role</label>
+                    <select id="revoke-permission-role" name="role" class="form-control">
                         @foreach($roles as $r)
                             <option value="{{ $r->name }}">{{ $r->name }}</option>
                         @endforeach
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Permission</label>
-                    <select name="permission" class="form-control">
+                    <label for="revoke-permission-permission">Permission</label>
+                    <select id="revoke-permission-permission" name="permission" class="form-control">
                         @foreach($permissions as $p)
                             <option value="{{ $p->name }}">{{ $p->name }}</option>
                         @endforeach

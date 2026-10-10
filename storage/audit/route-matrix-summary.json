@@ -1,0 +1,16 @@
+{
+  "routes": 96,
+  "total_calls": 1167,
+  "retries": 7,
+  "status_histogram": {
+    "200": 40,
+    "302": 211,
+    "401": 48,
+    "403": 196,
+    "404": 131,
+    "419": 534,
+    "429": 7
+  },
+  "failure_counts": {},
+  "failures": []
+}

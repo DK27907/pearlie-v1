@@ -1,0 +1,30 @@
+{
+  "database": "database/database.audit.sqlite",
+  "chat": {
+    "parallel_posts": 20,
+    "http_200": 20,
+    "empty_responses": 0
+  },
+  "mpesa_callback": {
+    "simulated_amount_ksh": 1,
+    "parallel_callbacks": 2,
+    "http_200": 2,
+    "payment_rows_for_checkout": 1,
+    "completed_payment_rows_for_checkout": 1,
+    "payment_events_for_payment": 1,
+    "responses": [
+      "accepted",
+      "already_processed"
+    ]
+  },
+  "appointment_cancel": {
+    "parallel_cancels": 2,
+    "http_302": 2,
+    "appointment_status_after_race": "cancelled",
+    "cancellation_history_rows": 1,
+    "slot_holds_after_race": 0,
+    "fixture_restored_after_probe": "pending"
+  },
+  "real_mpesa_transaction": false,
+  "pin_entered": false
+}

@@ -1,0 +1,38 @@
+{
+  "base_url": "http://127.0.0.1:8001",
+  "payment_amount_ksh": 1,
+  "chat": {
+    "requests": 20,
+    "statuses": {
+      "200": 20
+    },
+    "emptyResponses": 0
+  },
+  "callbacks": [
+    {
+      "status": 200,
+      "body": {
+        "ResultCode": 0,
+        "ResultDesc": "Accepted"
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "status": "already_processed"
+      }
+    }
+  ],
+  "cancels": [
+    {
+      "status": 302,
+      "location": "http://127.0.0.1:8001/appointments/14",
+      "bodyPreview": "<!DOCTYPE html>\n<html>\n    <head>\n        <meta charset=\"UTF-8\" />\n        <meta http-equiv=\"refresh\" content=\"0;url='http://127.0.0.1:8001/appointments/14'\" />\n\n        <title>Redirecting to http://127.0.0.1:8001/appointments/14</title>\n    </head>\n    <body>\n        Redirecting to <a href=\"http://"
+    },
+    {
+      "status": 302,
+      "location": "http://127.0.0.1:8001/profile",
+      "bodyPreview": "<!DOCTYPE html>\n<html>\n    <head>\n        <meta charset=\"UTF-8\" />\n        <meta http-equiv=\"refresh\" content=\"0;url='http://127.0.0.1:8001/profile'\" />\n\n        <title>Redirecting to http://127.0.0.1:8001/profile</title>\n    </head>\n    <body>\n        Redirecting to <a href=\"http://127.0.0.1:8001/p"
+    }
+  ]
+}
