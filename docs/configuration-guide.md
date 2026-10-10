@@ -62,6 +62,8 @@ DB_PASSWORD=<database-password>
 QUEUE_CONNECTION=database
 CACHE_STORE=database
 SESSION_DRIVER=database
+SESSION_SECURE_COOKIE=true
+SESSION_ENCRYPT=true
 
 # Global fallback for a hospital without its own M-Pesa credential.
 MPESA_ENVIRONMENT=production
@@ -97,6 +99,8 @@ WHATSAPP_API_VERSION=v20.0
 ```
 
 Set `APP_DEBUG=false` and use HTTPS in production. Configure provider callback/webhook URLs to public HTTPS endpoints, verify email sender domains, and use production provider credentials only after provider-side approval. Never reuse sandbox payment credentials in production.
+
+Set `expose_php=Off` in the production PHP configuration; it is a PHP runtime directive, not a Laravel environment variable.
 
 ## Fallback behavior
 

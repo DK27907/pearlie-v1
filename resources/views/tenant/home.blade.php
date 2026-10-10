@@ -168,7 +168,7 @@
                             @if (filled($doctor->licence_number))
                                 <p class="mt-2 text-sm text-slate-300"><strong>Licence:</strong> {{ $doctor->licence_number }}</p>
                             @endif
-                            <a href="{{ $chatRoute }}?doctor={{ $doctor->id }}" class="mt-5 inline-flex rounded-xl bg-sky-500 px-4 py-2 text-sm font-bold text-white">Book Appointment</a>
+                            <a href="{{ $chatRoute }}?doctor={{ $doctor->id }}" class="mt-5 inline-flex rounded-xl bg-sky-700 px-4 py-2 text-sm font-bold text-white">Book Appointment</a>
                         </article>
                     @empty
                         <div class="rounded-2xl border border-dashed border-slate-600 bg-slate-800 p-8 text-slate-300 md:col-span-2 xl:col-span-4">Our doctors will appear here once they are added to the hospital.</div>

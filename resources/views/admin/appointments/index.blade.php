@@ -1,15 +1,17 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+<div class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 py-10 sm:px-6 lg:px-8">
     <div class="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div><p class="text-sm font-semibold uppercase tracking-widest text-cyan-700">Care operations</p><h1 class="mt-2 text-3xl font-bold text-slate-900">Appointment requests</h1><p class="mt-2 text-slate-500">Review new requests, confirm details, and notify patients.</p></div>
         <a class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-cyan-300" href="{{ route('admin.appointments.exportCsv') }}">Export CSV</a>
     </div>
 
     <form method="GET" class="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row">
-        <input type="text" name="q" class="w-full rounded-lg border-slate-200 text-sm focus:border-cyan-500 focus:ring-cyan-500 sm:max-w-sm" placeholder="Search name, phone or reason" value="{{ request('q') }}" />
-        <select name="status" class="rounded-lg border-slate-200 text-sm focus:border-cyan-500 focus:ring-cyan-500">
+        <label class="sr-only" for="appointment-search">Search appointments</label>
+        <input id="appointment-search" type="text" name="q" class="w-full rounded-lg border-slate-200 text-sm focus:border-cyan-500 focus:ring-cyan-500 sm:max-w-sm" placeholder="Search name, phone or reason" value="{{ request('q') }}" />
+        <label class="sr-only" for="appointment-status-filter">Filter by appointment status</label>
+        <select id="appointment-status-filter" name="status" class="rounded-lg border-slate-200 text-sm focus:border-cyan-500 focus:ring-cyan-500">
             <option value="">All statuses</option>
             @foreach (\App\Models\AppointmentRequest::statuses() as $status)
                 <option value="{{ $status }}" @selected(request('status') === $status)>{{ ucfirst(str_replace('_', ' ', $status)) }}</option>
@@ -20,12 +22,14 @@
 
     <form method="POST" action="{{ route('admin.appointments.bulk') }}" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">@csrf
     <div class="flex flex-wrap gap-3 border-b border-slate-100 p-4">
-        <select name="action" class="rounded-lg border-slate-200 text-sm">
+        <label class="sr-only" for="appointment-bulk-action">Bulk appointment action</label>
+        <select id="appointment-bulk-action" name="action" class="rounded-lg border-slate-200 text-sm">
             <option value="update_status">Update status</option>
             <option value="delete">Delete</option>
             <option value="export">Export CSV</option>
         </select>
-        <select name="status" class="rounded-lg border-slate-200 text-sm">
+        <label class="sr-only" for="appointment-bulk-status">Bulk appointment status</label>
+        <select id="appointment-bulk-status" name="status" class="rounded-lg border-slate-200 text-sm">
             <option value="">-- status --</option>
             <option value="pending">pending</option>
             <option value="confirmed">confirmed</option>

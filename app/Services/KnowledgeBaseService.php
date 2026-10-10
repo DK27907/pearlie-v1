@@ -23,6 +23,17 @@ class KnowledgeBaseService
                 : 'Kwa dharura, tafadhali wasiliana na timu ya dharura ya hospitali sasa. Ninakuunganisha na mhudumu wa afya.';
         }
 
+        if ($this->isEmergencyQuery($normalizedQuery)) {
+            $hospital = hospital();
+            $emergencyPhone = $hospital
+                ? $hospital->emergency_phone
+                : pearlie_config('hospital.emergency_phone');
+
+            return $emergencyPhone
+                ? 'For an emergency, call '.$emergencyPhone.' now.'
+                : 'For an emergency, contact the hospital emergency team immediately.';
+        }
+
         $queryWords = preg_split('/[^\pL\pN]+/u', $normalizedQuery, -1, PREG_SPLIT_NO_EMPTY) ?: [];
         $entries = KnowledgeBase::query()->get();
 
@@ -34,17 +45,6 @@ class KnowledgeBaseService
         $emergencyMatch = $this->bestEmergencyMatch($normalizedQuery, $queryWords, $entries);
         if ($emergencyMatch !== null) {
             return $emergencyMatch->answer;
-        }
-
-        if ($this->isEmergencyIntent($normalizedQuery)) {
-            $hospital = hospital();
-            $emergencyPhone = $hospital
-                ? $hospital->emergency_phone
-                : pearlie_config('hospital.emergency_phone');
-
-            return $emergencyPhone
-                ? 'For an emergency, call '.$emergencyPhone.' now.'
-                : 'For an emergency, contact the hospital emergency team immediately.';
         }
 
         $serviceMatch = $this->bestServiceMatch($normalizedQuery, $queryWords, $entries);
@@ -80,6 +80,17 @@ class KnowledgeBaseService
             fn (array $match): string => $match['entry']->category.': '.$match['entry']->answer,
             array_slice($matches, 0, 5),
         ));
+    }
+
+    public function isEmergencyQuery(string $query): bool
+    {
+        $normalizedQuery = $this->normalize($query);
+
+        if (preg_match('/\b(?:emergency|dharura)\s+hours?\b/i', $normalizedQuery) === 1) {
+            return false;
+        }
+
+        return $this->isEmergencyIntent($normalizedQuery);
     }
 
     public function getServiceContext(): string
@@ -307,7 +318,7 @@ class KnowledgeBaseService
     private function isEmergencyIntent(string $query): bool
     {
         return (bool) preg_match(
-            '/\b(emergency|dharura|haraka|urgent(?:ly)?|ambulance|accident|ajali|bleeding|damu nyingi|chest pain|maumivu ya kifua|can[\'’]?t breathe|shida kupumua|kiharusi|nimeumia vibaya)\b/i',
+            '/\b(emergency|dharura|haraka|urgent(?:ly)?|ambulance|accident|ajali|bleeding|damu nyingi|chest pain|maumivu ya kifua|maumivu makali|can[\'’]?\s*t breathe|shida kupumua|kiharusi|nimeumia vibaya)\b/i',
             $query,
         );
     }
@@ -315,7 +326,7 @@ class KnowledgeBaseService
     private function isSwahiliEmergencyIntent(string $query): bool
     {
         return (bool) preg_match(
-            '/\b(maumivu ya kifua|shida kupumua|damu nyingi|kiharusi|dharura|ajali|nimeumia vibaya)\b/i',
+            '/\b(maumivu ya kifua|maumivu makali|shida kupumua|damu nyingi|kiharusi|dharura|ajali|nimeumia vibaya)\b/i',
             $query,
         );
     }

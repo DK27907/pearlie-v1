@@ -6,9 +6,9 @@
         $assistantUrl = $tenantHospital ? route('tenant.chat.page', $tenantHospital->slug) : route('pearlie.index');
         $botName = $tenantHospital?->chatbotName() ?? 'Assistant';
     @endphp
-    <nav aria-label="Main navigation" class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <nav aria-label="Main navigation" class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 sm:px-6 lg:px-8">
         <div class="flex min-h-20 items-center justify-between gap-4">
-            <a href="{{ $homeUrl }}" class="flex shrink-0 items-center gap-3" aria-label="{{ $branding['header_text'] }} home">
+            <a href="{{ $homeUrl }}" class="flex shrink-0 items-center gap-3">
                 @if ($branding['logo_url'])
                     <img class="h-11 w-11 rounded-xl object-contain" src="{{ $branding['logo_url'] }}" alt="">
                 @else

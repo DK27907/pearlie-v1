@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\AppointmentLifecycleException;
 use App\Models\AppointmentRequest;
 use App\Models\Conversation;
 use App\Models\Hospital;
@@ -10,6 +11,8 @@ use App\Models\User;
 use App\Services\Chat\ChatResponse;
 use App\Support\DateParser;
 use Carbon\CarbonImmutable;
+use DateTimeImmutable;
+use DateTimeZone;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Cache;
@@ -33,13 +36,23 @@ class BookingChatService
 
     private const STATE_CANCELLED = 'CANCELLED';
 
+    private const STATE_LIFECYCLE_SELECT = 'LIFECYCLE_SELECT';
+
+    private const STATE_LIFECYCLE_CANCEL_CONFIRM = 'LIFECYCLE_CANCEL_CONFIRM';
+
+    private const STATE_LIFECYCLE_RESCHEDULE_DATE = 'LIFECYCLE_RESCHEDULE_DATE';
+
+    private const STATE_LIFECYCLE_RESCHEDULE_TIME = 'LIFECYCLE_RESCHEDULE_TIME';
+
+    private const STATE_LIFECYCLE_RESCHEDULE_CONFIRM = 'LIFECYCLE_RESCHEDULE_CONFIRM';
+
     /**
      * @var array<string, string>
      */
     private const FIELD_PROMPTS = [
         'service_id' => 'What service do you need?',
         'doctor_id' => 'Which doctor would you prefer?',
-        'date' => 'What date would you prefer?',
+        'date' => 'What date would you prefer? Use DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say "tomorrow".',
         'time' => 'What time would you prefer?',
         'patient_name' => 'What is your full name?',
         'patient_phone' => 'What Kenyan mobile number should we use?',
@@ -50,6 +63,8 @@ class BookingChatService
         private readonly MpesaService $mpesa,
         private readonly PearlieServiceV2 $assistant,
         private readonly KnowledgeBaseService $knowledgeBase,
+        private readonly AppointmentPolicyService $appointmentPolicy,
+        private readonly AppointmentLifecycleService $appointmentLifecycle,
     ) {}
 
     public function handle(string $channelId, string $message, string $channel = 'web'): ChatResponse
@@ -104,7 +119,67 @@ class BookingChatService
             $state = $this->emptyState();
         }
 
+        if (trim($message) === '') {
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                'Please type a message so I can help.',
+                $state,
+            );
+        }
+
+        if (preg_match('/[\pL\pN]/u', $message) !== 1) {
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                'Please send a question using words so I can help.',
+                $state,
+                source: 'clarification',
+            );
+        }
+
+        if ($this->knowledgeBase->isEmergencyQuery($message)) {
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $this->knowledgeBase->search($message)
+                    ?? 'For an emergency, contact the hospital emergency team immediately.',
+                $state,
+                source: 'emergency',
+            );
+        }
+
         $intent = $this->extractIntent($message, (string) $state['state']);
+
+        if (in_array($state['state'], [
+            self::STATE_LIFECYCLE_SELECT,
+            self::STATE_LIFECYCLE_CANCEL_CONFIRM,
+            self::STATE_LIFECYCLE_RESCHEDULE_DATE,
+            self::STATE_LIFECYCLE_RESCHEDULE_TIME,
+            self::STATE_LIFECYCLE_RESCHEDULE_CONFIRM,
+        ], true)) {
+            return $this->handleAppointmentLifecycleState(
+                $sessionId,
+                $channel,
+                $message,
+                $hospital,
+                $state,
+            );
+        }
+
+        if (in_array($intent, ['cancel_appointment', 'reschedule_appointment'], true)) {
+            return $this->beginAppointmentLifecycle(
+                $sessionId,
+                $channel,
+                $message,
+                $hospital,
+                $state,
+                $intent === 'cancel_appointment' ? 'cancel' : 'reschedule',
+            );
+        }
 
         if ($state['state'] === self::STATE_PAYMENT_PENDING) {
             return $this->respond(
@@ -185,13 +260,14 @@ class BookingChatService
         // But skip this check if in CONFIRMING state (handled specially below)
         if (in_array($intent, ['yes', 'no'], true) && $state['state'] !== self::STATE_CONFIRMING) {
             $response = $state['state'] === self::STATE_COLLECTING
-                ? $this->promptForNextField($state, $hospital)
+                ? $this->promptForNextField($state, $hospital, $message, $sessionId, $channel)
                 : 'There is no booking waiting for confirmation. Tell me what service or hospital information you need.';
 
             return $this->respond($sessionId, $channel, $message, $response, $state, source: 'clarification');
         }
 
-        if ($this->assistant->shouldEscalateMessage($message, $sessionId)
+        if ($intent === 'other'
+            && $this->assistant->shouldEscalateMessage($message, $sessionId)
             && ! $this->containsBookingKeyword($message)
             && ! $this->containsEscalationPhrase($message)
             && $this->extractService($message, $hospital) === null
@@ -222,17 +298,29 @@ class BookingChatService
         }
 
         if ($intent === 'greeting') {
-            $greeting = $this->knowledgeBase->search($message);
+            $isSwahiliGreeting = preg_match(
+                '/\b(habari|hujambo|jambo|mambo|niaje|sasa|shikamoo|marahaba|salama|poa)\b/iu',
+                $message,
+            ) === 1;
+            $greeting = $isSwahiliGreeting
+                ? null
+                : $this->knowledgeBase->search($message);
 
             return $this->respond(
                 $sessionId,
                 $channel,
                 $message,
-                $greeting ?? sprintf(
-                    "Hello! I'm %s, %s's healthcare assistant. I can help with services, hospital information, or booking an appointment.",
-                    $hospital->chatbotName(),
-                    $hospital->name,
-                ),
+                $greeting ?? ($isSwahiliGreeting
+                    ? sprintf(
+                        'Habari! Mimi ni %s, msaidizi wa afya wa %s. Naweza kukusaidia na huduma, taarifa za hospitali, au kuweka miadi.',
+                        $hospital->chatbotName(),
+                        $hospital->name,
+                    )
+                    : sprintf(
+                        "Hello! I'm %s, %s's healthcare assistant. I can help with services, hospital information, or booking an appointment.",
+                        $hospital->chatbotName(),
+                        $hospital->name,
+                    )),
                 $state,
                 source: $greeting !== null ? 'knowledge_base' : 'hospital_greeting',
             );
@@ -444,7 +532,9 @@ class BookingChatService
             return $this->emptyState();
         }
 
-        return $this->reconcilePaymentState($conversation->chat_state);
+        return $this->reconcilePaymentState(
+            $this->validatedState($conversation->chat_state, $channelId, $channel),
+        );
     }
 
     public function reset(string $channelId, string $channel = 'web'): void
@@ -561,6 +651,29 @@ class BookingChatService
 
         $state['state'] = self::STATE_COLLECTING;
 
+        if ($this->nextMissingField($state) === 'date') {
+            $requestedDate = DateParser::parse($message);
+            $previousState = $this->persistedState($sessionId, $channel);
+            $dateWasRequested = $previousState['state'] === self::STATE_COLLECTING
+                && $this->nextMissingField($previousState) === 'date';
+            $dateError = match (true) {
+                $requestedDate === null && $dateWasRequested => 'invalid',
+                $requestedDate !== null && $requestedDate->lessThan(CarbonImmutable::today()) => 'past',
+                $requestedDate !== null && $requestedDate->greaterThan(CarbonImmutable::today()->addYear()) => 'too_far',
+                default => null,
+            };
+
+            if ($dateError !== null) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $this->datePrompt($message, $sessionId, $channel, $dateError),
+                    $state,
+                );
+            }
+        }
+
         if (filled($state['time'] ?? null) && $this->isTimeOutsideHospitalHours((string) $state['time'])) {
             $requestedTime = (string) $state['time'];
             $doctor = $hospital->users()->find((int) $state['doctor_id']);
@@ -607,18 +720,26 @@ class BookingChatService
                     : $prompt;
 
                 if ($field === 'date' && $automaticallySelectedDoctor !== null) {
-                    $promptMessage = sprintf(
-                        '%s is available for this service. What date would you prefer?',
-                        $automaticallySelectedDoctor->name,
+                    $promptMessage = $this->datePrompt(
+                        $message,
+                        $sessionId,
+                        $channel,
+                        doctorName: $automaticallySelectedDoctor->name,
                     );
                 } elseif ($field === 'date' && filled($state['doctor_id'] ?? null)) {
                     $selectedDoctor = $hospital->users()->find((int) $state['doctor_id']);
                     if ($selectedDoctor !== null) {
-                        $promptMessage = sprintf(
-                            '%s is available for this service. What date would you prefer?',
-                            $selectedDoctor->name,
+                        $promptMessage = $this->datePrompt(
+                            $message,
+                            $sessionId,
+                            $channel,
+                            doctorName: $selectedDoctor->name,
                         );
+                    } else {
+                        $promptMessage = $this->datePrompt($message, $sessionId, $channel);
                     }
+                } elseif ($field === 'date') {
+                    $promptMessage = $this->datePrompt($message, $sessionId, $channel);
                 }
 
                 if ($field === 'time' && $this->looksLikeTimeAttempt($message)) {
@@ -766,7 +887,11 @@ class BookingChatService
 
     private function containsBookingKeyword(string $message): bool
     {
-        return preg_match('/\b(book|booking|appointment|schedule|reserve|see\s+(?:a\s+)?doctor|i want to book|need\s+(?:an?\s+)?appointment|need\s+to\s+book)\b/iu', $message) === 1;
+        return preg_match(
+            '/\b(book|booking|appointment|schedule|reserve|see\s+(?:a\s+)?doctor|i want to book|need\s+(?:an?\s+)?appointment|need\s+to\s+book)\b|'
+                .'\b(?:nataka|naomba)\s+(?:kuweka|kupata|kuomba)\s+miadi\b|\bweka\s+miadi\b/iu',
+            $message,
+        ) === 1;
     }
 
     private function looksLikeSpecificServiceRequest(string $message): bool
@@ -1030,11 +1155,60 @@ class BookingChatService
     {
         $date = DateParser::parse($message);
 
-        if ($date === null || $date->lessThan(CarbonImmutable::today())) {
+        if ($date === null
+            || $date->lessThan(CarbonImmutable::today())
+            || $date->greaterThan(CarbonImmutable::today()->addYear())
+        ) {
             return null;
         }
 
         return $date;
+    }
+
+    private function datePrompt(
+        string $message,
+        string $sessionId,
+        string $channel,
+        ?string $error = null,
+        ?string $doctorName = null,
+    ): string {
+        $isSwahili = $this->isSwahiliDateMessage($message);
+        if (! $isSwahili) {
+            $previousMessage = $this->latestConversation($sessionId, $channel)?->user_message;
+            $isSwahili = is_string($previousMessage) && $this->isSwahiliDateMessage($previousMessage);
+        }
+
+        if ($isSwahili) {
+            $prompt = match ($error) {
+                'past' => 'Tarehe hiyo imepita. Tafadhali chagua tarehe ijayo kwa muundo wa DD/MM/YYYY (mfano 15/10/2026).',
+                'too_far' => 'Tarehe hiyo iko mbali sana. Tafadhali chagua tarehe ndani ya miezi 12 ijayo kwa muundo wa DD/MM/YYYY.',
+                'invalid' => "Samahani, sikuweza kuelewa tarehe. Tafadhali ingiza tarehe kama DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema 'kesho'.",
+                default => "Ungependa miadi tarehe gani? Tafadhali ingiza DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema 'kesho'.",
+            };
+
+            return $doctorName !== null && $error === null
+                ? $doctorName.' ana huduma kwa miadi hiyo. '.$prompt
+                : $prompt;
+        }
+
+        $prompt = match ($error) {
+            'past' => 'That date is in the past. Please choose a future date in DD/MM/YYYY format (e.g. 15/10/2026).',
+            'too_far' => 'That date is too far ahead. Please choose a date within the next 12 months in DD/MM/YYYY format (e.g. 15/10/2026).',
+            'invalid' => "Sorry, I didn't catch that. What date would you prefer? Please enter it as DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say 'tomorrow'.",
+            default => 'What date would you prefer? Use DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say "tomorrow".',
+        };
+
+        return $doctorName !== null && $error === null
+            ? $doctorName.' is available for this service. '.$prompt
+            : $prompt;
+    }
+
+    private function isSwahiliDateMessage(string $message): bool
+    {
+        return preg_match(
+            '/\b(habari|hujambo|sijambo|jambo|mambo|vipi|niaje|sasa|shikamoo|marahaba|salama|poa|freshi|mzuri|nzuri|miadi|daktari|tafadhali|samahani|ndiyo|hapana|kesho|leo|huduma|namba|simu|jina|naomba|nataka|tarehe|siku|jumatatu|jumanne|jumatano|alhamisi|ijumaa|jumamosi|jumapili)\b/iu',
+            $message,
+        ) === 1;
     }
 
     private function extractTime(string $message): ?string
@@ -1153,8 +1327,14 @@ class BookingChatService
 
     private function extractIntent(string $message, string $state): string
     {
-        $normalized = mb_strtolower(trim($message));
+        $normalized = $this->normalizeIntentKeywords($message);
 
+        if (preg_match('/\b(cancel|cancell?ation|futa|ghairi)\b.{0,30}\b(my\s+)?(appointment|booking|miadi)\b|\b(futa|ghairi)\s+(miadi|appointment)\b/u', $normalized) === 1) {
+            return 'cancel_appointment';
+        }
+        if (preg_match('/\b(reschedule|rebook|change)\b.{0,30}\b(my\s+)?(appointment|booking|miadi)\b|\b(badilisha|hamisha)\s+(miadi|appointment)\b/u', $normalized) === 1) {
+            return 'reschedule_appointment';
+        }
         if ($state !== self::STATE_IDLE
             && preg_match('/\b(start over|start again|restart|reset|begin again|anza upya|tuanzie upya)\b/u', $normalized)
         ) {
@@ -1178,7 +1358,7 @@ class BookingChatService
         if (preg_match('/\b(continue booking|resume booking)\b/u', $normalized)) {
             return 'continue_booking';
         }
-        if ($this->containsBookingKeyword($message)) {
+        if ($this->containsBookingKeyword($normalized)) {
             return 'book';
         }
         if ($this->containsEscalationPhrase($message)) {
@@ -1190,22 +1370,25 @@ class BookingChatService
         if (preg_match('/\b(what services|which services|services do you offer|services are available|hospital services|huduma zenu|huduma gani)\b/iu', $normalized)) {
             return 'services';
         }
-        if (preg_match('/\b(dentist|dentists|doctor|doctors|specialist|specialists|radiologist|physiotherapist|obstetrician|gynecologist|gynaecologist)\b/iu', $normalized)
-            && preg_match('/\b(do you have|is there|are there|available|availability|which|who|can i see|mna|yupo|wapo)\b/iu', $normalized)
+        if (preg_match('/\b(dentist|dentists|doctor|doctors|doc|daktari|madaktari|specialist|specialists|radiologist|physiotherapist|obstetrician|gynecologist|gynaecologist)\b/iu', $normalized)
+            && (
+                preg_match('/\b(do you have|is there|are there|available|availability|which|who|can i see|mna|yupo|wapo|yupi|yuko|gimme|give me)\b/iu', $normalized)
+                || preg_match('/^\s*(?:a\s+)?(?:dentists?|doctors?|docs?|daktari|madaktari)\s*[?!.]*\s*$/iu', $normalized)
+            )
         ) {
             return 'doctors';
         }
         if (preg_match('/\b(opening hours|working hours|outpatient hours|emergency hours|what time|when do you open|when are you open|hours|saa ngapi|mnafunga)\b/iu', $normalized)) {
             return 'hours';
         }
-        if (preg_match('/\b(where are you|where is|location|address|directions|mko wapi|iko wapi)\b/iu', $normalized)) {
+        if (preg_match('/\b(where are you|where is|location|address|directions|mko wapi|iko wapi|mnapatikana wapi)\b/iu', $normalized)) {
             return 'location';
         }
         if (preg_match('/\b(contact(?: the hospital)?|phone number|hospital phone|telephone number|email address|hospital email|website|whatsapp number|call the hospital|what is your phone number)\b/iu', $normalized)) {
             return 'contact';
         }
         if ($state === self::STATE_IDLE
-            && preg_match('/^(?:hi|hello|hey|habari|hujambo|jambo|mambo|vipi|niaje|sasa|shikamoo|marahaba|salama|poa|freshi|mzuri|nzuri|good morning|good afternoon|good evening)[.!?,\s]*$/u', $normalized)
+            && preg_match('/^(?:hi|hello|hey|habari|hujambo|jambo|mambo(?:\s+vipi)?|vipi|niaje|sasa|shikamoo|marahaba|salama|poa|freshi|mzuri|nzuri|yo|sup|what\s+s\s+up|whats\s+up|good morning|good afternoon|good evening)[.!?,\s]*$/u', $normalized)
         ) {
             return 'greeting';
         }
@@ -1215,11 +1398,524 @@ class BookingChatService
         if (preg_match('/\b(thank you|thanks|thank you very much|asante|shukran|appreciate it)\b/iu', $normalized)) {
             return 'thanks';
         }
-        if (preg_match('/\b(capital of|president of|population of|weather|stock price|who invented|who won|define|meaning of|translate)\b/u', $normalized)) {
+        if (preg_match('/\b(capital of|president of|who is (?:the )?president|population of|weather|stock price|who invented|who won|tell me (?:a )?joke|define|meaning of|translate)\b/u', $normalized)) {
             return 'out_of_scope';
         }
 
         return 'other';
+    }
+
+    private function normalizeIntentKeywords(string $message): string
+    {
+        $normalized = $this->normalize($message);
+        $normalized = preg_replace('/\bu\b/u', 'you', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\bwanna\b/u', 'want to', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\bgimme\b/u', 'give me', $normalized) ?? $normalized;
+        $keywords = [
+            'appointment',
+            'booking',
+            'book',
+            'cancel',
+            'cancer',
+            'dentist',
+            'doctor',
+            'hello',
+            'location',
+            'located',
+            'look',
+            'pricing',
+            'price',
+            'prize',
+            'schedule',
+            'support',
+            'took',
+            'what',
+            'whats',
+            'where',
+        ];
+        $tokens = explode(' ', $normalized);
+
+        foreach ($tokens as &$token) {
+            $closestMatches = [];
+            $closestDistance = PHP_INT_MAX;
+
+            foreach ($keywords as $keyword) {
+                $distance = levenshtein($token, $keyword);
+                $maximumDistance = 1;
+
+                if ($distance > $maximumDistance) {
+                    continue;
+                }
+
+                if ($distance < $closestDistance) {
+                    $closestMatches = [$keyword];
+                    $closestDistance = $distance;
+                } elseif ($distance === $closestDistance) {
+                    $closestMatches[] = $keyword;
+                }
+            }
+
+            if (count($closestMatches) === 1) {
+                $token = $closestMatches[0];
+            }
+        }
+        unset($token);
+
+        return implode(' ', $tokens);
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private function beginAppointmentLifecycle(
+        string $sessionId,
+        string $channel,
+        string $message,
+        Hospital $hospital,
+        array $state,
+        string $action,
+    ): ChatResponse {
+        $user = auth()->user();
+        $appointments = AppointmentRequest::query()
+            ->where('hospital_id', $hospital->id)
+            ->whereNotNull('slot_start_time')
+            ->whereIn('status', [
+                AppointmentRequest::STATUS_PENDING,
+                AppointmentRequest::STATUS_CONFIRMED,
+            ])
+            ->whereDate('preferred_date', '>=', now()->toDateString())
+            ->where(function ($query) use ($sessionId, $user): void {
+                $query->where('session_id', $sessionId);
+                if ($user instanceof User && (int) $user->hospital_id === (int) hospital()->id) {
+                    $query->orWhere('patient_id', $user->id);
+                }
+            })
+            ->orderByDesc('preferred_date')
+            ->orderByDesc('id')
+            ->limit(10)
+            ->get();
+
+        $eligible = $appointments->filter(function (AppointmentRequest $appointment) use ($action): bool {
+            $decision = $this->appointmentPolicy->evaluate($appointment);
+
+            return $action === 'cancel' ? $decision->canCancel : $decision->canReschedule;
+        })->values();
+
+        if ($eligible->isEmpty()) {
+            if (in_array($state['state'], [
+                self::STATE_IDENTIFYING,
+                self::STATE_COLLECTING,
+                self::STATE_CONFIRMING,
+            ], true)) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    'I could not find an upcoming appointment to change. Your in-progress booking details are unchanged.',
+                    $state,
+                );
+            }
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                'I could not find an upcoming appointment linked to this chat that can be changed. Please sign in to manage appointments in your patient dashboard.',
+                $this->emptyState(),
+            );
+        }
+
+        $state = $this->emptyState(self::STATE_LIFECYCLE_SELECT);
+        $state['lifecycle_action'] = $action;
+        $state['appointment_candidates'] = $eligible->pluck('id')->map(fn ($id): int => (int) $id)->all();
+
+        if ($eligible->count() === 1) {
+            return $this->selectLifecycleAppointment(
+                $sessionId,
+                $channel,
+                $message,
+                $hospital,
+                $state,
+                (int) $eligible->first()->id,
+            );
+        }
+
+        $isSwahili = $this->isSwahiliDateMessage($message);
+        $items = $eligible->values()->map(fn (AppointmentRequest $appointment, int $index): string => sprintf(
+            '%d. #%d — %s %s',
+            $index + 1,
+            $appointment->id,
+            $appointment->preferred_date?->format('d/m/Y'),
+            $appointment->slot_start_time ? substr((string) $appointment->slot_start_time, 0, 5) : '',
+        ))->implode("\n");
+        $prompt = $isSwahili
+            ? "Umepangiwa miadi zaidi ya mmoja. Jibu kwa nambari ya miadi unayotaka kubadilisha:\n".$items
+            : "You have more than one eligible appointment. Reply with the number of the appointment to change:\n".$items;
+
+        return $this->respond($sessionId, $channel, $message, $prompt, $state);
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private function handleAppointmentLifecycleState(
+        string $sessionId,
+        string $channel,
+        string $message,
+        Hospital $hospital,
+        array $state,
+    ): ChatResponse {
+        if ($state['state'] === self::STATE_LIFECYCLE_SELECT) {
+            if (preg_match('/^\s*([1-9]\d?)\s*$/', $message, $matches) !== 1) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    'Reply with the number beside the appointment you want to change.',
+                    $state,
+                );
+            }
+
+            $index = (int) $matches[1] - 1;
+            $appointmentId = $state['appointment_candidates'][$index] ?? null;
+            if (! is_int($appointmentId)) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    'That selection is not valid. Reply with one of the appointment numbers shown.',
+                    $state,
+                );
+            }
+
+            return $this->selectLifecycleAppointment(
+                $sessionId,
+                $channel,
+                $message,
+                $hospital,
+                $state,
+                $appointmentId,
+            );
+        }
+
+        if (preg_match('/^\s*(cancel|reschedule|futa|badilisha)\s*$/iu', $message) === 1) {
+            $state['lifecycle_action'] = in_array(mb_strtolower(trim($message)), ['cancel', 'futa'], true)
+                ? 'cancel'
+                : 'reschedule';
+            $state['state'] = self::STATE_LIFECYCLE_SELECT;
+            $appointments = AppointmentRequest::query()
+                ->where('hospital_id', $hospital->id)
+                ->whereIn('id', $state['appointment_candidates'] ?? [])
+                ->get();
+            $eligible = $appointments->filter(function (AppointmentRequest $candidate) use ($state): bool {
+                $decision = $this->appointmentPolicy->evaluate($candidate);
+
+                return $state['lifecycle_action'] === 'cancel'
+                    ? $decision->canCancel
+                    : $decision->canReschedule;
+            })->values();
+            $state['appointment_candidates'] = $eligible->pluck('id')->map(fn ($candidateId): int => (int) $candidateId)->all();
+
+            if ($eligible->count() === 1) {
+                return $this->selectLifecycleAppointment(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $hospital,
+                    $state,
+                    (int) $eligible->first()->id,
+                );
+            }
+
+            if ($eligible->isEmpty()) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    'That appointment cannot be changed under the current hospital policy.',
+                    $this->emptyState(),
+                );
+            }
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                'Reply with the number of the appointment you want to change.',
+                $state,
+            );
+        }
+
+        $appointmentId = $state['lifecycle_appointment_id'] ?? null;
+        if (! is_int($appointmentId)
+            || ! $this->chatAppointmentIsOwned($appointmentId, $sessionId, $hospital->id)
+        ) {
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                'I could not verify that appointment for this chat. Please sign in to manage it in your patient dashboard.',
+                $this->emptyState(),
+            );
+        }
+
+        $appointment = AppointmentRequest::query()
+            ->where('hospital_id', $hospital->id)
+            ->findOrFail($appointmentId);
+        $intent = $this->extractIntent($message, $state['state']);
+        $isSwahili = $this->isSwahiliDateMessage($message);
+
+        if ($state['state'] === self::STATE_LIFECYCLE_CANCEL_CONFIRM) {
+            if (preg_match('/^\s*(?:no|n|nope|hapana)\b/iu', $message) === 1) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $isSwahili ? 'Sawa, miadi yako haijaghairiwa.' : 'Okay, your appointment has not been cancelled.',
+                    $this->emptyState(),
+                );
+            }
+            if (preg_match('/^\s*(?:yes|y|yeah|yep|ok|confirm|book it|proceed|ndiyo|ndio|sawa)\b/iu', $message) !== 1) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $isSwahili ? 'Tafadhali jibu ndiyo au hapana.' : 'Please reply yes or no to confirm cancellation.',
+                    $state,
+                );
+            }
+
+            try {
+                $result = $this->appointmentLifecycle->cancel(
+                    $appointmentId,
+                    (int) $hospital->id,
+                    auth()->user() instanceof User ? auth()->user() : null,
+                    reason: 'Patient requested cancellation in chat',
+                );
+            } catch (AppointmentLifecycleException $exception) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $exception->getMessage(),
+                    $this->emptyState(),
+                );
+            }
+
+            $response = $isSwahili
+                ? 'Miadi yako imeghairiwa.'
+                : 'Your appointment has been cancelled.';
+            if ($result->forfeitedAmount > 0) {
+                $response .= ' KSh '.number_format($result->forfeitedAmount, 2).' was retained under the hospital cancellation policy.';
+            } elseif ($result->paymentOutcome === 'refund_pending') {
+                $response .= ' Any refundable balance is pending manual payment review.';
+            }
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $response,
+                $this->emptyState(),
+                $appointmentId,
+            );
+        }
+
+        if ($state['state'] === self::STATE_LIFECYCLE_RESCHEDULE_DATE) {
+            $date = DateParser::parse($message);
+            if ($date === null
+                || $date->toDateString() < CarbonImmutable::today()->toDateString()
+                || $date->greaterThan(CarbonImmutable::today()->addYear())
+            ) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    'Please choose a valid future date within the next 12 months, such as 15/10/2026.',
+                    $state,
+                );
+            }
+
+            $state['lifecycle_date'] = $date->toDateString();
+            $state['state'] = self::STATE_LIFECYCLE_RESCHEDULE_TIME;
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $isSwahili ? 'Ungependa miadi iwe saa ngapi?' : 'What time would you prefer? For example, 10:30 AM.',
+                $state,
+            );
+        }
+
+        if ($state['state'] === self::STATE_LIFECYCLE_RESCHEDULE_TIME) {
+            $time = $this->extractTime($message);
+            if ($time === null || $appointment->doctor_id === null) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    'Please enter a valid time, such as 10:30 AM.',
+                    $state,
+                );
+            }
+
+            $availableSlots = $this->availability->getAvailableSlots(
+                (int) $appointment->doctor_id,
+                (string) $state['lifecycle_date'],
+            );
+            if (($availableSlots[$time] ?? false) !== true) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    'That time is not available with your current doctor. Please choose another time or start again with a different date.',
+                    $state,
+                );
+            }
+
+            $state['lifecycle_time'] = $time;
+            $state['state'] = self::STATE_LIFECYCLE_RESCHEDULE_CONFIRM;
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                sprintf(
+                    'Please confirm moving appointment #%d to %s at %s. Reply yes or no.',
+                    $appointment->id,
+                    CarbonImmutable::parse((string) $state['lifecycle_date'])->format('d/m/Y'),
+                    CarbonImmutable::parse($time)->format('g:i A'),
+                ),
+                $state,
+                $appointmentId,
+            );
+        }
+
+        if ($state['state'] === self::STATE_LIFECYCLE_RESCHEDULE_CONFIRM) {
+            if (preg_match('/^\s*(?:no|n|nope|hapana)\b/iu', $message) === 1) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    'Okay, your appointment has not been changed.',
+                    $this->emptyState(),
+                );
+            }
+            if (preg_match('/^\s*(?:yes|y|yeah|yep|ok|confirm|book it|proceed|ndiyo|ndio|sawa)\b/iu', $message) !== 1) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    'Please reply yes or no to confirm the new appointment time.',
+                    $state,
+                );
+            }
+
+            try {
+                $this->appointmentLifecycle->reschedule(
+                    $appointmentId,
+                    (int) $hospital->id,
+                    (int) $appointment->doctor_id,
+                    (string) $state['lifecycle_date'],
+                    (string) $state['lifecycle_time'],
+                    auth()->user() instanceof User ? auth()->user() : null,
+                    reason: 'Patient requested rescheduling in chat',
+                );
+            } catch (AppointmentLifecycleException $exception) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $exception->getMessage(),
+                    $this->emptyState(),
+                );
+            }
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                'Your appointment has been rescheduled.',
+                $this->emptyState(),
+                $appointmentId,
+            );
+        }
+
+        return $this->respond(
+            $sessionId,
+            $channel,
+            $message,
+            'I could not continue that appointment request. Please start again.',
+            $this->emptyState(),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private function selectLifecycleAppointment(
+        string $sessionId,
+        string $channel,
+        string $message,
+        Hospital $hospital,
+        array $state,
+        int $appointmentId,
+    ): ChatResponse {
+        $appointment = AppointmentRequest::query()
+            ->where('hospital_id', $hospital->id)
+            ->find($appointmentId);
+        if (! $appointment || ! $this->chatAppointmentIsOwned($appointmentId, $sessionId, $hospital->id)) {
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                'I could not verify that appointment for this chat.',
+                $this->emptyState(),
+            );
+        }
+
+        $state['lifecycle_appointment_id'] = $appointment->id;
+        $state['appointment_candidates'] = [];
+        if ($state['lifecycle_action'] === 'cancel') {
+            $state['state'] = self::STATE_LIFECYCLE_CANCEL_CONFIRM;
+            $response = sprintf(
+                'Cancel appointment #%d on %s at %s? Reply yes or no.',
+                $appointment->id,
+                $appointment->preferred_date?->format('d/m/Y'),
+                $appointment->slot_start_time ? CarbonImmutable::parse($appointment->slot_start_time)->format('g:i A') : 'the scheduled time',
+            );
+        } else {
+            $state['state'] = self::STATE_LIFECYCLE_RESCHEDULE_DATE;
+            $response = $this->isSwahiliDateMessage($message)
+                ? 'Ni tarehe gani mpya ungependa? Tumia muundo wa DD/MM/YYYY.'
+                : 'What new date would you prefer? Use DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say "tomorrow".';
+        }
+
+        return $this->respond(
+            $sessionId,
+            $channel,
+            $message,
+            $response,
+            $state,
+            $appointment->id,
+        );
+    }
+
+    private function chatAppointmentIsOwned(int $appointmentId, string $sessionId, int $hospitalId): bool
+    {
+        $user = auth()->user();
+
+        return AppointmentRequest::query()
+            ->where('hospital_id', $hospitalId)
+            ->whereKey($appointmentId)
+            ->where(function ($query) use ($sessionId, $user): void {
+                $query->where('session_id', $sessionId);
+                if ($user instanceof User && (int) $user->hospital_id === (int) hospital()->id) {
+                    $query->orWhere('patient_id', $user->id);
+                }
+            })
+            ->exists();
     }
 
     /**
@@ -1237,6 +1933,11 @@ class BookingChatService
             'patient_phone' => null,
             'patient_email' => null,
             'appointment_id' => null,
+            'lifecycle_action' => null,
+            'lifecycle_appointment_id' => null,
+            'appointment_candidates' => [],
+            'lifecycle_date' => null,
+            'lifecycle_time' => null,
             'escalation_pending' => false,
             'pending_escalation_message' => null,
         ];
@@ -1280,6 +1981,8 @@ class BookingChatService
         ?int $appointmentId = null,
         bool $escalated = false,
     ): void {
+        $state = $this->validatedState($state, $sessionId, $channel);
+
         Conversation::query()->create([
             'session_id' => $sessionId,
             'user_message' => $userMessage,
@@ -1298,19 +2001,40 @@ class BookingChatService
         string $message,
         array $state,
     ): ChatResponse {
+        $previousConversationId = Conversation::query()
+            ->where('session_id', $sessionId)
+            ->where('channel', $channel)
+            ->latest('id')
+            ->value('id') ?? 0;
         $patientPhone = filled($state['patient_phone'] ?? null)
             ? (string) $state['patient_phone']
             : null;
         $result = $this->assistant->processMessageWithPatientPhone($message, $sessionId, $channel, $patientPhone);
         $response = (string) ($result['response'] ?? 'I could not process that message. Please try again.');
-        $this->persistState(
-            $sessionId,
-            $channel,
-            $message,
-            $response,
-            $state,
-            escalated: (bool) ($result['escalated'] ?? false),
-        );
+        $conversation = Conversation::query()
+            ->where('session_id', $sessionId)
+            ->where('channel', $channel)
+            ->where('user_message', $message)
+            ->where('id', '>', $previousConversationId)
+            ->latest('id')
+            ->first();
+
+        if ($conversation) {
+            $conversation->forceFill([
+                'chat_state' => $state,
+                'chat_state_updated_at' => now(),
+                'escalated' => (bool) ($result['escalated'] ?? false),
+            ])->save();
+        } else {
+            $this->persistState(
+                $sessionId,
+                $channel,
+                $message,
+                $response,
+                $state,
+                escalated: (bool) ($result['escalated'] ?? false),
+            );
+        }
 
         return new ChatResponse(
             $response,
@@ -1324,11 +2048,20 @@ class BookingChatService
     /**
      * @param  array<string, mixed>  $state
      */
-    private function promptForNextField(array $state, Hospital $hospital): string
-    {
+    private function promptForNextField(
+        array $state,
+        Hospital $hospital,
+        string $message,
+        string $sessionId,
+        string $channel,
+    ): string {
         $field = $this->nextMissingField($state);
         if ($field === 'service_id') {
             return $this->servicePrompt($hospital);
+        }
+
+        if ($field === 'date') {
+            return $this->datePrompt($message, $sessionId, $channel);
         }
 
         return $field !== null
@@ -1597,28 +2330,50 @@ class BookingChatService
         $state['state'] = self::STATE_COLLECTING;
         $state['date'] = null;
         $state['time'] = null;
+        $previousMessage = $this->latestConversation($sessionId, $channel)?->user_message;
+        $isSwahili = $this->isSwahiliDateMessage($message)
+            || (is_string($previousMessage) && $this->isSwahiliDateMessage($previousMessage));
 
         if ($availableDates === []) {
-            $response = sprintf(
-                '%s is not available on %s, and no upcoming times were found. Please choose another doctor or contact the hospital.',
-                $doctor->name,
-                $requestedDate->format('F j'),
-            );
+            $response = $isSwahili
+                ? sprintf(
+                    '%s hapatikani tarehe %s, na hakuna nafasi nyingine zilizopatikana. Tafadhali chagua daktari mwingine au wasiliana na hospitali.',
+                    $doctor->name,
+                    $requestedDate->format('d/m/Y'),
+                )
+                : sprintf(
+                    '%s is not available on %s, and no upcoming times were found. Please choose another doctor or contact the hospital.',
+                    $doctor->name,
+                    $requestedDate->format('F j'),
+                );
         } else {
-            $formattedDates = array_map(
-                fn (CarbonImmutable $date): string => $date->format('l F j'),
-                $availableDates,
-            );
-            $lastDate = array_pop($formattedDates);
-            $dateList = $formattedDates === []
-                ? $lastDate
-                : implode(', ', $formattedDates).' or '.$lastDate;
-            $response = sprintf(
-                '%s is not available on %s. The next available days are %s. Which day works for you?',
-                $doctor->name,
-                $requestedDate->format('l F j'),
-                $dateList,
-            );
+            if ($isSwahili) {
+                $dateList = implode(', ', array_map(
+                    fn (CarbonImmutable $date): string => $date->format('d/m/Y'),
+                    $availableDates,
+                ));
+                $response = sprintf(
+                    '%s hapatikani tarehe %s. Tarehe zinazofuata zenye nafasi ni %s. Tafadhali chagua tarehe moja.',
+                    $doctor->name,
+                    $requestedDate->format('d/m/Y'),
+                    $dateList,
+                );
+            } else {
+                $formattedDates = array_map(
+                    fn (CarbonImmutable $date): string => $date->format('l F j').' ('.$date->format('d/m/Y').')',
+                    $availableDates,
+                );
+                $lastDate = array_pop($formattedDates);
+                $dateList = $formattedDates === []
+                    ? $lastDate
+                    : implode(', ', $formattedDates).' or '.$lastDate;
+                $response = sprintf(
+                    '%s is not available on %s. The next available days are %s. Which day works for you?',
+                    $doctor->name,
+                    $requestedDate->format('l F j'),
+                    $dateList,
+                );
+            }
         }
 
         return $this->respond($sessionId, $channel, $message, $response, $state);
@@ -1688,9 +2443,147 @@ class BookingChatService
     {
         $conversation = $this->latestConversation($channelId, $channel);
 
-        return $conversation && is_array($conversation->chat_state)
-            ? $conversation->chat_state
-            : $this->emptyState();
+        if (! $conversation || ! is_array($conversation->chat_state)) {
+            return $this->emptyState();
+        }
+
+        return $this->validatedState($conversation->chat_state, $channelId, $channel);
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     * @return array<string, mixed>
+     */
+    private function validatedState(array $state, string $channelId, string $channel): array
+    {
+        $allowedKeys = [
+            'state',
+            'service_id',
+            'doctor_id',
+            'date',
+            'time',
+            'patient_name',
+            'patient_phone',
+            'patient_email',
+            'appointment_id',
+            'lifecycle_action',
+            'lifecycle_appointment_id',
+            'appointment_candidates',
+            'lifecycle_date',
+            'lifecycle_time',
+            'escalation_pending',
+            'pending_escalation_message',
+            'summary',
+        ];
+        $validStates = [
+            self::STATE_IDLE,
+            self::STATE_IDENTIFYING,
+            self::STATE_COLLECTING,
+            self::STATE_CONFIRMING,
+            self::STATE_PAYMENT_PENDING,
+            self::STATE_COMPLETED,
+            self::STATE_CANCELLED,
+            self::STATE_LIFECYCLE_SELECT,
+            self::STATE_LIFECYCLE_CANCEL_CONFIRM,
+            self::STATE_LIFECYCLE_RESCHEDULE_DATE,
+            self::STATE_LIFECYCLE_RESCHEDULE_TIME,
+            self::STATE_LIFECYCLE_RESCHEDULE_CONFIRM,
+        ];
+
+        $date = $state['date'] ?? null;
+        $parsedDate = is_string($date)
+            ? DateTimeImmutable::createFromFormat('!Y-m-d', $date, new DateTimeZone(config('app.timezone')))
+            : false;
+        $idsAreValid = true;
+        foreach (['service_id', 'doctor_id', 'appointment_id'] as $idKey) {
+            if (array_key_exists($idKey, $state)
+                && $state[$idKey] !== null
+                && (! is_int($state[$idKey]) || $state[$idKey] < 1)
+            ) {
+                $idsAreValid = false;
+                break;
+            }
+        }
+
+        $isValid = array_diff(array_keys($state), $allowedKeys) === []
+            && in_array($state['state'] ?? null, $validStates, true)
+            && $idsAreValid
+            && (! array_key_exists('lifecycle_action', $state)
+                || $state['lifecycle_action'] === null
+                || in_array($state['lifecycle_action'], ['cancel', 'reschedule'], true))
+            && (! array_key_exists('lifecycle_appointment_id', $state)
+                || $state['lifecycle_appointment_id'] === null
+                || (is_int($state['lifecycle_appointment_id']) && $state['lifecycle_appointment_id'] > 0))
+            && $this->appointmentCandidatesAreValid($state['appointment_candidates'] ?? [])
+            && $this->lifecycleDateIsValid($state['lifecycle_date'] ?? null)
+            && (! array_key_exists('lifecycle_time', $state)
+                || $state['lifecycle_time'] === null
+                || (is_string($state['lifecycle_time']) && preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $state['lifecycle_time']) === 1))
+            && ($date === null || (
+                $parsedDate instanceof DateTimeImmutable
+                && $parsedDate->format('Y-m-d') === $date
+                && $parsedDate > now()->startOfDay()->toDateTimeImmutable()
+            ))
+            && (! array_key_exists('time', $state) || $state['time'] === null
+                || (is_string($state['time']) && preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $state['time']) === 1))
+            && (! array_key_exists('escalation_pending', $state) || is_bool($state['escalation_pending']))
+            && $this->nullableStringFieldIsValid($state, 'patient_name', 255)
+            && $this->nullableStringFieldIsValid($state, 'patient_phone', 32)
+            && $this->nullableStringFieldIsValid($state, 'patient_email', 254)
+            && $this->nullableStringFieldIsValid($state, 'pending_escalation_message', 2000)
+            && $this->nullableStringFieldIsValid($state, 'summary', 2000);
+
+        if ($isValid) {
+            return $state;
+        }
+
+        Log::error('Invalid booking chat state was reset.', [
+            'channel' => $channel,
+            'session_hash' => hash('sha256', $this->sessionId($channelId, $channel)),
+            'unknown_keys' => array_values(array_diff(array_keys($state), $allowedKeys)),
+        ]);
+
+        return $this->emptyState();
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private function nullableStringFieldIsValid(array $state, string $key, int $maxLength): bool
+    {
+        return ! array_key_exists($key, $state)
+            || $state[$key] === null
+            || (is_string($state[$key]) && mb_strlen($state[$key]) <= $maxLength);
+    }
+
+    private function appointmentCandidatesAreValid(mixed $candidateIds): bool
+    {
+        if (! is_array($candidateIds) || count($candidateIds) > 10) {
+            return false;
+        }
+
+        foreach ($candidateIds as $candidateId) {
+            if (! is_int($candidateId) || $candidateId < 1) {
+                return false;
+            }
+        }
+
+        return count($candidateIds) === count(array_unique($candidateIds));
+    }
+
+    private function lifecycleDateIsValid(mixed $date): bool
+    {
+        if ($date === null) {
+            return true;
+        }
+
+        if (! is_string($date) || preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) !== 1) {
+            return false;
+        }
+
+        $parsed = CarbonImmutable::createFromFormat('!Y-m-d', $date);
+
+        return $parsed !== false && $parsed->format('Y-m-d') === $date;
     }
 
     /**

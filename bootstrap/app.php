@@ -4,6 +4,7 @@ use App\Http\Middleware\EnsureFeatureEnabled;
 use App\Http\Middleware\EnsureSuperAdmin;
 use App\Http\Middleware\EnsureUserIsDoctor;
 use App\Http\Middleware\EnsureUserIsHospitalAdmin;
+use App\Http\Middleware\EnsureUserIsPatient;
 use App\Http\Middleware\ResolveHospital;
 use App\Http\Middleware\RestrictMpesaCallbackToSafaricom;
 use App\Http\Middleware\SecurityHeaders;
@@ -28,6 +29,7 @@ $application = Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'doctor' => EnsureUserIsDoctor::class,
             'hospital.admin' => EnsureUserIsHospitalAdmin::class,
+            'patient' => EnsureUserIsPatient::class,
             'superadmin' => EnsureSuperAdmin::class,
             'feature' => EnsureFeatureEnabled::class,
             'safaricom.ip' => RestrictMpesaCallbackToSafaricom::class,

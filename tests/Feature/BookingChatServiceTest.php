@@ -17,6 +17,7 @@ use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -83,6 +84,154 @@ class BookingChatServiceTest extends TestCase
         $this->assertStringContainsString('What service do you need', $response->message);
         $this->assertStringNotContainsString('health worker', mb_strtolower($response->message));
         $this->assertStringNotContainsString('phone number', mb_strtolower($response->message));
+    }
+
+    public function test_typoed_booking_request_starts_the_booking_flow(): void
+    {
+        $this->createContext();
+
+        $response = app(BookingChatService::class)->handle(
+            'typo-booking',
+            'I want to bok an apointment',
+            'web',
+        );
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertStringContainsString('What service do you need', $response->message);
+    }
+
+    public function test_typoed_service_name_is_recognized_during_booking(): void
+    {
+        [, $services] = $this->createContext(['Dental Checkup & Cleaning', 'General Consultation']);
+        $chat = app(BookingChatService::class);
+        $chat->handle('typo-service', 'I want to book an appointment', 'web');
+
+        $chat->handle('typo-service', 'dntl cleanin', 'web');
+
+        $this->assertSame($services[0]->id, $this->state('typo-service')['service_id']);
+    }
+
+    public function test_typoed_greeting_is_recognized(): void
+    {
+        $this->createContext();
+
+        $response = app(BookingChatService::class)->handle('typo-greeting', 'helo', 'web');
+
+        $this->assertStringContainsString('Hello!', $response->message);
+    }
+
+    public function test_swahili_booking_request_starts_booking_without_creating_an_appointment(): void
+    {
+        $this->createContext();
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'swahili-booking-intent',
+            'nataka kuweka miadi',
+            'web',
+        );
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertStringContainsString('What service do you need?', $response->message);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_slang_and_swahili_doctor_questions_use_the_local_doctor_answer(): void
+    {
+        [, , $doctors] = $this->createContext();
+        $doctors[0]->update(['specialization' => 'Dentist']);
+        Http::preventStrayRequests();
+
+        foreach ([
+            'do u have a dentst',
+            'gimme a dentist',
+            'hey can i see a doc',
+            'daktari yupi yuko',
+            'doctor',
+        ] as $index => $message) {
+            $response = app(BookingChatService::class)->handle(
+                'doctor-question-'.$index,
+                $message,
+                'web',
+            );
+
+            $this->assertSame('hospital_doctors', $response->source, $message);
+            $this->assertStringContainsString('Dr. Amina Njeri', $response->message);
+            $this->assertSame('IDLE', $response->state);
+        }
+    }
+
+    public function test_typos_in_location_question_use_the_current_hospital_address(): void
+    {
+        [$hospital] = $this->createContext();
+        $hospital->forceFill(['address' => 'Updated clinic address, Nyahururu'])->save();
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'typo-location-question',
+            'whre are you locatd',
+            'web',
+        );
+
+        $this->assertSame('hospital_information', $response->source);
+        $this->assertStringContainsString('Updated clinic address, Nyahururu', $response->message);
+    }
+
+    public function test_emergency_messages_override_intent_and_preserve_booking_fields(): void
+    {
+        [$hospital, $services] = $this->createContext();
+        $hospital->forceFill(['emergency_phone' => '0700111222'])->save();
+        Http::preventStrayRequests();
+        $chat = app(BookingChatService::class);
+
+        foreach ([
+            'chest pain',
+            "I can't breathe",
+            'dharura',
+            'nina maumivu makali',
+        ] as $index => $message) {
+            $sessionId = 'emergency-during-booking-'.$index;
+            $booking = $chat->handle($sessionId, 'Book Dental Cleaning', 'web');
+            $emergency = $chat->handle($sessionId, $message, 'web');
+            $state = $chat->getState($sessionId);
+
+            $this->assertSame('COLLECTING', $booking->state);
+            $this->assertSame('emergency', $emergency->source);
+            $this->assertStringContainsString('0700111222', $emergency->message);
+            $this->assertSame('COLLECTING', $state['state']);
+            $this->assertSame($services[0]->id, $state['service_id']);
+        }
+
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_greetings_out_of_scope_and_nonverbal_messages_stay_local(): void
+    {
+        $this->createContext();
+        Http::preventStrayRequests();
+        $chat = app(BookingChatService::class);
+
+        foreach (['yo', 'sup', 'whats up', 'mambo vipi', 'shikamoo'] as $index => $message) {
+            $greeting = $chat->handle('slang-greeting-'.$index, $message, 'web');
+
+            $this->assertSame('hospital_greeting', $greeting->source, $message);
+            $this->assertSame('IDLE', $greeting->state);
+        }
+
+        foreach (['capital of France', 'who is the president', 'tell me a joke'] as $index => $message) {
+            $outOfScope = $chat->handle('out-of-scope-'.$index, $message, 'web');
+
+            $this->assertStringContainsString('Booking Chat Hospital', $outOfScope->message);
+            $this->assertSame('IDLE', $outOfScope->state);
+        }
+
+        foreach (['?', '...', '😀😀😀'] as $index => $message) {
+            $clarification = $chat->handle('nonverbal-message-'.$index, $message, 'web');
+
+            $this->assertSame('clarification', $clarification->source);
+            $this->assertStringContainsString('using words', $clarification->message);
+            $this->assertSame('IDLE', $clarification->state);
+        }
     }
 
     public function test_booking_does_not_trigger_escalation(): void
@@ -341,6 +490,110 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame('2026-10-15', $this->state('extract-date-explicit')['date']);
     }
 
+    public function test_booking_date_prompt_includes_the_expected_format_and_example(): void
+    {
+        $this->createContext();
+
+        $response = app(BookingChatService::class)->handle(
+            'date-format-prompt',
+            'Book Dental Cleaning',
+            'web',
+        );
+
+        $this->assertStringContainsString('DD/MM/YYYY', $response->message);
+        $this->assertStringContainsString('15/10/2026', $response->message);
+        $this->assertStringContainsString('YYYY-MM-DD', $response->message);
+    }
+
+    public function test_booking_accepts_iso_kenyan_and_hyphenated_dates_and_natural_language(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+
+        foreach ([
+            'iso' => ['2026-10-15', '2026-10-15'],
+            'kenyan' => ['15/10/2026', '2026-10-15'],
+            'hyphenated' => ['15-10-2026', '2026-10-15'],
+            'english-natural-date' => ['October 15, 2026', '2026-10-15'],
+            'swahili-natural-date' => ['tarehe 15 Oktoba 2026', '2026-10-15'],
+            'next-monday' => ['next Monday', '2026-10-05'],
+            'swahili-weekday' => ['Jumatatu', '2026-10-05'],
+            'tomorrow' => ['tomorrow', '2026-10-03'],
+            'swahili-tomorrow' => ['kesho', '2026-10-03'],
+        ] as $case => [$input, $expectedDate]) {
+            $sessionId = 'date-format-'.$case;
+            $chat->handle($sessionId, 'Book Dental Cleaning', 'web');
+            $response = $chat->handle($sessionId, $input, 'web');
+
+            $this->assertSame($expectedDate, $response->collectedFields['date']);
+        }
+    }
+
+    public function test_ambiguous_date_is_rejected_with_format_guidance(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $chat->handle('date-ambiguous', 'Book Dental Cleaning', 'web');
+
+        $response = $chat->handle('date-ambiguous', '03/04', 'web');
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertNull($response->collectedFields['date']);
+        $this->assertStringContainsString('Sorry, I didn\'t catch that', $response->message);
+        $this->assertStringContainsString('DD/MM/YYYY', $response->message);
+    }
+
+    public function test_past_date_is_rejected_with_future_date_guidance(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $chat->handle('date-past', 'Book Dental Cleaning', 'web');
+
+        $response = $chat->handle('date-past', '01/01/2020', 'web');
+
+        $this->assertNull($response->collectedFields['date']);
+        $this->assertStringContainsString('date is in the past', $response->message);
+        $this->assertStringContainsString('DD/MM/YYYY', $response->message);
+    }
+
+    public function test_date_more_than_twelve_months_ahead_is_rejected(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $chat->handle('date-too-far', 'Book Dental Cleaning', 'web');
+
+        $response = $chat->handle('date-too-far', '01/01/2030', 'web');
+
+        $this->assertNull($response->collectedFields['date']);
+        $this->assertStringContainsString('too far ahead', $response->message);
+        $this->assertStringContainsString('12 months', $response->message);
+    }
+
+    public function test_swahili_booking_date_prompt_and_invalid_date_guidance_are_in_swahili(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $prompt = $chat->handle('date-swahili', 'Nataka Dental Cleaning', 'web');
+        $response = $chat->handle('date-swahili', '03/04', 'web');
+
+        $this->assertStringContainsString('DD/MM/YYYY', $prompt->message);
+        $this->assertStringContainsString('miadi tarehe gani', $prompt->message);
+        $this->assertStringContainsString('Samahani', $response->message);
+        $this->assertStringContainsString('tafadhali', mb_strtolower($response->message));
+
+        $chat->handle('date-swahili-past', 'Nataka Dental Cleaning', 'web');
+        $pastDateResponse = $chat->handle('date-swahili-past', '01/01/2020', 'web');
+
+        $this->assertStringContainsString('imepita', mb_strtolower($pastDateResponse->message));
+        $this->assertStringContainsString('DD/MM/YYYY', $pastDateResponse->message);
+
+        $chat->handle('date-swahili-future', 'Nataka Dental Cleaning', 'web');
+        $futureDateResponse = $chat->handle('date-swahili-future', '01/01/2030', 'web');
+
+        $this->assertStringContainsString('mbali sana', mb_strtolower($futureDateResponse->message));
+        $this->assertStringContainsString('miezi 12', mb_strtolower($futureDateResponse->message));
+    }
+
     public function test_extracts_9am_as_the_booking_time(): void
     {
         $this->createContext();
@@ -484,6 +737,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame($doctors[0]->id, $response->collectedFields['doctor_id']);
         $this->assertSame('Test Patient', $response->collectedFields['patient_name']);
         $this->assertDatabaseCount('appointment_requests', 0);
+
     }
 
     public function test_unavailable_date_offers_the_nearest_available_days(): void
@@ -503,12 +757,27 @@ class BookingChatServiceTest extends TestCase
         $this->assertStringContainsString('Monday October 5', $response->message);
         $this->assertStringContainsString('Tuesday October 6', $response->message);
         $this->assertStringContainsString('Wednesday October 7', $response->message);
+        $this->assertStringContainsString('05/10/2026', $response->message);
+        $this->assertStringContainsString('06/10/2026', $response->message);
+        $this->assertStringContainsString('07/10/2026', $response->message);
         $this->assertSame('COLLECTING', $response->state);
         $this->assertNull($response->collectedFields['date']);
         $this->assertNull($response->collectedFields['time']);
         $this->assertSame($doctors[0]->id, $response->collectedFields['doctor_id']);
         $this->assertSame('Test Patient', $response->collectedFields['patient_name']);
         $this->assertDatabaseCount('appointment_requests', 0);
+
+        $swahiliResponse = $chat->handle(
+            'alternative-nearest-days-swahili',
+            'Nataka Dental Cleaning with Dr. Amina Njeri Saturday at 9am. My name is Test Patient, phone 254748249882, email patient@test.com.',
+            'web',
+        );
+
+        $this->assertStringContainsString('hapatikani', mb_strtolower($swahiliResponse->message));
+        $this->assertStringContainsString('05/10/2026', $swahiliResponse->message);
+        $this->assertStringContainsString('06/10/2026', $swahiliResponse->message);
+        $this->assertStringContainsString('07/10/2026', $swahiliResponse->message);
+        $this->assertStringNotContainsString('October', $swahiliResponse->message);
     }
 
     public function test_user_picks_an_alternative_slot_and_booking_succeeds(): void
@@ -864,6 +1133,92 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame('IDLE', $response->state);
         $this->assertSame('booking_reset', $response->source);
         $this->assertNull($chat->getState('start-over-booking')['service_id']);
+    }
+
+    public function test_valid_chat_state_is_persisted_and_returned(): void
+    {
+        $this->createContext();
+
+        $response = app(BookingChatService::class)->handle(
+            'valid-chat-state',
+            'Book Dental Cleaning',
+            'web',
+        );
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertIsInt($response->collectedFields['service_id']);
+        $this->assertDatabaseHas('conversations', [
+            'session_id' => 'valid-chat-state',
+            'chat_state->state' => 'COLLECTING',
+        ]);
+    }
+
+    public function test_unknown_chat_state_keys_are_logged_and_reset(): void
+    {
+        $this->createContext();
+        $this->storeChatState('unknown-state-key', [
+            'state' => 'COLLECTING',
+            'unknown_field' => 'unexpected',
+        ]);
+        Log::spy();
+
+        $response = app(BookingChatService::class)->handle('unknown-state-key', 'reset', 'web');
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertDatabaseHas('conversations', [
+            'session_id' => 'unknown-state-key',
+            'user_message' => 'reset',
+            'chat_state->state' => 'IDLE',
+        ]);
+        Log::shouldHaveReceived('error')
+            ->withArgs(fn (string $message, array $context = []): bool => (
+                $message === 'Invalid booking chat state was reset.'
+                && $context['channel'] === 'web'
+                && isset($context['session_hash'])
+                && $context['unknown_keys'] === ['unknown_field']
+            ));
+    }
+
+    public function test_past_chat_state_dates_are_logged_and_reset(): void
+    {
+        $this->createContext();
+        $this->storeChatState('past-chat-state-date', [
+            'state' => 'COLLECTING',
+            'date' => '2026-10-01',
+        ]);
+        Log::spy();
+
+        $response = app(BookingChatService::class)->handle('past-chat-state-date', 'reset', 'web');
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertDatabaseHas('conversations', [
+            'session_id' => 'past-chat-state-date',
+            'user_message' => 'reset',
+            'chat_state->state' => 'IDLE',
+        ]);
+        Log::shouldHaveReceived('error')
+            ->withArgs(fn (string $message): bool => $message === 'Invalid booking chat state was reset.');
+    }
+
+    public function test_non_integer_chat_state_service_ids_are_logged_and_reset(): void
+    {
+        $this->createContext();
+        $this->storeChatState('invalid-chat-state-service-id', [
+            'state' => 'COLLECTING',
+            'service_id' => '1',
+        ]);
+        Log::spy();
+
+        $response = app(BookingChatService::class)->handle('invalid-chat-state-service-id', 'reset', 'web');
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertDatabaseHas('conversations', [
+            'session_id' => 'invalid-chat-state-service-id',
+            'user_message' => 'reset',
+            'chat_state->state' => 'IDLE',
+        ]);
+        Log::shouldHaveReceived('error')
+            ->withArgs(fn (string $message): bool => $message === 'Invalid booking chat state was reset.');
     }
 
     public function test_thank_you_does_not_become_the_patient_name_during_booking(): void
@@ -1291,6 +1646,23 @@ class BookingChatServiceTest extends TestCase
     private function state(string $channelId, string $channel = 'web'): array
     {
         return app(BookingChatService::class)->getState($channelId, $channel);
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private function storeChatState(string $sessionId, array $state): void
+    {
+        Conversation::query()->create([
+            'session_id' => $sessionId,
+            'user_message' => 'stored state',
+            'ai_response' => 'stored response',
+            'confidence_score' => 1,
+            'channel' => 'web',
+            'escalated' => false,
+            'chat_state' => $state,
+            'chat_state_updated_at' => now(),
+        ]);
     }
 
     private function configureMpesaFakes(): void

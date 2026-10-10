@@ -45,6 +45,7 @@
         }
 
         .chat-header .title {
+            margin: 0;
             font-weight: 700;
             font-size: 1.3rem;
             letter-spacing: -0.3px;
@@ -259,7 +260,7 @@
             text-align: center;
             padding: 10px 16px;
             font-size: 0.7rem;
-            color: #aab;
+            color: #595959;
             background: #ffffff;
             border-top: 1px solid #f0f3f8;
             flex-shrink: 0;
@@ -267,7 +268,8 @@
 
         .chat-footer a {
             color: var(--tenant-secondary);
-            text-decoration: none;
+            text-decoration: underline;
+            text-underline-offset: 2px;
         }
 
         /* ── Animations ── */
@@ -339,7 +341,7 @@
 @endpush
 
 @section('content')
-<section class="chat-page">
+<main class="chat-page">
 
     <div class="chat-container">
 
@@ -355,7 +357,7 @@
                 <span class="logo" aria-hidden="true">🏥</span>
             @endif
             <div>
-                <div class="title">{{ $aiName }} AI Assistant</div>
+                <h1 class="title">{{ $aiName }} AI Assistant</h1>
                 <div class="subtitle">{{ $branding['header_text'] }}@if ($hospital->address) &bull; {{ $hospital->address }}@endif</div>
             </div>
             <label class="sr-only" for="languageToggle">Chat language</label>
@@ -365,22 +367,6 @@
             </select>
             <span class="badge">AI</span>
         </div>
-
-        @if ($services->isNotEmpty())
-            <div class="border-b border-slate-200 bg-white px-5 py-3">
-                <div>
-                    <label for="bookingService" class="block text-sm font-semibold text-slate-700">Choose a service (optional)</label>
-                    <select id="bookingService" data-service-select class="mt-1 block w-full rounded-lg border-slate-300 text-sm focus:border-cyan-600 focus:ring-cyan-600">
-                        <option value="" disabled @selected($selectedServiceId === null)>Select a service</option>
-                        @foreach ($services as $service)
-                            <option value="{{ $service->id }}" data-price="{{ number_format((float) $service->price, 2, '.', '') }}" data-duration="{{ $service->duration_minutes }}" @selected($selectedServiceId === $service->id)>
-                                {{ $service->name }} — KSh {{ number_format((float) $service->price, 2) }} ({{ $service->duration_minutes }} min)
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
-            </div>
-        @endif
 
         <!-- ─── Messages ─── -->
         <div class="chat-messages" id="messages">
@@ -414,6 +400,7 @@
             <input
                 type="text"
                 id="userInput"
+                aria-label="Message the hospital assistant"
                 placeholder="Ask me anything about {{ $hospital->name }}..."
                 data-placeholder-en="Ask me anything about {{ $hospital->name }}..."
                 data-placeholder-sw="Uliza chochote kuhusu {{ $hospital->name }}..."
@@ -440,7 +427,7 @@
 
     </div>
 
-    </section>
+    </main>
 @endsection
 
 @push('scripts')
