@@ -17,6 +17,13 @@
         $amount = $appointment->payment_amount ?? $payment?->amount ?? $appointment->service?->price ?? $appointment->booking_fee ?? 0;
     @endphp
     <div class="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+        @if (session('status'))
+            <div role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">{{ session('status') }}</div>
+        @endif
+        @if ($errors->any())
+            <div role="alert" class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{{ $errors->first() }}</div>
+        @endif
+
         <article class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 class="font-bold text-slate-900">Appointment</h2>
             <dl class="mt-5 grid gap-x-8 gap-y-5 sm:grid-cols-2">
@@ -32,16 +39,67 @@
             </dl>
         </article>
 
+        @if ($lifecyclePolicy->canCancel || $lifecyclePolicy->canReschedule)
+            <article class="rounded-2xl border border-cyan-200 bg-cyan-50 p-6">
+                <h2 class="font-bold text-slate-900">Change this appointment</h2>
+                <p class="mt-2 text-sm text-slate-700">
+                    Cancellation cutoff: {{ $lifecyclePolicy->cancellationCutoffAt->format('d/m/Y g:i a') }}.
+                    Rescheduling is available until {{ $lifecyclePolicy->reschedulingCutoffAt->format('d/m/Y g:i a') }}.
+                </p>
+                @if ($lifecyclePolicy->isLateCancellation)
+                    <p class="mt-2 text-sm text-amber-800">
+                        The cancellation cutoff has passed. A fee of up to KSh {{ number_format($lifecyclePolicy->lateCancellationFee, 2) }} may be retained from a paid deposit.
+                    </p>
+                @endif
+                <div class="mt-4 flex flex-wrap gap-3">
+                    @if ($lifecyclePolicy->canReschedule)
+                        <a href="{{ route('appointments.reschedule.create', $appointment->id) }}" class="rounded-lg bg-cyan-800 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-700">Reschedule</a>
+                    @endif
+                    @if ($lifecyclePolicy->canCancel)
+                        <form method="POST" action="{{ route('appointments.cancel', $appointment->id) }}" class="flex flex-wrap items-center gap-2" data-confirm="Cancel this appointment?">
+                            @csrf
+                            <label class="sr-only" for="cancellation-reason">Cancellation reason</label>
+                            <input id="cancellation-reason" name="reason" maxlength="1000" class="rounded-lg border-slate-300 text-sm" placeholder="Reason (optional)">
+                            <button type="submit" class="rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-50">Cancel appointment</button>
+                        </form>
+                    @endif
+                </div>
+            </article>
+        @endif
+
         <article class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 class="font-bold text-slate-900">M-Pesa payment</h2>
             <dl class="mt-4 grid gap-x-8 gap-y-4 text-sm sm:grid-cols-2">
                 <div><dt class="text-slate-500">Payment status</dt><dd class="mt-1 font-medium capitalize text-slate-900">{{ $payment?->status ?: $appointment->payment_status }}</dd></div>
+                @if ((float) $appointment->forfeited_amount > 0)
+                    <div><dt class="text-slate-500">Deposit retained</dt><dd class="mt-1 font-medium text-slate-900">KSh {{ number_format((float) $appointment->forfeited_amount, 2) }}</dd></div>
+                @endif
                 <div><dt class="text-slate-500">Receipt</dt><dd class="mt-1 font-medium text-slate-900">{{ $payment?->mpesa_receipt ?: $appointment->mpesa_receipt ?: 'Not available' }}</dd></div>
                 <div><dt class="text-slate-500">Phone</dt><dd class="mt-1 font-medium text-slate-900">{{ $payment?->phone ?: $appointment->mpesa_phone ?: 'Not available' }}</dd></div>
                 <div><dt class="text-slate-500">Checkout request</dt><dd class="mt-1 break-all font-medium text-slate-900">{{ $payment?->checkout_request_id ?: $appointment->mpesa_checkout_request_id ?: 'Not available' }}</dd></div>
                 <div><dt class="text-slate-500">Result</dt><dd class="mt-1 font-medium text-slate-900">{{ $payment?->result_description ?: $appointment->mpesa_result_description ?: 'Not available' }}</dd></div>
                 <div><dt class="text-slate-500">Paid at</dt><dd class="mt-1 font-medium text-slate-900">{{ $payment?->processed_at?->format('M j, Y, g:i a') ?: $appointment->paid_at?->format('M j, Y, g:i a') ?: 'Not paid' }}</dd></div>
             </dl>
+        </article>
+
+        <article class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 class="font-bold text-slate-900">Appointment history</h2>
+            @forelse ($appointment->histories as $history)
+                <div class="mt-4 border-l-2 border-cyan-600 pl-4">
+                    <p class="font-semibold capitalize text-slate-900">{{ str_replace('_', ' ', $history->action) }}</p>
+                    <p class="mt-1 text-sm text-slate-700">
+                        @if ($history->action === 'rescheduled')
+                            {{ $history->old_date?->format('d/m/Y') }} at {{ $history->old_start_time ? substr((string) $history->old_start_time, 0, 5) : '—' }}
+                            → {{ $history->new_date?->format('d/m/Y') }} at {{ $history->new_start_time ? substr((string) $history->new_start_time, 0, 5) : '—' }}
+                        @else
+                            {{ $history->reason ?: 'No reason provided.' }}
+                        @endif
+                    </p>
+                    <p class="mt-1 text-xs text-slate-500">{{ $history->created_at?->format('M j, Y, g:i a') }}</p>
+                </div>
+            @empty
+                <p class="mt-2 text-sm text-slate-500">No appointment changes have been recorded.</p>
+            @endforelse
         </article>
 
         <article class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

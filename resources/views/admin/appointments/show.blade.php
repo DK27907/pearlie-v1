@@ -10,6 +10,9 @@
     @if(session('error'))
         <div class="alert alert-danger">{{ session('error') }}</div>
     @endif
+    @if ($errors->any())
+        <div role="alert" class="my-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{{ $errors->first() }}</div>
+    @endif
 
     <div class="card mb-3">
         <div class="card-body">
@@ -106,37 +109,61 @@
                     <button type="submit" class="rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800">Mark No-Show</button>
                 </form>
             @endif
+
+            @if (in_array($appt->status, ['pending', 'confirmed'], true))
+                <section class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <h2 class="font-semibold text-slate-900">Appointment lifecycle override</h2>
+                    <form method="POST" action="{{ route('admin.appointments.cancel', $appt->id) }}" class="flex flex-wrap items-center gap-2" data-confirm="Cancel this appointment?">
+                        @csrf
+                        <label for="admin-cancellation-reason" class="sr-only">Cancellation reason</label>
+                        <input id="admin-cancellation-reason" name="reason" maxlength="1000" class="rounded-lg border-slate-300 text-sm" placeholder="Cancellation reason">
+                        <button type="submit" class="rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800">Cancel appointment</button>
+                    </form>
+                    <form method="POST" action="{{ route('admin.appointments.reschedule', $appt->id) }}" class="grid gap-3 sm:grid-cols-2">
+                        @csrf
+                        <label class="grid gap-1 text-sm font-medium text-slate-700">Doctor
+                            <select name="doctor_id" required class="rounded-lg border-slate-300 text-sm">
+                                @foreach ($doctors as $doctor)
+                                    <option value="{{ $doctor->id }}" @selected(old('doctor_id', $appt->doctor_id) == $doctor->id)>{{ $doctor->name }}</option>
+                                @endforeach
+                            </select>
+                        </label>
+                        <label class="grid gap-1 text-sm font-medium text-slate-700">Date
+                            <input type="date" name="date" required min="{{ now()->toDateString() }}" max="{{ now()->addYear()->toDateString() }}" class="rounded-lg border-slate-300 text-sm">
+                        </label>
+                        <label class="grid gap-1 text-sm font-medium text-slate-700">Time
+                            <input type="time" name="time" required class="rounded-lg border-slate-300 text-sm">
+                        </label>
+                        <label class="grid gap-1 text-sm font-medium text-slate-700">Reason (optional)
+                            <input name="reason" maxlength="1000" class="rounded-lg border-slate-300 text-sm">
+                        </label>
+                        <button type="submit" class="rounded-lg bg-cyan-800 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-700 sm:col-span-2">Reschedule appointment</button>
+                    </form>
+                </section>
+            @endif
+
+            <section class="mt-6 rounded-xl border border-slate-200 bg-white p-4">
+                <h2 class="font-semibold text-slate-900">Appointment change history</h2>
+                @forelse ($appt->histories as $history)
+                    <div class="mt-3 border-l-2 border-cyan-700 pl-3">
+                        <p class="font-medium capitalize text-slate-800">{{ str_replace('_', ' ', $history->action) }} by {{ $history->actor_role }}</p>
+                        @if ($history->action === 'rescheduled')
+                            <p class="text-sm text-slate-600">
+                                {{ $history->old_date?->format('d/m/Y') }} at {{ $history->old_start_time ? substr((string) $history->old_start_time, 0, 5) : '—' }}
+                                → {{ $history->new_date?->format('d/m/Y') }} at {{ $history->new_start_time ? substr((string) $history->new_start_time, 0, 5) : '—' }}
+                            </p>
+                        @else
+                            <p class="text-sm text-slate-600">{{ $history->reason ?: 'No reason provided.' }}</p>
+                        @endif
+                        <p class="text-xs text-slate-500">{{ $history->created_at?->format('M j, Y, g:i a') }}</p>
+                    </div>
+                @empty
+                    <p class="mt-2 text-sm text-slate-500">No appointment changes have been recorded.</p>
+                @endforelse
+            </section>
         </div>
     </div>
 
     <a href="{{ route('admin.appointments.index') }}" class="btn btn-link">Back to list</a>
 </div>
-
-@if ($checkoutRequestId)
-    <script>
-        document.getElementById('verify-mpesa-payment')?.addEventListener('click', async (event) => {
-            const button = event.currentTarget;
-            const result = document.getElementById('mpesa-verification-result');
-            button.disabled = true;
-            result.textContent = 'Checking payment status…';
-
-            try {
-                const response = await fetch(button.dataset.statusUrl, {
-                    headers: { Accept: 'application/json' },
-                });
-                const payload = await response.json();
-
-                if (!response.ok || payload.success !== true) {
-                    throw new Error(payload.message || 'Payment status could not be verified.');
-                }
-
-                result.textContent = payload.data.ResultDesc || payload.data.ResponseDescription || 'Payment status received.';
-            } catch (error) {
-                result.textContent = error.message || 'Payment status could not be verified.';
-            } finally {
-                button.disabled = false;
-            }
-        });
-    </script>
-@endif
 @endsection

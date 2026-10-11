@@ -63,6 +63,32 @@ class AppointmentLifecycleTest extends TestCase
         Queue::assertPushed(SendAppointmentLifecycleNotifications::class, 1);
     }
 
+    public function test_cancellation_forms_use_the_csp_safe_confirmation_hook_for_every_role(): void
+    {
+        [$hospital, $patient, $appointment, $doctor] = $this->appointmentContext([
+            'preferred_date' => '2026-10-10',
+        ]);
+        $admin = User::factory()->for($hospital, 'hospital')->create([
+            'is_admin' => true,
+            'role' => 'hospital_admin',
+        ]);
+
+        $this->actingAs($patient)
+            ->get(route('appointments.show', $appointment->id))
+            ->assertSee('data-confirm="Cancel this appointment?"', false)
+            ->assertDontSee('onsubmit="return confirm(', false);
+
+        $this->actingAs($admin)
+            ->get(route('admin.appointments.show', $appointment->id))
+            ->assertSee('data-confirm="Cancel this appointment?"', false)
+            ->assertDontSee('onsubmit="return confirm(', false);
+
+        $this->actingAs($doctor)
+            ->get(route('doctor.appointments.show', $appointment->id))
+            ->assertSee('data-confirm="Cancel this appointment?"', false)
+            ->assertDontSee('onsubmit="return confirm(', false);
+    }
+
     public function test_patient_cannot_cancel_another_patients_appointment(): void
     {
         [$hospital, $patient, $appointment] = $this->appointmentContext([

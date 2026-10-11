@@ -20,9 +20,12 @@
 @endsection
 
 @section('content')
-    <div class="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:px-8 lg:grid-cols-[minmax(0,1fr)_18rem]">
+    <div class="mx-auto grid max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] gap-6 px-4 py-8 sm:px-6 lg:px-8 lg:grid-cols-[minmax(0,1fr)_18rem]">
         @if (session('status'))
             <div role="status" class="lg:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">{{ session('status') }}</div>
+        @endif
+        @if ($errors->any())
+            <div role="alert" class="lg:col-span-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{{ $errors->first() }}</div>
         @endif
 
         <section class="space-y-6">
@@ -58,6 +61,18 @@
                     <div><dt class="text-slate-500">Received</dt><dd class="mt-1 font-medium text-slate-800">{{ $appointment->created_at?->format('M j, Y, g:i a') }}</dd></div>
                     <div><dt class="text-slate-500">Confirmed by you</dt><dd class="mt-1 font-medium text-slate-800">{{ $appointment->confirmed_by_doctor_at?->format('M j, Y, g:i a') ?: 'Not confirmed' }}</dd></div>
                 </dl>
+                <div class="mt-5 border-t border-slate-100 pt-4">
+                    <h3 class="font-semibold text-slate-900">Appointment changes</h3>
+                    @forelse ($appointment->histories as $history)
+                        <div class="mt-3 border-l-2 border-cyan-600 pl-3">
+                            <p class="font-medium capitalize text-slate-800">{{ str_replace('_', ' ', $history->action) }}</p>
+                            <p class="text-sm text-slate-600">{{ $history->reason ?: 'No reason provided.' }}</p>
+                            <p class="text-xs text-slate-500">{{ $history->created_at?->format('M j, Y, g:i a') }}</p>
+                        </div>
+                    @empty
+                        <p class="mt-2 text-sm text-slate-500">No appointment changes have been recorded.</p>
+                    @endforelse
+                </div>
             </article>
         </section>
 
@@ -83,6 +98,27 @@
                         <label class="mb-2 block text-xs font-medium text-slate-600" for="no-show-reason">Reason (optional)</label>
                         <input id="no-show-reason" name="reason" maxlength="255" class="mb-2 w-full rounded-lg border-slate-300 text-sm" placeholder="e.g. Patient did not arrive">
                         <button type="submit" class="w-full rounded-lg bg-rose-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-800">Mark No-Show</button>
+                    </form>
+                @endif
+                @if (in_array($appointment->status, ['pending', 'confirmed'], true))
+                    <form method="POST" action="{{ route('doctor.appointments.cancel', $appointment->id) }}" data-confirm="Cancel this appointment?">
+                        @csrf
+                        <label class="mb-2 block text-xs font-medium text-slate-600" for="doctor-cancellation-reason">Cancellation reason (optional)</label>
+                        <input id="doctor-cancellation-reason" name="reason" maxlength="1000" class="mb-2 w-full rounded-lg border-slate-300 text-sm">
+                        <button type="submit" class="w-full rounded-lg bg-rose-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-800">Cancel appointment</button>
+                    </form>
+                    <form method="POST" action="{{ route('doctor.appointments.reschedule', $appointment->id) }}" class="grid gap-2">
+                        @csrf
+                        <label class="grid gap-1 text-xs font-medium text-slate-600">New date
+                            <input type="date" name="date" required min="{{ now()->toDateString() }}" max="{{ now()->addYear()->toDateString() }}" class="rounded-lg border-slate-300 text-sm">
+                        </label>
+                        <label class="grid gap-1 text-xs font-medium text-slate-600">New time
+                            <input type="time" name="time" required class="rounded-lg border-slate-300 text-sm">
+                        </label>
+                        <label class="grid gap-1 text-xs font-medium text-slate-600">Reason (optional)
+                            <input name="reason" maxlength="1000" class="rounded-lg border-slate-300 text-sm">
+                        </label>
+                        <button type="submit" class="w-full rounded-lg bg-cyan-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-700">Reschedule with me</button>
                     </form>
                 @endif
                 @if (! in_array($appointment->status, ['pending', 'confirmed'], true))

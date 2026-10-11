@@ -1,0 +1,41 @@
+{
+  "checks": 7,
+  "statuses": [
+    {
+      "role": "pearl_admin",
+      "uri": "admin/appointments/16",
+      "status": 404
+    },
+    {
+      "role": "pearl_admin",
+      "uri": "admin/escalations/1",
+      "status": 404
+    },
+    {
+      "role": "demo_admin",
+      "uri": "admin/appointments/14",
+      "status": 404
+    },
+    {
+      "role": "demo_admin",
+      "uri": "admin/escalations/2",
+      "status": 404
+    },
+    {
+      "role": "doctor",
+      "uri": "doctor/appointments/16",
+      "status": 404
+    },
+    {
+      "role": "doctor",
+      "uri": "doctor/escalations/1",
+      "status": 404
+    },
+    {
+      "role": "patient",
+      "uri": "appointments/16",
+      "status": 404
+    }
+  ],
+  "passed": true
+}

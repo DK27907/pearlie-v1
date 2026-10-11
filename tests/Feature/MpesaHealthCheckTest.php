@@ -117,8 +117,16 @@ class MpesaHealthCheckTest extends TestCase
         );
         Cache::put(
             MpesaHealthCheck::SCHEDULER_HEARTBEAT_CACHE_KEY,
-            $ranAt->timestamp,
+            now()->timestamp,
             600,
         );
+
+        foreach (MpesaHealthCheck::SCHEDULED_TASK_HEARTBEATS as $command => $ttlMinutes) {
+            Cache::put(
+                MpesaHealthCheck::schedulerHeartbeatCacheKey($command),
+                now()->timestamp,
+                $ttlMinutes * 60,
+            );
+        }
     }
 }
