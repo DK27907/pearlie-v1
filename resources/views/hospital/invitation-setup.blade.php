@@ -4,7 +4,7 @@
             <p class="text-sm font-semibold uppercase tracking-widest text-indigo-700">{{ $invite->hospital->name }}</p>
             <h1 class="mt-2 text-2xl font-bold text-slate-900">Set up your hospital administrator account</h1>
             <p class="mt-2 text-sm text-slate-600">Invitation for {{ $invite->email }}. Your link is valid for a limited time.</p>
-            <form method="POST" action="{{ route('hospital.invitation.store', [$invite->hospital->slug, $invite->token]) }}" class="mt-6 space-y-4">
+            <form method="POST" action="{{ $setupUrl }}" class="mt-6 space-y-4">
                 @csrf
                 <label class="block text-sm font-semibold text-slate-700">Your name<input name="name" value="{{ old('name') }}" required autocomplete="name" class="mt-1 w-full rounded-xl border-slate-300"></label>
                 <label class="block text-sm font-semibold text-slate-700">Password<input type="password" name="password" required minlength="12" autocomplete="new-password" class="mt-1 w-full rounded-xl border-slate-300"><span class="mt-1 block text-xs font-normal text-slate-500">Use at least 12 characters.</span></label>

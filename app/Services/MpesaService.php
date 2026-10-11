@@ -22,6 +22,8 @@ class MpesaService
 
     public function getAccessToken(?string $checkoutRequestId = null): ?string
     {
+        $httpStatus = null;
+
         try {
             $config = $this->configForCurrentHospital();
             $this->ensureCredentials($config);
@@ -29,15 +31,30 @@ class MpesaService
             $response = Http::timeout($config['timeout'] ?? 20)
                 ->withBasicAuth($config['consumer_key'], $config['consumer_secret'])
                 ->get($this->baseUrl($config).'/oauth/v1/generate?grant_type=client_credentials');
+            $httpStatus = $response->status();
             $response->throw();
 
             $token = $response->json('access_token');
+            if (! is_string($token) || $token === '') {
+                app(ExternalProviderLogger::class)->record(
+                    'mpesa',
+                    'access_token',
+                    'failed',
+                    $httpStatus,
+                    'token_missing',
+                );
 
-            return is_string($token) && $token !== '' ? $token : null;
+                return null;
+            }
+
+            app(ExternalProviderLogger::class)->record('mpesa', 'access_token', 'succeeded', $httpStatus);
+
+            return $token;
         } catch (Throwable $exception) {
+            app(ExternalProviderLogger::class)->record('mpesa', 'access_token', 'failed', $httpStatus, null, $exception);
             Log::error('Unable to obtain the M-Pesa access token.', [
                 'checkout_request_id' => $checkoutRequestId,
-                'exception' => $exception,
+                'exception_class' => $exception::class,
             ]);
 
             throw $exception;
@@ -55,6 +72,7 @@ class MpesaService
         ?int $appointmentId = null,
     ): array {
         $slotHoldId = null;
+        $providerHttpStatus = null;
 
         try {
             if (hospital() && ! hospital()->hasFeature('mpesa')) {
@@ -97,6 +115,7 @@ class MpesaService
                     'AccountReference' => $accountReference,
                     'TransactionDesc' => $transactionDesc,
                 ]);
+            $providerHttpStatus = $checkoutResponse->status();
             $checkoutResponse->throw();
 
             $responseData = $checkoutResponse->json();
@@ -108,6 +127,7 @@ class MpesaService
                     $responseData['ResponseDescription'] ?? 'M-Pesa could not initiate the STK push.',
                 );
             }
+            app(ExternalProviderLogger::class)->record('mpesa', 'stk_push', 'succeeded', $providerHttpStatus);
 
             $payment = DB::transaction(function () use (
                 $appointmentId,
@@ -172,15 +192,16 @@ class MpesaService
                 } catch (Throwable $lifecycleException) {
                     Log::error('Unable to cancel an appointment after M-Pesa initiation failed.', [
                         'appointment_id' => $appointmentId,
-                        'exception' => $lifecycleException,
+                        'exception_class' => $lifecycleException::class,
                     ]);
                 }
             }
 
+            app(ExternalProviderLogger::class)->record('mpesa', 'stk_push', 'failed', $providerHttpStatus, null, $exception);
             Log::error('Unable to initiate an M-Pesa STK push.', [
                 'appointment_id' => $appointmentId,
                 'amount' => $amount,
-                'exception' => $exception,
+                'exception_class' => $exception::class,
             ]);
 
             throw $exception;
@@ -200,7 +221,7 @@ class MpesaService
 
             Log::info('Received an M-Pesa callback.', [
                 'checkout_request_id' => $checkoutRequestId,
-                'payload' => $callbackData,
+                'result_code' => is_array($callback) ? ($callback['ResultCode'] ?? null) : null,
             ]);
 
             if (! is_array($callback)
@@ -436,7 +457,9 @@ class MpesaService
                         Log::warning('M-Pesa payment failed.', [
                             'checkout_request_id' => $checkoutRequestId,
                             'result_code' => $resultCode,
-                            'result_desc' => $failureReason,
+                            'failure_code' => in_array($failureReason, ['amount_mismatch', 'phone_mismatch'], true)
+                                ? $failureReason
+                                : 'provider_declined',
                         ]);
                     }
 
@@ -478,9 +501,10 @@ class MpesaService
                 return $payment->load('appointment');
             });
         } catch (Throwable $exception) {
+            app(ExternalProviderLogger::class)->record('mpesa', 'callback_processing', 'failed', null, null, $exception);
             Log::error('Unable to process an M-Pesa payment callback.', [
                 'checkout_request_id' => $checkoutRequestId,
-                'exception' => $exception,
+                'exception_class' => $exception::class,
             ]);
 
             throw $exception;
@@ -542,6 +566,8 @@ class MpesaService
      */
     public function verifyPayment(string $checkoutRequestId): array
     {
+        $httpStatus = null;
+
         try {
             if (hospital() && ! hospital()->hasFeature('mpesa')) {
                 throw new RuntimeException('M-Pesa payments are not enabled for this hospital plan.');
@@ -567,6 +593,7 @@ class MpesaService
                     'Timestamp' => $timestamp,
                     'CheckoutRequestID' => $checkoutRequestId,
                 ]);
+            $httpStatus = $response->status();
             $response->throw();
 
             $result = $response->json();
@@ -574,11 +601,14 @@ class MpesaService
                 throw new RuntimeException('M-Pesa returned an invalid payment status response.');
             }
 
+            app(ExternalProviderLogger::class)->record('mpesa', 'payment_status', 'succeeded', $httpStatus);
+
             return $result;
         } catch (Throwable $exception) {
+            app(ExternalProviderLogger::class)->record('mpesa', 'payment_status', 'failed', $httpStatus, null, $exception);
             Log::error('Unable to verify M-Pesa payment status.', [
                 'checkout_request_id' => $checkoutRequestId,
-                'message' => $exception->getMessage(),
+                'exception_class' => $exception::class,
             ]);
 
             return [
@@ -608,7 +638,7 @@ class MpesaService
             throw new InvalidArgumentException('Enter a valid Kenyan mobile phone number.');
         } catch (Throwable $exception) {
             Log::error('Unable to format an M-Pesa phone number.', [
-                'exception' => $exception,
+                'exception_class' => $exception::class,
             ]);
 
             throw $exception;
@@ -621,7 +651,7 @@ class MpesaService
             return $this->formatPhone((string) $phone);
         } catch (Throwable $exception) {
             Log::error('Unable to normalise a legacy M-Pesa phone number.', [
-                'exception' => $exception,
+                'exception_class' => $exception::class,
             ]);
 
             throw $exception;
@@ -654,7 +684,7 @@ class MpesaService
         } catch (Throwable $exception) {
             Log::error('Unable to initiate a legacy appointment STK push.', [
                 'appointment_id' => $appointment->id,
-                'exception' => $exception,
+                'exception_class' => $exception::class,
             ]);
 
             throw $exception;

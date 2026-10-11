@@ -59,9 +59,9 @@ class MpesaWhatsAppBookingTest extends TestCase
     public function test_verified_callback_marks_appointment_paid_and_confirmed_idempotently(): void
     {
         config([
-            'services.whatsapp.phone_number_id' => 'phone-id',
-            'services.whatsapp.access_token' => 'token',
-            'services.whatsapp.app_secret' => 'test-app-secret',
+            'whatsapp.phone_number_id' => 'phone-id',
+            'whatsapp.access_token' => 'token',
+            'whatsapp.app_secret' => 'test-app-secret',
             'mpesa.environment' => 'sandbox',
             'mpesa.consumer_key' => 'test-consumer',
             'mpesa.consumer_secret' => 'test-secret',

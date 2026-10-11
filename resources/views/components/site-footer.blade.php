@@ -7,7 +7,7 @@
         $servicesUrl = $tenantHospital ? route('tenant.home', $tenantHospital->slug).'#services' : route('home').'#services';
         $whatsappNumber = preg_replace('/\D+/', '', (string) pearlie_config('hospital.whatsapp_number'));
     @endphp
-    <div class="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-3 lg:px-8">
+    <div class="mx-auto grid max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] gap-10 px-4 py-12 sm:px-6 md:grid-cols-3 lg:px-8">
         <section>
             <h2 class="text-lg font-bold text-white">{{ $branding['header_text'] }}</h2>
             <address class="mt-4 space-y-2 text-sm not-italic leading-6 text-slate-300">
@@ -52,7 +52,7 @@
         </section>
     </div>
     <div class="border-t border-white/10">
-        <div class="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-4 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+        <div class="mx-auto flex max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] flex-col gap-2 px-4 py-4 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
             <p>{{ $branding['footer_text'] }}</p>
             <p>Powered by AxiomForge Digital Solutions</p>
         </div>

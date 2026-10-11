@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Hospital;
 use App\Services\NotificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -13,6 +14,8 @@ class NotificationServiceTest extends TestCase
 
     public function test_africas_talking_used_when_credentials_present()
     {
+        app()->instance('currentHospital', Hospital::factory()->create());
+
         config([
             'services.sms_provider' => 'africastalking',
             'services.africastalking.username' => 'testuser',
@@ -34,6 +37,8 @@ class NotificationServiceTest extends TestCase
 
     public function test_twilio_is_used_when_selected_as_the_provider()
     {
+        app()->instance('currentHospital', Hospital::factory()->create());
+
         config([
             'services.sms_provider' => 'twilio',
             'services.africastalking.username' => null,
@@ -58,6 +63,8 @@ class NotificationServiceTest extends TestCase
 
     public function test_twilio_api_key_credentials_are_supported(): void
     {
+        app()->instance('currentHospital', Hospital::factory()->create());
+
         config([
             'services.sms_provider' => 'twilio',
             'services.africastalking.username' => null,

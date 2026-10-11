@@ -1,7 +1,7 @@
-@extends('layouts.app')
+@extends('superadmin.layouts.app')
 
 @section('content')
-    <div class="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+    <div class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] space-y-8 px-4 py-8 sm:px-6 lg:px-8">
         <header class="flex flex-wrap items-end justify-between gap-4">
             <div><p class="text-sm font-semibold uppercase tracking-widest text-indigo-700">AxiomForge platform</p><h1 class="mt-2 text-3xl font-bold text-slate-900">MediDesk AI overview</h1><p class="mt-2 text-slate-600">Hospital adoption, subscription status, and monthly activity.</p></div>
             <a href="{{ route('superadmin.hospitals.create') }}" class="rounded-xl bg-indigo-700 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-800">Add hospital</a>

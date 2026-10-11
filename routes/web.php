@@ -1,17 +1,22 @@
 <?php
 
+use App\Http\Controllers\Admin\AppointmentLifecycleController as AdminAppointmentLifecycleController;
 use App\Http\Controllers\Admin\DoctorController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Auth\DoctorSetupController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\Doctor;
+use App\Http\Controllers\Doctor\AppointmentLifecycleController as DoctorAppointmentLifecycleController;
 use App\Http\Controllers\Doctor\EscalationController as DoctorEscalationController;
 use App\Http\Controllers\HospitalInvitationController;
 use App\Http\Controllers\HospitalOnboardingController;
 use App\Http\Controllers\MarketingDemoController;
 use App\Http\Controllers\MarketingHomeController;
+use App\Http\Controllers\Patient\AppointmentCancelController;
 use App\Http\Controllers\Patient\AppointmentController as PatientAppointmentController;
+use App\Http\Controllers\Patient\AppointmentRescheduleController;
+use App\Http\Controllers\PaymentStatusController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
 use App\Http\Controllers\SuperAdmin\HospitalController as SuperAdminHospitalController;
@@ -25,19 +30,19 @@ Route::post('/demo-requests', [MarketingDemoController::class, 'store'])
 
 Route::get('/pearlie', [ChatController::class, 'index'])->name('pearlie.index');
 Route::post('/pearlie/chat', [ChatController::class, 'chat'])
-    ->middleware('throttle:30,1')
+    ->middleware('throttle:tenant-chat')
     ->name('pearlie.chat');
 Route::get('/h/{slug}', [TenantHomeController::class, 'index'])->name('tenant.home');
 Route::get('/h/{slug}/chat', [ChatController::class, 'index'])->name('tenant.chat.page');
 Route::post('/h/{slug}/chat', [ChatController::class, 'chat'])
-    ->middleware('throttle:30,1')
+    ->middleware('throttle:tenant-chat')
     ->name('tenant.chat.post');
 Route::post('/h/{slug}/chat/reset', [ChatController::class, 'reset'])
-    ->middleware('throttle:30,1')
+    ->middleware('throttle:tenant-chat-reset')
     ->name('tenant.chat.reset');
 Route::get('/chat/{slug}', [ChatController::class, 'index'])->name('tenant.chat.legacy-page');
 Route::post('/chat/{slug}', [ChatController::class, 'chat'])
-    ->middleware('throttle:30,1')
+    ->middleware('throttle:tenant-chat')
     ->name('tenant.chat.short');
 Route::get('/hospital/{slug}/invitation/{token}', [HospitalInvitationController::class, 'show'])
     ->middleware('signed')
@@ -65,9 +70,18 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-Route::middleware(['auth', 'verified'])->group(function (): void {
+Route::middleware(['auth', 'verified', 'patient'])->group(function (): void {
     Route::get('/appointments', [PatientAppointmentController::class, 'index'])->name('appointments.index');
     Route::get('/appointments/{appointment}', [PatientAppointmentController::class, 'show'])->name('appointments.show');
+    Route::post('/appointments/{id}/cancel', [AppointmentCancelController::class, 'store'])
+        ->whereNumber('id')
+        ->name('appointments.cancel');
+    Route::get('/appointments/{id}/reschedule', [AppointmentRescheduleController::class, 'create'])
+        ->whereNumber('id')
+        ->name('appointments.reschedule.create');
+    Route::post('/appointments/{id}/reschedule', [AppointmentRescheduleController::class, 'store'])
+        ->whereNumber('id')
+        ->name('appointments.reschedule.store');
 });
 
 Route::middleware(['auth', 'doctor', 'feature:doctors'])
@@ -82,6 +96,8 @@ Route::middleware(['auth', 'doctor', 'feature:doctors'])
         Route::post('/appointments/{id}/confirm', [Doctor\DashboardController::class, 'confirmAppointment'])->name('appointments.confirm');
         Route::post('/appointments/{id}/complete', [Doctor\DashboardController::class, 'completeAppointment'])->name('appointments.complete');
         Route::post('/appointments/{id}/no-show', [Doctor\DashboardController::class, 'markNoShow'])->name('appointments.no-show');
+        Route::post('/appointments/{id}/cancel', [DoctorAppointmentLifecycleController::class, 'cancel'])->whereNumber('id')->name('appointments.cancel');
+        Route::post('/appointments/{id}/reschedule', [DoctorAppointmentLifecycleController::class, 'reschedule'])->whereNumber('id')->name('appointments.reschedule');
         Route::get('/availability', [Doctor\DashboardController::class, 'availability'])->name('availability');
         Route::post('/availability', [Doctor\DashboardController::class, 'updateAvailability'])->name('availability.update');
         Route::post('/unavailable', [Doctor\DashboardController::class, 'markUnavailable'])->name('unavailable.store');
@@ -100,6 +116,11 @@ Route::middleware(['auth', 'hospital.admin'])
         Route::get('/onboarding', [HospitalOnboardingController::class, 'show'])->name('onboarding');
         Route::put('/onboarding', [HospitalOnboardingController::class, 'update'])->name('onboarding.update');
     });
+
+Route::get('/api/payments/{paymentId}/status', [PaymentStatusController::class, 'show'])
+    ->whereNumber('paymentId')
+    ->middleware(['auth', 'hospital.admin', 'throttle:30,1', 'feature:mpesa'])
+    ->name('payments.status');
 
 Route::middleware(['auth', 'superadmin'])
     ->prefix('superadmin')
@@ -128,6 +149,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\EscalationController;
 use App\Http\Controllers\Admin\InviteController;
 use App\Http\Controllers\Admin\KnowledgeBaseController;
+use App\Http\Controllers\Admin\NotificationLogController;
 use App\Http\Controllers\Admin\PaymentController;
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\ReportController;
@@ -173,6 +195,7 @@ Route::middleware(['auth', 'hospital.admin'])
         Route::get('conversations', [ConversationController::class, 'index'])->name('conversations.index');
         Route::get('conversations/{conversation}', [ConversationController::class, 'show'])->name('conversations.show');
         Route::get('payments', [PaymentController::class, 'index'])->name('payments.index');
+        Route::get('notification-logs', [NotificationLogController::class, 'index'])->name('notification-logs.index');
         Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
         Route::get('reports/export', [ReportController::class, 'exportCsv'])->name('reports.export');
         Route::get('settings', [HospitalOnboardingController::class, 'adminSettings'])->name('settings');
@@ -194,6 +217,7 @@ Route::middleware(['auth', 'hospital.admin'])
         Route::post('escalations/{id}/claim', [EscalationController::class, 'claim'])->middleware('feature:escalation')->name('escalations.claim');
         Route::post('escalations/{id}/resolve', [EscalationController::class, 'resolve'])->middleware('feature:escalation')->name('escalations.resolve');
         Route::post('escalations/{id}/reply', [EscalationController::class, 'reply'])->middleware('feature:escalation')->name('escalations.reply');
+        Route::post('escalation-replies/{replyId}/retry', [EscalationController::class, 'retryReply'])->middleware('feature:escalation')->name('escalation-replies.retry');
         Route::get('escalations/{id}', [EscalationController::class, 'show'])->middleware('feature:escalation')->name('escalations.show');
         Route::post('escalations/{escalation}/assign', [EscalationController::class, 'assign'])->middleware('feature:escalation')->name('escalations.assign');
         Route::post('escalations/{id}/status', [EscalationController::class, 'updateStatus'])->middleware('feature:escalation')->name('escalations.updateStatus');
@@ -225,5 +249,7 @@ Route::middleware(['auth', 'hospital.admin'])
         Route::post('appointments/{id}/status', [AppointmentController::class, 'updateStatus'])->middleware('feature:booking')->name('appointments.updateStatus');
         Route::post('appointments/{id}/confirm', [AppointmentController::class, 'confirm'])->middleware('feature:booking')->name('appointments.confirm');
         Route::post('appointments/{id}/no-show', [AppointmentController::class, 'markNoShow'])->middleware('feature:booking')->name('appointments.no-show');
+        Route::post('appointments/{id}/cancel', [AdminAppointmentLifecycleController::class, 'cancel'])->whereNumber('id')->middleware('feature:booking')->name('appointments.cancel');
+        Route::post('appointments/{id}/reschedule', [AdminAppointmentLifecycleController::class, 'reschedule'])->whereNumber('id')->middleware('feature:booking')->name('appointments.reschedule');
         Route::post('appointments/bulk', [AppointmentController::class, 'bulkAction'])->middleware('feature:booking')->name('appointments.bulk');
     });

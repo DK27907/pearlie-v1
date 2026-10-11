@@ -7,12 +7,22 @@ export default {
         './vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php',
         './storage/framework/views/*.php',
         './resources/views/**/*.blade.php',
+        './resources/js/**/*.js',
     ],
 
     theme: {
         extend: {
+            screens: {
+                '3xl': '1920px',
+                '4xl': '2560px',
+                '5xl': '3840px',
+            },
             fontFamily: {
                 sans: ['Figtree', ...defaultTheme.fontFamily.sans],
+            },
+            maxWidth: {
+                '8xl': '96rem',
+                '9xl': '120rem',
             },
         },
     },

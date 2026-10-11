@@ -79,7 +79,7 @@ class SendEscalationNotification implements ShouldQueue
                 Log::error('Unable to send escalation email.', [
                     'escalation_id' => $this->escalation->id,
                     'channel' => 'email',
-                    'exception' => $exception,
+                    'exception_class' => $exception::class,
                 ]);
 
                 throw $exception;

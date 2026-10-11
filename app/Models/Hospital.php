@@ -44,6 +44,12 @@ class Hospital extends Model
         'business_hours',
         'notification_preferences',
         'no_show_grace_minutes',
+        'patient_cancellation_enabled',
+        'patient_rescheduling_enabled',
+        'cancellation_cutoff_hours',
+        'rescheduling_cutoff_hours',
+        'late_cancellation_fee',
+        'deposits_refundable',
         'hours_emergency',
         'hours_outpatient',
         'default_language',
@@ -73,6 +79,12 @@ class Hospital extends Model
             'settings' => 'array',
             'trial_ends_at' => 'datetime',
             'is_active' => 'boolean',
+            'patient_cancellation_enabled' => 'boolean',
+            'patient_rescheduling_enabled' => 'boolean',
+            'cancellation_cutoff_hours' => 'integer',
+            'rescheduling_cutoff_hours' => 'integer',
+            'late_cancellation_fee' => 'decimal:2',
+            'deposits_refundable' => 'boolean',
         ];
     }
 
@@ -205,6 +217,16 @@ class Hospital extends Model
     {
         $settings = $this->settings ?? [];
 
-        return (bool) ($settings['auto_confirm_paid_appointments'] ?? false);
+        if (array_key_exists('auto_confirm_paid_appointments', $settings)) {
+            return (bool) $settings['auto_confirm_paid_appointments'];
+        }
+
+        if ($this->hasAttribute('auto_confirm_paid_appointments')) {
+            $columnValue = $this->getAttribute('auto_confirm_paid_appointments');
+
+            return $columnValue !== null ? (bool) $columnValue : false;
+        }
+
+        return false;
     }
 }

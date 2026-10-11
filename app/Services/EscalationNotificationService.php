@@ -61,7 +61,7 @@ class EscalationNotificationService
                     Log::error('Unable to send escalation SMS.', [
                         'escalation_id' => $escalation->id,
                         'channel' => 'sms',
-                        'exception' => $exception,
+                        'exception_class' => $exception::class,
                     ]);
                 }
             } else {
@@ -95,7 +95,7 @@ class EscalationNotificationService
                     Log::error('Unable to send escalation WhatsApp message.', [
                         'escalation_id' => $escalation->id,
                         'channel' => 'whatsapp',
-                        'exception' => $exception,
+                        'exception_class' => $exception::class,
                     ]);
                 }
             } else {
@@ -132,7 +132,7 @@ class EscalationNotificationService
                         'escalation_id' => $escalation->id,
                         'channel' => 'in_app',
                         'worker_id' => $worker->id,
-                        'exception' => $exception,
+                        'exception_class' => $exception::class,
                     ]);
                 }
             }
@@ -183,14 +183,14 @@ class EscalationNotificationService
                     Log::error('Unable to dispatch escalation email.', [
                         'escalation_id' => $escalation->id,
                         'channel' => 'email',
-                        'exception' => $exception,
+                        'exception_class' => $exception::class,
                     ]);
                 }
             }
         } catch (Throwable $exception) {
             Log::error('Unable to prepare escalation notifications.', [
                 'escalation_id' => $escalation->id,
-                'exception' => $exception,
+                'exception_class' => $exception::class,
             ]);
         }
     }

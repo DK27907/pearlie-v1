@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+<div class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] space-y-6 px-4 py-8 sm:px-6 lg:px-8">
     <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
             <h1 class="text-2xl font-bold tracking-tight text-slate-900">Doctor management</h1>
@@ -58,7 +58,7 @@
                                             @csrf
                                             <button type="submit" class="font-semibold text-slate-700 hover:underline">Resend invite</button>
                                         </form>
-                                        <form method="POST" action="{{ route('admin.doctors.destroy', $doctor) }}" onsubmit="return confirm('Deactivate this doctor account?')">
+                                        <form method="POST" action="{{ route('admin.doctors.destroy', $doctor) }}" data-confirm="Deactivate this doctor account?">
                                             @csrf
                                             @method('DELETE')
                                             <button type="submit" class="font-semibold text-rose-700 hover:underline">Deactivate</button>

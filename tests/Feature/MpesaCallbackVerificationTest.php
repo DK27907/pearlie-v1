@@ -174,7 +174,8 @@ class MpesaCallbackVerificationTest extends TestCase
             ->once()
             ->with('Received an M-Pesa callback.', Mockery::on(
                 fn (array $context): bool => $context['checkout_request_id'] === 'checkout-not-found'
-                    && isset($context['payload']['Body']['stkCallback']),
+                    && $context['result_code'] === 0
+                    && ! array_key_exists('payload', $context),
             ));
         Log::shouldReceive('info')
             ->once()
@@ -322,7 +323,8 @@ class MpesaCallbackVerificationTest extends TestCase
             ->once()
             ->with('Received an M-Pesa callback.', Mockery::on(
                 fn (array $context): bool => $context['checkout_request_id'] === 'checkout-without-receipt'
-                    && isset($context['payload']['Body']['stkCallback']),
+                    && $context['result_code'] === 0
+                    && ! array_key_exists('payload', $context),
             ));
         Log::shouldReceive('info')
             ->once()

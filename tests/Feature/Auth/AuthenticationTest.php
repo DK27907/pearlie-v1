@@ -21,6 +21,8 @@ class AuthenticationTest extends TestCase
     public function test_users_can_authenticate_using_the_login_screen(): void
     {
         $user = User::factory()->create();
+        $this->get('/login');
+        $sessionIdBeforeLogin = session()->getId();
 
         $response = $this->post('/login', [
             'email' => $user->email,
@@ -28,6 +30,7 @@ class AuthenticationTest extends TestCase
         ]);
 
         $this->assertAuthenticated();
+        $this->assertNotSame($sessionIdBeforeLogin, session()->getId());
         $response->assertRedirect(route('dashboard', absolute: false));
     }
 
@@ -140,7 +143,7 @@ class AuthenticationTest extends TestCase
         $this->post('/login', [
             'email' => $user->email,
             'password' => 'password',
-        ])->assertSessionHasErrors(['email' => 'Account deactivated. Contact admin.']);
+        ])->assertSessionHasErrors(['email' => trans('auth.failed')]);
 
         $this->assertGuest();
     }
@@ -163,7 +166,7 @@ class AuthenticationTest extends TestCase
         $this->post('/login', [
             'email' => $admin->email,
             'password' => 'password',
-        ])->assertSessionHasErrors(['email' => 'Hospital suspended. Contact admin.']);
+        ])->assertSessionHasErrors(['email' => trans('auth.failed')]);
 
         $this->assertGuest();
     }
@@ -175,7 +178,37 @@ class AuthenticationTest extends TestCase
         $this->post('/login', [
             'email' => $user->email,
             'password' => 'wrong-password',
-        ]);
+        ])->assertSessionHasErrors(['email' => trans('auth.failed')]);
+
+        $this->assertGuest();
+    }
+
+    public function test_login_is_locked_after_five_failed_attempts(): void
+    {
+        $credentials = [
+            'email' => 'missing@example.test',
+            'password' => 'wrong-password',
+        ];
+
+        for ($attempt = 1; $attempt <= 5; $attempt++) {
+            $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.65'])
+                ->post('/login', $credentials)
+                ->assertSessionHasErrors(['email' => trans('auth.failed')]);
+        }
+
+        $response = $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.65'])
+            ->post('/login', $credentials)
+            ->assertSessionHasErrors(['email']);
+
+        $this->assertStringStartsWith(
+            'Too many login attempts.',
+            $response->getSession()->get('errors')->getBag('default')->first('email'),
+        );
+
+        $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.65'])
+            ->post('/login', $credentials)
+            ->assertTooManyRequests()
+            ->assertHeader('Retry-After');
 
         $this->assertGuest();
     }
@@ -190,13 +223,12 @@ class AuthenticationTest extends TestCase
         $response->assertRedirect('/');
     }
 
-    public function test_users_can_logout_via_get_route(): void
+    public function test_get_logout_does_not_end_an_authenticated_session(): void
     {
         $user = User::factory()->create();
 
-        $response = $this->actingAs($user)->get('/logout');
+        $this->actingAs($user)->get('/logout')->assertMethodNotAllowed();
 
-        $this->assertGuest();
-        $response->assertRedirect('/');
+        $this->assertAuthenticatedAs($user);
     }
 }

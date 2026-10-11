@@ -21,6 +21,7 @@ class PermissionController extends Controller
     {
         $request->validate(['name' => 'required|string|unique:permissions,name']);
         Permission::create(['name' => $request->input('name')]);
+
         return redirect()->back()->with('status', 'Permission created.');
     }
 
@@ -28,6 +29,7 @@ class PermissionController extends Controller
     {
         $perm = Permission::where('name', $name)->firstOrFail();
         $perm->delete();
+
         return redirect()->back()->with('status', 'Permission deleted.');
     }
 

@@ -12,7 +12,9 @@ class ResolveHospital
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if ($request->routeIs('pearlie.home')) {
+        $isHomeRoute = $request->routeIs('home');
+
+        if ($isHomeRoute) {
             app()->instance('currentHospital', null);
 
             return $next($request);
@@ -43,21 +45,28 @@ class ResolveHospital
             abort_unless($hospital, 404, 'Hospital not found.');
         }
 
+        if (! $hospital && $user && ! $user->isSuperAdmin() && $user->hospital_id) {
+            $hospital = Hospital::query()->find($user->hospital_id);
+        }
+
         if ($user && ! $user->isSuperAdmin()) {
             if (! $user->hospital_id) {
                 abort(403, 'Your account is not assigned to a hospital.');
             }
 
             if ($hospital && (int) $hospital->id !== (int) $user->hospital_id) {
-                abort(403, 'You cannot access another hospital.');
+                abort(404);
             }
 
             $hospital ??= Hospital::query()->find($user->hospital_id);
         }
 
-        $hospital ??= Hospital::query()
-            ->where('slug', config('pearlie.default_hospital_slug', 'pearl'))
-            ->first();
+        if (! $hospital && ! $isHomeRoute) {
+            $hospital = Hospital::query()
+                ->where('slug', config('pearlie.default_hospital_slug', 'pearl'))
+                ->first();
+        }
+
         abort_unless($hospital, 404, 'No hospital is configured.');
         if (! $this->isAuthenticationRoute($request) && ! $this->isPaymentCallback($request)) {
             abort_unless(

@@ -32,14 +32,6 @@ return [
         'key' => env('RESEND_API_KEY'),
     ],
 
-    'whatsapp' => [
-        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
-        'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
-        'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
-        'app_secret' => env('WHATSAPP_APP_SECRET'),
-        'api_version' => env('WHATSAPP_VERSION', env('WHATSAPP_API_VERSION', 'v18.0')),
-    ],
-
     /*
     |--------------------------------------------------------------------------
     | Third Party Services

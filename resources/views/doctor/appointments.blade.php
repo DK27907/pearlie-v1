@@ -9,7 +9,7 @@
 @endsection
 
 @section('content')
-    <div class="mx-auto max-w-7xl space-y-5 px-4 py-8 sm:px-6 lg:px-8">
+    <div class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] space-y-5 px-4 py-8 sm:px-6 lg:px-8">
         @if (session('status'))
             <div role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">{{ session('status') }}</div>
         @endif
@@ -28,6 +28,9 @@
                     @endforeach
                 </select>
             </label>
+            @if (request('patient'))
+                <input type="hidden" name="patient" value="{{ request('patient') }}">
+            @endif
             <button type="submit" class="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-800">Apply filters</button>
             <a href="{{ route('doctor.appointments') }}" class="rounded-lg border border-slate-200 px-4 py-2.5 text-center text-sm font-semibold text-slate-600 hover:bg-slate-50">Clear</a>
         </form>

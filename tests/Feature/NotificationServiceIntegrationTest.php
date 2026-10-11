@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Hospital;
 use App\Services\NotificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -13,6 +14,8 @@ class NotificationServiceIntegrationTest extends TestCase
 
     public function test_send_whatsapp_when_credentials_present()
     {
+        app()->instance('currentHospital', Hospital::factory()->create());
+
         config([
             'whatsapp.phone_number_id' => '12345',
             'whatsapp.access_token' => 'test-access-token',
@@ -33,6 +36,8 @@ class NotificationServiceIntegrationTest extends TestCase
 
     public function test_africastalking_then_twilio_fallback_behavior()
     {
+        app()->instance('currentHospital', Hospital::factory()->create());
+
         config([
             'services.sms_provider' => 'africastalking',
             'services.africastalking.username' => 'testuser',

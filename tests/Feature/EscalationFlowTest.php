@@ -7,11 +7,17 @@ use App\Models\Conversation;
 use App\Models\Escalation;
 use App\Models\Hospital;
 use App\Models\User;
+use App\Notifications\EscalationPatientMessage;
+use App\Services\EscalationNotificationService;
 use App\Services\EscalationService;
+use App\Services\NotificationService;
+use App\Services\PearlieService;
 use App\Services\PearlieServiceV2;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as ClientRequest;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
@@ -48,14 +54,22 @@ class EscalationFlowTest extends TestCase
         );
 
         $this->assertSame(0.45, $result['confidence']);
-        $this->assertSame(true, $result['escalated']);
-        $this->assertSame(
-            "I'm not 100% sure about that. I'm connecting you to a health worker now. You'll get a response shortly. You can keep asking me other questions while you wait.",
-            $result['response'],
+        $this->assertFalse($result['escalated']);
+        $this->assertStringContainsString('please share your phone number', $result['response']);
+        $this->assertDatabaseMissing('escalations', [
+            'session_id' => 'low-confidence-session',
+        ]);
+
+        $phoneResponse = app(PearlieServiceV2::class)->processMessage(
+            '0712345678',
+            'low-confidence-session',
         );
+
+        $this->assertTrue($phoneResponse['escalated']);
         $this->assertDatabaseHas('escalations', [
             'session_id' => 'low-confidence-session',
             'user_message' => 'Can you explain this symptom?',
+            'user_phone' => '0712345678',
             'status' => Escalation::STATUS_PENDING,
         ]);
     }
@@ -67,7 +81,7 @@ class EscalationFlowTest extends TestCase
         $worker = User::factory()->create(['is_doctor' => true]);
 
         $result = app(PearlieServiceV2::class)->processMessage(
-            'Please connect me to a human',
+            'Please connect me to a human at 0712345678',
             'human-keyword-session',
         );
 
@@ -97,15 +111,107 @@ class EscalationFlowTest extends TestCase
         $this->disableNotificationProviders();
 
         $result = app(PearlieServiceV2::class)->processMessage(
-            'Dharura, I have chest pain',
+            'Dharura, I have chest pain. My number is 0712345678',
             'urgent-session',
         );
 
         $this->assertSame('human_escalation', $result['source']);
         $this->assertSame(true, $result['escalated']);
+        $this->assertStringContainsString(
+            (string) hospital()?->emergency_phone,
+            $result['response'],
+        );
         $this->assertDatabaseHas('escalations', [
             'session_id' => 'urgent-session',
-            'user_message' => 'Dharura, I have chest pain',
+            'user_message' => 'Dharura, I have chest pain. My number is 0712345678',
+            'user_phone' => '0712345678',
+        ]);
+    }
+
+    public function test_emergency_handoff_collects_a_phone_and_admin_can_reply_to_it(): void
+    {
+        Mail::fake();
+        $this->disableNotificationProviders();
+        $worker = User::factory()->create(['is_doctor' => true]);
+
+        $emergency = app(PearlieServiceV2::class)->processMessage(
+            'I have chest pain',
+            'captured-phone-session',
+        );
+
+        $this->assertFalse($emergency['escalated']);
+        $this->assertStringContainsString('0707799114', $emergency['response']);
+        $this->assertStringContainsString('please share your phone number', $emergency['response']);
+        $this->assertDatabaseMissing('escalations', [
+            'session_id' => 'captured-phone-session',
+        ]);
+
+        $phoneResponse = app(PearlieServiceV2::class)->processMessage(
+            '0712345678',
+            'captured-phone-session',
+        );
+        $escalation = Escalation::query()
+            ->where('session_id', 'captured-phone-session')
+            ->firstOrFail();
+        $escalation->forceFill([
+            'status' => Escalation::STATUS_IN_PROGRESS,
+            'assigned_worker_id' => $worker->id,
+        ])->save();
+        $admin = User::factory()->create([
+            'is_admin' => true,
+            'role' => 'hospital_admin',
+        ]);
+        config([
+            'whatsapp.phone_number_id' => 'business-phone-id',
+            'whatsapp.access_token' => 'test-token',
+            'whatsapp.api_version' => 'v20.0',
+        ]);
+        Http::fake([
+            'graph.facebook.com/v20.0/business-phone-id/messages' => Http::response(['messages' => [['id' => 'reply-message']]]),
+        ]);
+        Http::preventStrayRequests();
+
+        $this->actingAs($admin)
+            ->get(route('admin.escalations.show', $escalation->id))
+            ->assertOk()
+            ->assertSee('0712345678');
+        $this->actingAs($admin)
+            ->post(route('admin.escalations.reply', $escalation->id), [
+                'channel' => 'whatsapp',
+                'message' => 'A health worker is replying.',
+            ])
+            ->assertRedirect(route('admin.escalations.show', $escalation->id))
+            ->assertSessionHas('status', 'Reply sent to the patient.');
+
+        $this->assertTrue($phoneResponse['escalated']);
+        $this->assertDatabaseHas('escalations', [
+            'id' => $escalation->id,
+            'user_phone' => '0712345678',
+        ]);
+        Http::assertSent(fn (ClientRequest $request): bool => str_contains($request->url(), 'graph.facebook.com')
+            && $request['to'] === '254712345678'
+            && str_contains($request['text']['body'], 'A health worker is replying.'));
+    }
+
+    public function test_phone_collected_for_an_escalation_is_preserved_in_a_pending_booking(): void
+    {
+        Mail::fake();
+        $this->disableNotificationProviders();
+        $assistant = app(PearlieService::class);
+        $sessionId = 'booking-emergency-phone-session';
+
+        $assistant->processMessage('I want to book with Dr. Kamau', $sessionId);
+        $emergency = $assistant->processMessage('I have chest pain', $sessionId);
+        $phoneResponse = $assistant->processMessage('0712345678', $sessionId);
+        $bookingResponse = $assistant->processMessage('Jane Doe', $sessionId);
+
+        $this->assertStringContainsString('please share your phone number', $emergency['response']);
+        $this->assertTrue($phoneResponse['escalated']);
+        $this->assertStringContainsString('Which service do you need?', $bookingResponse['response']);
+        $this->assertDatabaseHas('escalations', [
+            'session_id' => $sessionId,
+            'user_message' => 'I have chest pain',
+            'user_phone' => '0712345678',
         ]);
     }
 
@@ -119,6 +225,15 @@ class EscalationFlowTest extends TestCase
             'ai_response' => 'Certainly.',
             'confidence_score' => 0.9,
             'channel' => 'web',
+        ]);
+        AppointmentRequest::query()->create([
+            'session_id' => 'repeated-message-session',
+            'name' => 'Amina Wanjiku',
+            'phone' => '0712345678',
+            'preferred_date' => today()->addDay(),
+            'reason' => 'Consultation',
+            'raw_message' => 'Appointment request',
+            'status' => AppointmentRequest::STATUS_PENDING,
         ]);
 
         $result = app(PearlieServiceV2::class)->processMessage(
@@ -136,12 +251,13 @@ class EscalationFlowTest extends TestCase
     public function test_sms_is_sent_to_health_worker_with_escalation_link(): void
     {
         Mail::fake();
+        app('currentHospital')->update(['phone' => '0700000000']);
         config([
             'services.africastalking.username' => 'test-user',
             'services.africastalking.api_key' => 'test-key',
             'services.africastalking.sender_id' => 'PearlHosp',
-            'services.whatsapp.phone_number_id' => null,
-            'services.whatsapp.access_token' => null,
+            'whatsapp.phone_number_id' => null,
+            'whatsapp.access_token' => null,
             'pearlie.escalation.notify_phone' => '0700000000',
             'pearlie.escalation.notify_whatsapp' => null,
         ]);
@@ -164,12 +280,13 @@ class EscalationFlowTest extends TestCase
     public function test_whatsapp_is_sent_to_health_worker_with_escalation_link(): void
     {
         Mail::fake();
+        app('currentHospital')->update(['whatsapp_number' => '254700000000']);
         config([
             'services.africastalking.username' => null,
             'services.africastalking.api_key' => null,
-            'services.whatsapp.phone_number_id' => 'business-phone-id',
-            'services.whatsapp.access_token' => 'test-token',
-            'services.whatsapp.api_version' => 'v20.0',
+            'whatsapp.phone_number_id' => 'business-phone-id',
+            'whatsapp.access_token' => 'test-token',
+            'whatsapp.api_version' => 'v20.0',
             'pearlie.escalation.notify_phone' => null,
             'pearlie.escalation.notify_whatsapp' => '254700000000',
         ]);
@@ -189,14 +306,46 @@ class EscalationFlowTest extends TestCase
             && str_contains($request['text']['body'], route('admin.escalations.show', $escalation->id)));
     }
 
+    public function test_escalation_logs_attempts_for_each_notification_channel(): void
+    {
+        Bus::fake();
+        Log::spy();
+        config([
+            'pearlie.escalation.notify_phone' => '0700000000',
+            'pearlie.escalation.notify_whatsapp' => '254700000000',
+            'pearlie.escalation_email' => 'admin@example.test',
+        ]);
+        $worker = User::factory()->create(['is_doctor' => true]);
+        $notifications = \Mockery::mock(NotificationService::class);
+        $notifications->shouldReceive('sendSms')->once()->andReturn(true);
+        $notifications->shouldReceive('sendWhatsApp')->once()->andReturn(true);
+        $this->app->instance(NotificationService::class, $notifications);
+        $escalation = Escalation::query()->create([
+            'session_id' => 'logged-escalation-session',
+            'user_message' => 'Please connect me to a health worker',
+        ]);
+
+        app(EscalationNotificationService::class)->notifyHealthWorkers($escalation);
+
+        Log::shouldHaveReceived('info')->withArgs(fn (string $message, array $context): bool => $context['escalation_id'] === $escalation->id
+            && $context['channel'] === 'sms')->atLeast()->once();
+        Log::shouldHaveReceived('info')->withArgs(fn (string $message, array $context): bool => $context['escalation_id'] === $escalation->id
+            && $context['channel'] === 'whatsapp')->atLeast()->once();
+        Log::shouldHaveReceived('info')->withArgs(fn (string $message, array $context): bool => $context['escalation_id'] === $escalation->id
+            && $context['channel'] === 'in_app'
+            && $context['worker_id'] === $worker->id)->once();
+        Log::shouldHaveReceived('info')->withArgs(fn (string $message, array $context): bool => $context['escalation_id'] === $escalation->id
+            && $context['channel'] === 'email')->atLeast()->once();
+    }
+
     public function test_health_worker_can_claim_escalation_and_patient_is_notified(): void
     {
         Mail::fake();
         $this->disableNotificationProviders();
         config([
-            'services.whatsapp.phone_number_id' => 'business-phone-id',
-            'services.whatsapp.access_token' => 'test-token',
-            'services.whatsapp.api_version' => 'v20.0',
+            'whatsapp.phone_number_id' => 'business-phone-id',
+            'whatsapp.access_token' => 'test-token',
+            'whatsapp.api_version' => 'v20.0',
         ]);
         Http::fake([
             'graph.facebook.com/v20.0/business-phone-id/messages' => Http::response(['messages' => [['id' => 'patient-message']]]),
@@ -263,9 +412,9 @@ class EscalationFlowTest extends TestCase
     {
         Mail::fake();
         config([
-            'services.whatsapp.phone_number_id' => 'business-phone-id',
-            'services.whatsapp.access_token' => 'test-token',
-            'services.whatsapp.api_version' => 'v20.0',
+            'whatsapp.phone_number_id' => 'business-phone-id',
+            'whatsapp.access_token' => 'test-token',
+            'whatsapp.api_version' => 'v20.0',
             'services.africastalking.username' => null,
             'services.africastalking.api_key' => null,
         ]);
@@ -355,7 +504,7 @@ class EscalationFlowTest extends TestCase
         ]);
         $this->assertDatabaseHas('notifications', [
             'notifiable_id' => $worker->id,
-            'type' => \App\Notifications\EscalationPatientMessage::class,
+            'type' => EscalationPatientMessage::class,
         ]);
         $this->assertModelExists($escalation);
     }
@@ -458,8 +607,8 @@ class EscalationFlowTest extends TestCase
             'services.twilio.api_key' => null,
             'services.twilio.api_secret' => null,
             'services.twilio.from_number' => null,
-            'services.whatsapp.phone_number_id' => null,
-            'services.whatsapp.access_token' => null,
+            'whatsapp.phone_number_id' => null,
+            'whatsapp.access_token' => null,
             'pearlie.escalation.notify_phone' => null,
             'pearlie.escalation.notify_whatsapp' => null,
             'pearlie.escalation_email' => null,

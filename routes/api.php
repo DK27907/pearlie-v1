@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\MpesaCallbackController;
-use App\Http\Controllers\PaymentStatusController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -31,7 +30,3 @@ Route::post('/mpesa/callback/{hospitalSlug}', [MpesaCallbackController::class, '
 Route::get('/mpesa/status/{checkoutRequestId}', [MpesaCallbackController::class, 'checkStatus'])
     ->name('mpesa.status')
     ->middleware(['throttle:10,1', 'feature:mpesa']);
-Route::get('/payments/{paymentId}/status', [PaymentStatusController::class, 'show'])
-    ->whereNumber('paymentId')
-    ->name('payments.status')
-    ->middleware(['throttle:30,1', 'feature:mpesa']);

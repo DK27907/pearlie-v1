@@ -1,14 +1,14 @@
 @extends('layouts.app')
 
 @section('content')
-    <div class="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+    <div class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] space-y-8 px-4 py-8 sm:px-6 lg:px-8">
         <header>
             <p class="text-sm font-semibold uppercase tracking-widest text-[#1a5276]">{{ pearlie_config('hospital.name') }}</p>
             <h1 class="mt-2 text-3xl font-bold tracking-tight text-[#0a2f44]">Admin dashboard</h1>
             <p class="mt-2 text-sm text-slate-600">A current overview of patient conversations, appointments, and follow-up.</p>
         </header>
 
-        <section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-label="Hospital statistics">
+        <section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4 5xl:grid-cols-6" aria-label="Hospital statistics">
             @foreach ([
                 ['Total conversations', $total_conversations, 'text-[#1a5276]', '💬'],
                 ['Pending escalations', $pending_escalations, 'text-rose-700', '⚠'],

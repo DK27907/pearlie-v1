@@ -4,12 +4,12 @@ namespace App\Http\Controllers\SuperAdmin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Hospital;
-use App\Services\HospitalManagementService;
 use App\Services\HospitalInvitationService;
+use App\Services\HospitalManagementService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -34,7 +34,7 @@ class HospitalController extends Controller
 
     public function create(): View
     {
-        return view('superadmin.hospitals.form', ['hospital' => new Hospital()]);
+        return view('superadmin.hospitals.form', ['hospital' => new Hospital]);
     }
 
     public function store(Request $request, HospitalManagementService $hospitals): RedirectResponse

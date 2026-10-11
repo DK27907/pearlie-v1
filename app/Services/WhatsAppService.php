@@ -26,7 +26,7 @@ class WhatsAppService
             return ['success' => true, 'message' => 'WhatsApp message accepted for delivery.'];
         } catch (Throwable $exception) {
             Log::error('Unable to send a WhatsApp message.', [
-                'exception' => $exception,
+                'exception_class' => $exception::class,
             ]);
 
             throw $exception;
@@ -64,7 +64,7 @@ class WhatsAppService
         } catch (Throwable $exception) {
             Log::error('Unable to send a WhatsApp template.', [
                 'template' => $templateName,
-                'exception' => $exception,
+                'exception_class' => $exception::class,
             ]);
 
             throw $exception;
@@ -81,7 +81,7 @@ class WhatsAppService
             ])->throw();
         } catch (Throwable $exception) {
             Log::error('Unable to mark a WhatsApp message as read.', [
-                'exception' => $exception,
+                'exception_class' => $exception::class,
             ]);
 
             throw $exception;
@@ -129,7 +129,7 @@ class WhatsAppService
         } catch (Throwable $exception) {
             Log::error('Unable to send the appointment WhatsApp confirmation.', [
                 'appointment_id' => $appointment->id,
-                'exception' => $exception,
+                'exception_class' => $exception::class,
             ]);
 
             throw $exception;

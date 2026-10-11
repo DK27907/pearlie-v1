@@ -7,6 +7,7 @@ use App\Models\MpesaPayment;
 use App\Services\MpesaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -17,11 +18,30 @@ class MpesaCallbackController extends Controller
     public function handleConfirmation(Request $request): JsonResponse
     {
         $checkoutRequestId = null;
+        $payload = $request->all();
+        $idempotencyKey = $this->callbackIdempotencyKey($payload);
 
         try {
-            $checkoutRequestId = data_get($request->all(), 'Body.stkCallback.CheckoutRequestID');
+            $checkoutRequestId = data_get($payload, 'Body.stkCallback.CheckoutRequestID');
             $checkoutRequestId = is_string($checkoutRequestId) ? $checkoutRequestId : null;
-            $this->mpesa->handleCallback($request->all());
+
+            if ($idempotencyKey !== null) {
+                return Cache::lock($idempotencyKey.':lock', 120)->block(10, function () use ($idempotencyKey, $payload): JsonResponse {
+                    if (Cache::has($idempotencyKey)) {
+                        return response()->json(['status' => 'already_processed']);
+                    }
+
+                    $this->mpesa->handleCallback($payload);
+                    Cache::put($idempotencyKey, true, now()->addHours(24));
+
+                    return response()->json([
+                        'ResultCode' => 0,
+                        'ResultDesc' => 'Accepted',
+                    ]);
+                });
+            }
+
+            $this->mpesa->handleCallback($payload);
 
             return response()->json([
                 'ResultCode' => 0,
@@ -66,5 +86,31 @@ class MpesaCallbackController extends Controller
             'success' => true,
             'data' => $this->mpesa->verifyPayment($checkoutRequestId),
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function callbackIdempotencyKey(array $payload): ?string
+    {
+        $callback = data_get($payload, 'Body.stkCallback');
+        $checkoutRequestId = data_get($callback, 'CheckoutRequestID');
+        $resultCode = data_get($callback, 'ResultCode');
+        $items = data_get($callback, 'CallbackMetadata.Item', []);
+        $receipt = collect($items)->firstWhere('Name', 'MpesaReceiptNumber')['Value'] ?? null;
+
+        if (! is_string($checkoutRequestId) || ! is_numeric($resultCode)
+            || ($receipt !== null && ! is_string($receipt))
+        ) {
+            return null;
+        }
+
+        $hash = hash('sha256', json_encode([
+            $checkoutRequestId,
+            $receipt,
+            (string) $resultCode,
+        ], JSON_THROW_ON_ERROR));
+
+        return 'mpesa:callback:idempotency:'.$hash;
     }
 }

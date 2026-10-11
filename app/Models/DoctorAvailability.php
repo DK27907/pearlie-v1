@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToHospital;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -9,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class DoctorAvailability extends Model
 {
-    use \App\Traits\BelongsToHospital, HasFactory;
+    use BelongsToHospital, HasFactory;
 
     protected $table = 'doctor_availabilities';
 

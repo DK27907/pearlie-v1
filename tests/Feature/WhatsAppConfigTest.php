@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Hospital;
 use App\Services\NotificationService;
 use App\Services\WhatsAppService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -14,6 +15,8 @@ class WhatsAppConfigTest extends TestCase
 
     public function test_whatsapp_message_uses_the_unified_whatsapp_config_token(): void
     {
+        app()->instance('currentHospital', Hospital::factory()->create());
+
         config([
             'whatsapp.phone_number_id' => 'phone-id',
             'whatsapp.access_token' => 'test-token',

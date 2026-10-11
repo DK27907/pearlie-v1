@@ -84,6 +84,36 @@
                             <input type="checkbox" name="auto_confirm_paid_appointments" value="1" @checked(old('auto_confirm_paid_appointments', $autoConfirm)) class="mt-0.5 rounded border-slate-300 text-sky-800 focus:ring-sky-700">
                             <span>Automatically confirm appointments after successful payment</span>
                         </label>
+                        <fieldset class="space-y-4 rounded-xl border border-slate-200 p-4">
+                            <legend class="px-2 text-sm font-bold text-slate-900">Patient cancellation and rescheduling</legend>
+                            <div class="grid gap-5 sm:grid-cols-2">
+                                <label class="block text-sm font-semibold text-slate-700">
+                                    Cancellation cutoff (hours)
+                                    <input class="{{ $inputClass }}" type="number" name="cancellation_cutoff_hours" min="0" max="8760" required value="{{ old('cancellation_cutoff_hours', $cancellationCutoffHours) }}">
+                                </label>
+                                <label class="block text-sm font-semibold text-slate-700">
+                                    Rescheduling cutoff (hours)
+                                    <input class="{{ $inputClass }}" type="number" name="rescheduling_cutoff_hours" min="0" max="8760" required value="{{ old('rescheduling_cutoff_hours', $reschedulingCutoffHours) }}">
+                                </label>
+                                <label class="block text-sm font-semibold text-slate-700">
+                                    Late cancellation fee (KSh)
+                                    <input class="{{ $inputClass }}" type="number" name="late_cancellation_fee" min="0" max="1000000" step="0.01" required value="{{ old('late_cancellation_fee', $lateCancellationFee) }}">
+                                </label>
+                            </div>
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                @foreach ([
+                                    'patient_cancellation_enabled' => ['Patient cancellation enabled', $patientCancellationEnabled],
+                                    'patient_rescheduling_enabled' => ['Patient rescheduling enabled', $patientReschedulingEnabled],
+                                    'deposits_refundable' => ['Deposits are refundable outside the cancellation cutoff', $depositsRefundable],
+                                ] as $field => [$label, $value])
+                                    <label class="flex items-start gap-3 text-sm font-medium text-slate-700">
+                                        <input type="hidden" name="{{ $field }}" value="0">
+                                        <input type="checkbox" name="{{ $field }}" value="1" @checked(old($field, $value)) class="mt-0.5 rounded border-slate-300 text-sky-800 focus:ring-sky-700">
+                                        <span>{{ $label }}</span>
+                                    </label>
+                                @endforeach
+                            </div>
+                        </fieldset>
                         <fieldset>
                             <legend class="text-sm font-bold text-slate-900">Business hours</legend>
                             <div class="mt-3 space-y-3">

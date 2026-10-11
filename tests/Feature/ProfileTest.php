@@ -61,6 +61,79 @@ class ProfileTest extends TestCase
         $this->assertNotNull($user->refresh()->email_verified_at);
     }
 
+    public function test_doctor_can_update_professional_profile_information(): void
+    {
+        $doctor = User::factory()->create([
+            'is_doctor' => true,
+            'role' => 'doctor',
+            'specialization' => 'General Medicine',
+        ]);
+
+        $this->actingAs($doctor)->patch('/profile', [
+            'name' => $doctor->name,
+            'email' => $doctor->email,
+            'specialization' => 'Orthodontics',
+            'bio' => 'Provides family-focused orthodontic care.',
+            'consultation_fee' => '3500.00',
+            'licence_number' => 'KMPDC-B98765',
+        ])->assertSessionHasNoErrors()
+            ->assertRedirect('/profile');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $doctor->id,
+            'specialization' => 'Orthodontics',
+            'bio' => 'Provides family-focused orthodontic care.',
+            'consultation_fee' => '3500.00',
+            'licence_number' => 'KMPDC-B98765',
+        ]);
+    }
+
+    public function test_non_doctor_cannot_update_doctor_professional_profile_fields(): void
+    {
+        $patient = User::factory()->create([
+            'specialization' => 'Patient value',
+            'bio' => 'Patient bio',
+            'consultation_fee' => '0.00',
+            'licence_number' => 'Patient licence',
+        ]);
+
+        $this->actingAs($patient)->patch('/profile', [
+            'name' => $patient->name,
+            'email' => $patient->email,
+            'specialization' => 'Injected specialty',
+            'bio' => 'Injected bio',
+            'consultation_fee' => '999999.99',
+            'licence_number' => 'Injected licence',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('users', [
+            'id' => $patient->id,
+            'specialization' => 'Patient value',
+            'bio' => 'Patient bio',
+            'consultation_fee' => '0.00',
+            'licence_number' => 'Patient licence',
+        ]);
+    }
+
+    public function test_doctor_cannot_save_a_negative_consultation_fee(): void
+    {
+        $doctor = User::factory()->create([
+            'is_doctor' => true,
+            'role' => 'doctor',
+            'specialization' => 'General Medicine',
+            'consultation_fee' => '1500.00',
+        ]);
+
+        $this->actingAs($doctor)->from('/profile')->patch('/profile', [
+            'name' => $doctor->name,
+            'email' => $doctor->email,
+            'specialization' => 'General Medicine',
+            'consultation_fee' => '-1',
+        ])->assertSessionHasErrors('consultation_fee');
+
+        $this->assertSame('1500.00', $doctor->refresh()->consultation_fee);
+    }
+
     public function test_user_can_delete_their_account(): void
     {
         $user = User::factory()->create();

@@ -35,6 +35,7 @@ class DashboardController extends Controller
         $filters = $request->validate([
             'date' => ['nullable', 'date_format:Y-m-d'],
             'status' => ['nullable', 'string', 'in:'.implode(',', AppointmentRequest::statuses())],
+            'patient' => ['nullable', 'integer', 'min:1'],
         ]);
 
         return view('doctor.appointments', [

@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('superadmin.layouts.app')
 
 @section('content')
     <div class="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
@@ -15,7 +15,7 @@
         @if ($hospital->subscription_status === 'suspended' || ! $hospital->is_active)
             <form method="POST" action="{{ route('superadmin.hospitals.activate', $hospital) }}">@csrf<button class="text-sm font-semibold text-emerald-700 hover:underline">Restore hospital access</button></form>
         @else
-            <form method="POST" action="{{ route('superadmin.hospitals.suspend', $hospital) }}" onsubmit="return confirm('Suspend this hospital account? Data will be retained.')">@csrf<button class="text-sm font-semibold text-rose-700 hover:underline">Suspend hospital access</button></form>
+            <form method="POST" action="{{ route('superadmin.hospitals.suspend', $hospital) }}" data-confirm="Suspend this hospital account? Data will be retained.">@csrf<button class="text-sm font-semibold text-rose-700 hover:underline">Suspend hospital access</button></form>
         @endif
     </div>
 @endsection

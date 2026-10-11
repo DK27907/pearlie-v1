@@ -9,7 +9,7 @@
         @unless ($adminSettings)
             <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="Onboarding checklist">
                 @foreach (['profile' => 'Hospital profile', 'branding' => 'Branding', 'doctors' => 'Add doctors', 'knowledge' => 'Knowledge base', 'payments' => 'M-Pesa'] as $key => $label)
-                    <article class="rounded-xl border {{ $checklist[$key] ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white' }} p-4"><p class="text-xl">{{ $checklist[$key] ? '✓' : '○' }}</p><p class="mt-2 text-sm font-semibold">{{ $label }}</p><p class="mt-1 text-xs text-slate-500">{{ $checklist[$key] ? 'Complete' : 'Needs attention' }}</p></article>
+                    <article data-checklist="{{ $key }}" class="rounded-xl border {{ $checklist[$key] ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white' }} p-4"><p class="text-xl">{{ $checklist[$key] ? '✓' : '○' }}</p><p class="mt-2 text-sm font-semibold">{{ $label }}</p><p class="mt-1 text-xs text-slate-500">{{ $checklist[$key] ? 'Complete' : 'Needs attention' }}</p></article>
                 @endforeach
             </section>
         @endunless
@@ -28,13 +28,6 @@
                 <label class="space-y-1 text-sm font-semibold text-slate-700 sm:col-span-2">Hospital logo (PNG, JPG, or WebP; max 2 MB)<input type="file" name="logo" accept="image/png,image/jpeg,image/webp" class="block w-full rounded-xl border border-slate-300 p-2 font-normal"></label>
                 <label class="space-y-1 text-sm font-semibold text-slate-700 sm:col-span-2">About the hospital<textarea name="settings[about]" rows="3" class="w-full rounded-xl border-slate-300 font-normal">{{ old('settings.about', data_get($hospital->settings, 'about')) }}</textarea></label>
                 <label class="space-y-1 text-sm font-semibold text-slate-700 sm:col-span-2">Assistant instructions<textarea name="settings[ai_instructions]" rows="4" class="w-full rounded-xl border-slate-300 font-normal">{{ old('settings.ai_instructions', data_get($hospital->settings, 'ai_instructions')) }}</textarea></label>
-                <div class="sm:col-span-2">
-                    <input type="hidden" name="settings[auto_confirm_paid_appointments]" value="0">
-                    <label class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
-                        <input type="checkbox" name="settings[auto_confirm_paid_appointments]" value="1" @checked(old('settings.auto_confirm_paid_appointments', data_get($hospital->settings, 'auto_confirm_paid_appointments', false)))>
-                        Auto-confirm paid appointments
-                    </label>
-                </div>
                 <label class="space-y-1 text-sm font-semibold text-slate-700">Appointment slot duration (minutes)<input type="number" name="slot_duration_minutes" min="5" max="240" value="{{ old('slot_duration_minutes', $hospital->slot_duration_minutes) }}" required class="w-full rounded-xl border-slate-300 font-normal"></label>
                 <label class="space-y-1 text-sm font-semibold text-slate-700">No-show grace period (minutes)<input type="number" name="no_show_grace_minutes" min="0" max="1440" value="{{ old('no_show_grace_minutes', $hospital->no_show_grace_minutes) }}" required class="w-full rounded-xl border-slate-300 font-normal"></label>
             </div>

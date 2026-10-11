@@ -4,7 +4,7 @@
         <p class="text-sm text-slate-600">Welcome, {{ $invite->doctor->name }}. Choose a password to activate your account.</p>
     </div>
 
-    <form method="POST" action="{{ route('doctor.setup.store', ['token' => $token]) }}" class="space-y-4">
+    <form method="POST" action="{{ route('doctor.setup.store', ['token' => $token, 'hospital' => $invite->doctor->hospital?->slug]) }}" class="space-y-4">
         @csrf
         <div>
             <x-input-label for="password" :value="__('Password')" />

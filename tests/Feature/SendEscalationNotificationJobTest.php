@@ -2,13 +2,13 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Bus;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Jobs\SendEscalationNotification;
-use App\Models\Escalation;
 use App\Mail\EscalationNotification;
+use App\Models\Escalation;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Mail;
+use Tests\TestCase;
 
 class SendEscalationNotificationJobTest extends TestCase
 {
@@ -34,7 +34,7 @@ class SendEscalationNotificationJobTest extends TestCase
         ];
 
         // Ensure escalation recipient is configured
-        \Illuminate\Support\Facades\Config::set('pearlie.escalation_email', 'frontdesk@example.com');
+        Config::set('pearlie.escalation_email', 'frontdesk@example.com');
 
         // Run the job handler directly so Mail::fake() can capture the send
         $job = new SendEscalationNotification($esc, $meta);

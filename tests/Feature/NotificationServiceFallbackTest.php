@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Hospital;
 use App\Services\NotificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -13,6 +14,8 @@ class NotificationServiceFallbackTest extends TestCase
 
     public function test_send_sms_uses_africastalking_and_falls_back_to_twilio_on_failure()
     {
+        app()->instance('currentHospital', Hospital::factory()->create());
+
         config([
             'services.africastalking.username' => 'testuser',
             'services.africastalking.api_key' => 'testkey',
@@ -61,6 +64,8 @@ class NotificationServiceFallbackTest extends TestCase
 
     public function test_send_sms_uses_explicitly_selected_twilio_provider()
     {
+        app()->instance('currentHospital', Hospital::factory()->create());
+
         config([
             'services.sms_provider' => 'twilio',
             'services.africastalking.username' => null,

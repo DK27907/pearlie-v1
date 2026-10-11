@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use App\Models\AppointmentRequest;
-use App\Models\Escalation;
 use App\Models\DoctorUnavailableDate;
+use App\Models\Escalation;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -59,7 +59,7 @@ class DoctorDashboardService
     }
 
     /**
-     * @param  array{date?: string|null, status?: string|null}  $filters
+     * @param  array{date?: string|null, status?: string|null, patient?: int|null}  $filters
      */
     public function appointments(User $doctor, array $filters): LengthAwarePaginator
     {
@@ -67,6 +67,18 @@ class DoctorDashboardService
             return $doctor->doctorAppointments()
                 ->when($filters['date'] ?? null, fn ($query, $date) => $query->whereDate('preferred_date', $date))
                 ->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
+                ->when($filters['patient'] ?? null, function ($query, $appointmentId) use ($doctor): void {
+                    $patientReference = $doctor->doctorAppointments()->findOrFail($appointmentId);
+                    if ($patientReference->patient_id !== null) {
+                        $query->where('patient_id', $patientReference->patient_id);
+
+                        return;
+                    }
+
+                    $query->whereNull('patient_id')
+                        ->where('name', $patientReference->name)
+                        ->where('phone', $patientReference->phone);
+                })
                 ->orderByDesc('preferred_date')
                 ->orderByDesc('id')
                 ->paginate(15)

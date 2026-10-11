@@ -35,8 +35,12 @@ class PaymentLifecycleTest extends TestCase
         Queue::fake([SendPaymentNotification::class]);
 
         $payload = $this->callbackPayload($payment, 0);
-        $this->postJson('/api/mpesa/callback/'.$hospital->slug, $payload)->assertOk();
-        $this->postJson('/api/mpesa/callback/'.$hospital->slug, $payload)->assertOk();
+        $this->postJson('/api/mpesa/callback/'.$hospital->slug, $payload)
+            ->assertOk()
+            ->assertExactJson(['ResultCode' => 0, 'ResultDesc' => 'Accepted']);
+        $this->postJson('/api/mpesa/callback/'.$hospital->slug, $payload)
+            ->assertOk()
+            ->assertExactJson(['status' => 'already_processed']);
 
         $this->assertDatabaseHas('appointment_requests', [
             'id' => $appointment->id,
@@ -529,6 +533,10 @@ class PaymentLifecycleTest extends TestCase
         [$firstHospital] = $this->createPaymentScenario();
         Http::preventStrayRequests();
         Queue::fake([SendPaymentNotification::class]);
+        $firstHospitalAdmin = User::factory()->for($firstHospital, 'hospital')->create([
+            'is_admin' => true,
+            'role' => 'hospital_admin',
+        ]);
         $secondHospital = Hospital::factory()->create(['subscription_plan' => 'enterprise']);
         app()->instance('currentHospital', $secondHospital);
         $secondDoctor = User::factory()->for($secondHospital, 'hospital')->create([
@@ -543,10 +551,67 @@ class PaymentLifecycleTest extends TestCase
             ->for($secondAppointment, 'appointment')
             ->create();
 
-        $this->getJson('/api/payments/'.$payment->id.'/status?hospital='.$firstHospital->slug)
+        $this->actingAs($firstHospitalAdmin)
+            ->getJson('/api/payments/'.$payment->id.'/status?hospital='.$firstHospital->slug)
             ->assertNotFound();
 
         Queue::assertNothingPushed();
+    }
+
+    public function test_guest_cannot_read_payment_status_or_receipt(): void
+    {
+        [$hospital, , $payment] = $this->createPaymentScenario(MpesaPayment::STATUS_COMPLETED);
+        $payment->forceFill(['mpesa_receipt' => 'PRIVATE-RECEIPT'])->save();
+
+        $this->getJson('/api/payments/'.$payment->id.'/status?hospital='.$hospital->slug)
+            ->assertUnauthorized()
+            ->assertJsonMissingPath('data')
+            ->assertDontSee('PRIVATE-RECEIPT');
+    }
+
+    public function test_non_admin_tenant_user_cannot_read_payment_status(): void
+    {
+        [$hospital, , $payment] = $this->createPaymentScenario();
+        $payment->forceFill(['mpesa_receipt' => 'PRIVATE-RECEIPT'])->save();
+        $patient = User::factory()->for($hospital, 'hospital')->create([
+            'role' => 'patient',
+        ]);
+
+        $this->actingAs($patient)
+            ->getJson('/api/payments/'.$payment->id.'/status?hospital='.$hospital->slug)
+            ->assertForbidden()
+            ->assertJsonMissingPath('data')
+            ->assertDontSee('PRIVATE-RECEIPT');
+    }
+
+    public function test_wrong_tenant_admin_cannot_enumerate_payment_ids(): void
+    {
+        $firstHospital = Hospital::factory()->create(['subscription_plan' => 'enterprise']);
+        $secondHospital = Hospital::factory()->create(['subscription_plan' => 'enterprise']);
+        $requestingHospital = Hospital::factory()->create(['subscription_plan' => 'enterprise']);
+        $firstAdmin = User::factory()->for($requestingHospital, 'hospital')->create([
+            'is_admin' => true,
+            'role' => 'hospital_admin',
+        ]);
+
+        app()->instance('currentHospital', $firstHospital);
+        $firstAppointment = AppointmentRequest::factory()->for($firstHospital)->create();
+        $firstPayment = MpesaPayment::factory()->for($firstAppointment, 'appointment')->create();
+
+        app()->instance('currentHospital', $secondHospital);
+        $secondAppointment = AppointmentRequest::factory()->for($secondHospital)->create();
+        $secondPayment = MpesaPayment::factory()->for($secondAppointment, 'appointment')->create();
+        app()->forgetInstance('currentHospital');
+
+        foreach (range(1, $secondPayment->id + 1) as $paymentId) {
+            $this->actingAs($firstAdmin)
+                ->getJson('/api/payments/'.$paymentId.'/status?hospital='.$requestingHospital->slug)
+                ->assertNotFound()
+                ->assertJsonMissingPath('data');
+        }
+
+        $this->assertModelExists($firstPayment);
+        $this->assertModelExists($secondPayment);
     }
 
     public function test_status_endpoint_returns_the_required_payment_fields(): void
@@ -554,8 +619,13 @@ class PaymentLifecycleTest extends TestCase
         [$hospital, $appointment, $payment] = $this->createPaymentScenario();
         Http::preventStrayRequests();
         Queue::fake([SendPaymentNotification::class]);
+        $admin = User::factory()->for($hospital, 'hospital')->create([
+            'is_admin' => true,
+            'role' => 'hospital_admin',
+        ]);
 
-        $this->getJson('/api/payments/'.$payment->id.'/status?hospital='.$hospital->slug)
+        $this->actingAs($admin)
+            ->getJson('/api/payments/'.$payment->id.'/status?hospital='.$hospital->slug)
             ->assertOk()
             ->assertJsonPath('data.payment_id', $payment->id)
             ->assertJsonPath('data.status', MpesaPayment::STATUS_PENDING)

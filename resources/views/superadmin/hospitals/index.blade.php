@@ -1,7 +1,7 @@
-@extends('layouts.app')
+@extends('superadmin.layouts.app')
 
 @section('content')
-    <div class="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+    <div class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] space-y-6 px-4 py-8 sm:px-6 lg:px-8">
         <div class="flex flex-wrap items-end justify-between gap-4">
             <div>
                 <p class="text-sm font-semibold uppercase tracking-widest text-indigo-700">MediDesk AI platform</p>

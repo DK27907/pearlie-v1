@@ -1,0 +1,741 @@
+ M README.md
+ M app/Console/Commands/RunTestEscalation.php
+ M app/Console/Commands/SendTestEscalation.php
+ M app/Http/Controllers/Admin/AppointmentController.php
+ M app/Http/Controllers/Admin/EscalationController.php
+ M app/Http/Controllers/Admin/PermissionController.php
+ M app/Http/Controllers/Admin/RoleController.php
+ M app/Http/Controllers/Admin/SettingsController.php
+ M app/Http/Controllers/Auth/RegisteredUserController.php
+ M app/Http/Controllers/ChatController.php
+ M app/Http/Controllers/Doctor/DashboardController.php
+ M app/Http/Controllers/Doctor/EscalationController.php
+ D app/Http/Controllers/LandingController.php
+ M app/Http/Controllers/MpesaCallbackController.php
+ M app/Http/Controllers/PaymentStatusController.php
+ D app/Http/Controllers/PearlieController.php
+ M app/Http/Controllers/SuperAdmin/DashboardController.php
+ M app/Http/Controllers/SuperAdmin/HospitalController.php
+ M app/Http/Middleware/EnsureFeatureEnabled.php
+ M app/Http/Middleware/EnsureSuperAdmin.php
+ M app/Http/Middleware/EnsureUserIsDoctor.php
+ M app/Http/Middleware/EnsureUserIsHospitalAdmin.php
+ M app/Http/Middleware/ResolveHospital.php
+ M app/Http/Middleware/RestrictMpesaCallbackToSafaricom.php
+ M app/Http/Middleware/SecurityHeaders.php
+ M app/Http/Requests/Admin/StoreDoctorRequest.php
+ M app/Http/Requests/Admin/UpdateBrandingSettingsRequest.php
+ M app/Http/Requests/Admin/UpdateDoctorRequest.php
+ M app/Http/Requests/Admin/UpdateGeneralSettingsRequest.php
+ M app/Http/Requests/Auth/LoginRequest.php
+ M app/Http/Requests/ProfileUpdateRequest.php
+ M app/Jobs/SendEscalationNotification.php
+ M app/Mail/EscalationNotification.php
+ M app/Mail/HospitalAdminInviteMail.php
+ M app/Models/AppointmentRequest.php
+ M app/Models/DoctorAvailability.php
+ M app/Models/DoctorInvite.php
+ M app/Models/DoctorUnavailableDate.php
+ M app/Models/Escalation.php
+ M app/Models/Hospital.php
+ M app/Models/Invite.php
+ M app/Models/KnowledgeBase.php
+ M app/Models/NotificationLog.php
+ M app/Models/User.php
+ M app/Notifications/EscalationCreated.php
+ M app/Notifications/EscalationPatientMessage.php
+ M app/Providers/AppServiceProvider.php
+ M app/Services/DoctorAvailabilityService.php
+ M app/Services/DoctorDashboardService.php
+ M app/Services/EscalationConflictException.php
+ M app/Services/EscalationNotificationService.php
+ M app/Services/EscalationService.php
+ M app/Services/HospitalMailService.php
+ M app/Services/HospitalManagementService.php
+ M app/Services/MpesaService.php
+ M app/Services/NotificationService.php
+ M app/Services/PaymentLifecycleService.php
+ M app/Services/WhatsAppBookingService.php
+ M app/Services/WhatsAppService.php
+ M app/Traits/BelongsToHospital.php
+ M composer.json
+ M composer.lock
+ M config/admin.php
+ M config/laragent.php
+ M config/mpesa.php
+ M config/pearlie.php
+ M config/services.php
+ M config/session.php
+ M config/tenancy.php
+ M config/whatsapp.php
+ M database/factories/UserFactory.php
+ M database/migrations/2026_08_28_202723_create_conversations_table.php
+ M database/migrations/2026_08_28_212408_create_knowledge_bases_table.php
+ M database/migrations/2026_09_08_230355_add_is_admin_to_users_table.php
+ M database/migrations/2026_09_08_231000_create_roles_and_role_user_tables.php
+ M database/migrations/2026_09_08_233000_drop_simple_roles_tables.php
+ M database/migrations/2026_09_27_000003_add_assignment_fields_to_escalations_table.php
+ M database/migrations/2026_09_27_080000_create_hospitals_table.php
+ M database/migrations/2026_09_27_080001_add_hospital_id_to_tenant_tables.php
+ M database/migrations/2026_09_27_080002_add_roles_to_users_table.php
+ M database/seeders/HospitalSeeder.php
+ M docs/mpesa-operations.md
+ M package-lock.json
+ M package.json
+ M resources/css/app.css
+ M resources/js/app.js
+ M resources/js/pearlie.js
+ M resources/views/admin/dashboard.blade.php
+ M resources/views/admin/doctors/index.blade.php
+ M resources/views/admin/doctors/partials/form.blade.php
+ M resources/views/admin/escalations/index.blade.php
+ M resources/views/admin/services/index.blade.php
+ M resources/views/admin/settings/edit.blade.php
+ M resources/views/auth/doctor-setup.blade.php
+ M resources/views/auth/password-edit.blade.php
+ M resources/views/components/modal.blade.php
+ M resources/views/components/site-footer.blade.php
+ M resources/views/dashboard.blade.php
+ M resources/views/doctor/appointments.blade.php
+ M resources/views/doctor/availability.blade.php
+ M resources/views/doctor/dashboard.blade.php
+ M resources/views/doctor/partials/nav.blade.php
+ M resources/views/escalations/index.blade.php
+ M resources/views/escalations/show.blade.php
+ M resources/views/hospital/invitation-setup.blade.php
+ M resources/views/hospital/onboarding.blade.php
+ D resources/views/landing.blade.php
+ M resources/views/layouts/guest.blade.php
+ M resources/views/layouts/master.blade.php
+ D resources/views/pearlie.blade.php
+ M resources/views/profile/edit.blade.php
+ M resources/views/profile/partials/delete-user-form.blade.php
+ M resources/views/profile/partials/update-password-form.blade.php
+ M resources/views/profile/partials/update-profile-information-form.blade.php
+ M resources/views/superadmin/dashboard.blade.php
+ M resources/views/superadmin/hospitals/form.blade.php
+ M resources/views/superadmin/hospitals/index.blade.php
+ M resources/views/superadmin/hospitals/show.blade.php
+ M routes/api.php
+ M routes/auth.php
+ M routes/web.php
+ M tailwind.config.js
+ M tests/Browser/screenshots/final-booking-01.png
+ M tests/Browser/screenshots/final-booking-02.png
+ M tests/Browser/screenshots/final-chat-01.png
+ M tests/Browser/screenshots/final-chat-02.png
+ M tests/Browser/screenshots/final-chat-03.png
+ M tests/Browser/screenshots/final-chat-04.png
+ M tests/Browser/screenshots/final-chat-05.png
+ M tests/Browser/screenshots/final-chat-06.png
+ M tests/Browser/screenshots/final-chat-07.png
+ M tests/Browser/screenshots/final-chat-08.png
+ M tests/Browser/screenshots/final-chat-09.png
+ M tests/Browser/screenshots/final-chat-10.png
+ M tests/Browser/screenshots/final-chat-11.png
+ M tests/Browser/screenshots/final-chat-12.png
+ M tests/Browser/screenshots/final-chat-13.png
+ M tests/Browser/screenshots/final-edge-01.png
+ M tests/Browser/screenshots/final-edge-02.png
+ M tests/Browser/screenshots/final-edge-03.png
+ M tests/Browser/screenshots/final-esc-01.png
+ M tests/Feature/Admin/DoctorManagementTest.php
+ M tests/Feature/Admin/SettingsPageTest.php
+ M tests/Feature/Auth/AuthenticationTest.php
+ M tests/Feature/Auth/DoctorSetupTest.php
+ M tests/Feature/Auth/RegistrationTest.php
+ M tests/Feature/ChatIntentTest.php
+ M tests/Feature/DoctorDashboardTest.php
+ M tests/Feature/EnsureUserIsAdminTest.php
+ M tests/Feature/EscalationFlowTest.php
+ M tests/Feature/EscalationServiceTest.php
+ M tests/Feature/HospitalSeederTest.php
+ M tests/Feature/LandingPageTest.php
+ M tests/Feature/MessagingProviderTest.php
+ M tests/Feature/MpesaCallbackIpAllowlistTest.php
+ M tests/Feature/MpesaCallbackVerificationTest.php
+ M tests/Feature/MpesaWhatsAppBookingTest.php
+ M tests/Feature/MultiTenancyTest.php
+ M tests/Feature/NotificationServiceFallbackTest.php
+ M tests/Feature/NotificationServiceIntegrationTest.php
+ M tests/Feature/NotificationServiceRetryTest.php
+ M tests/Feature/NotificationServiceTest.php
+ M tests/Feature/PatientAppointmentsPageTest.php
+ M tests/Feature/PaymentLifecycleTest.php
+ M tests/Feature/ProbeBookingFlowTest.php
+ M tests/Feature/ProfileTest.php
+ M tests/Feature/RoleAssignmentTest.php
+ M tests/Feature/SendEscalationNotificationJobTest.php
+ M tests/Feature/WhatsAppConfigTest.php
+ M tests/Feature/WhatsAppIntegrationTest.php
+ M tests/Feature/WhatsAppWebhookSecurityTest.php
+ M vite.config.js
+?? app/Console/Commands/PruneConversations.php
+?? app/Console/Commands/PruneNotificationLogs.php
+?? app/Console/Commands/PrunePasswordResetTokens.php
+?? app/Console/Commands/PrunePaymentEvents.php
+?? app/Events/AppointmentCancelled.php
+?? app/Events/AppointmentRescheduled.php
+?? app/Exceptions/AppointmentLifecycleException.php
+?? app/Http/Controllers/Admin/AppointmentLifecycleController.php
+?? app/Http/Controllers/Admin/ConversationController.php
+?? app/Http/Controllers/Admin/KnowledgeBaseController.php
+?? app/Http/Controllers/Admin/NotificationLogController.php
+?? app/Http/Controllers/Admin/PaymentController.php
+?? app/Http/Controllers/Admin/ReportController.php
+?? app/Http/Controllers/Doctor/AppointmentLifecycleController.php
+?? app/Http/Controllers/MarketingHomeController.php
+?? app/Http/Controllers/Patient/AppointmentCancelController.php
+?? app/Http/Controllers/Patient/AppointmentController.php
+?? app/Http/Middleware/EnsureUserIsPatient.php
+?? app/Jobs/SendAppointmentLifecycleNotifications.php
+?? app/Jobs/SendEscalationReply.php
+?? app/Mail/MarketingDemoRequest.php
+?? app/Models/AppointmentHistory.php
+?? app/Models/EscalationReply.php
+?? app/Notifications/AppointmentLifecycleNotification.php
+?? app/Services/AppointmentLifecycleService.php
+?? app/Services/AppointmentPolicyService.php
+?? app/Services/ExternalProviderLogger.php
+?? app/Support/CancellationResult.php
+?? app/Support/DateParser.php
+?? app/Support/PolicyResult.php
+?? app/Support/RescheduleResult.php
+?? before-push.txt
+?? bootstrap()
+?? checkout_request_id
+?? count()
+?? database/migrations/2026_09_29_215726_add_is_active_to_users_table.php
+?? database/migrations/2026_09_29_232459_add_user_phone_to_escalations_table.php
+?? database/migrations/2026_10_02_085314_add_professional_profile_fields_to_users_table.php
+?? database/migrations/2026_10_02_112646_add_patient_id_to_appointment_requests.php
+?? database/migrations/2026_10_07_175225_require_hospital_id_on_notification_logs.php
+?? database/migrations/2026_10_07_184712_create_escalation_replies_table.php
+?? database/migrations/2026_10_10_082826_add_cancellation_policy_to_hospitals_table.php
+?? database/migrations/2026_10_10_082827_add_cancellation_metadata_to_appointment_requests_table.php
+?? database/migrations/2026_10_10_082828_create_appointment_histories_table.php
+?? database/migrations/2026_10_10_112944_add_hospital_id_index_to_payment_events_table.php
+?? event
+?? first()
+?? id
+?? payment_id
+?? playwright.config.js
+?? resources/views/admin/conversations/index.blade.php
+?? resources/views/admin/conversations/show.blade.php
+?? resources/views/admin/knowledge-base/form.blade.php
+?? resources/views/admin/knowledge-base/index.blade.php
+?? resources/views/admin/knowledge-base/services/index.blade.php
+?? resources/views/admin/notification-logs/index.blade.php
+?? resources/views/admin/payments/index.blade.php
+?? resources/views/admin/reports/index.blade.php
+?? resources/views/doctor/patients/index.blade.php
+?? resources/views/emails/marketing-demo-request.blade.php
+?? resources/views/layouts/marketing.blade.php
+?? resources/views/layouts/tenant-chat.blade.php
+?? resources/views/layouts/tenant.blade.php
+?? resources/views/patient/appointments/index.blade.php
+?? resources/views/patient/appointments/reschedule.blade.php
+?? resources/views/profile/partials/doctor-professional-fields.blade.php
+?? resources/views/superadmin/layouts/app.blade.php
+?? tests/Browser/fixtures/payment-polling.html
+?? tests/Browser/payment-polling.spec.js
+?? tests/Browser/screenshots/admin-00-login.png
+?? tests/Browser/screenshots/admin-01-dashboard.png
+?? tests/Browser/screenshots/admin-02-appointments.png
+?? tests/Browser/screenshots/admin-03-14.png
+?? tests/Browser/screenshots/admin-04-doctors.png
+?? tests/Browser/screenshots/admin-05-create.png
+?? tests/Browser/screenshots/admin-06-edit.png
+?? tests/Browser/screenshots/admin-07-services.png
+?? tests/Browser/screenshots/admin-08-create.png
+?? tests/Browser/screenshots/admin-09-edit.png
+?? tests/Browser/screenshots/admin-10-conversations.png
+?? tests/Browser/screenshots/admin-11-escalations.png
+?? tests/Browser/screenshots/admin-12-22.png
+?? tests/Browser/screenshots/admin-13-invites.png
+?? tests/Browser/screenshots/admin-14-knowledge-base.png
+?? tests/Browser/screenshots/admin-15-create.png
+?? tests/Browser/screenshots/admin-16-knowledge-services.png
+?? tests/Browser/screenshots/admin-17-create.png
+?? tests/Browser/screenshots/admin-18-payments.png
+?? tests/Browser/screenshots/admin-19-reports.png
+?? tests/Browser/screenshots/admin-20-permissions.png
+?? tests/Browser/screenshots/admin-21-roles.png
+?? tests/Browser/screenshots/admin-22-settings.png
+?? tests/Browser/screenshots/admin-23-integration-settings.png
+?? tests/Browser/screenshots/admin-doctor-create-before.png
+?? tests/Browser/screenshots/admin-doctor-created.png
+?? tests/Browser/screenshots/admin-escalation-23.png
+?? tests/Browser/screenshots/admin-escalation-detail-safe.png
+?? tests/Browser/screenshots/admin-escalations-after-patient-create.png
+?? tests/Browser/screenshots/admin-escalations-filter-human.png
+?? tests/Browser/screenshots/admin-safe-dashboard.png
+?? tests/Browser/screenshots/admin-safe-login.png
+?? tests/Browser/screenshots/admin-service-create-before.png
+?? tests/Browser/screenshots/admin-service-created.png
+?? tests/Browser/screenshots/admin-settings-before.png
+?? tests/Browser/screenshots/admin-settings-email.png
+?? tests/Browser/screenshots/admin-settings-general-before.png
+?? tests/Browser/screenshots/admin-settings-general-saved.png
+?? tests/Browser/screenshots/admin-settings-mpesa-before.png
+?? tests/Browser/screenshots/admin-settings-mpesa-saved.png
+?? tests/Browser/screenshots/admin-settings-sms.png
+?? tests/Browser/screenshots/admin-settings-whatsapp.png
+?? tests/Browser/screenshots/audit-admin+pearl-admin-appointments.png
+?? tests/Browser/screenshots/audit-admin+pearl-admin-conversations.png
+?? tests/Browser/screenshots/audit-admin+pearl-admin-dashboard.png
+?? tests/Browser/screenshots/audit-admin+pearl-admin-doctors.png
+?? tests/Browser/screenshots/audit-admin+pearl-admin-escalations.png
+?? tests/Browser/screenshots/audit-admin+pearl-admin-knowledge-base.png
+?? tests/Browser/screenshots/audit-admin+pearl-admin-knowledge-services.png
+?? tests/Browser/screenshots/audit-admin+pearl-admin-notification-logs.png
+?? tests/Browser/screenshots/audit-admin+pearl-admin-payments.png
+?? tests/Browser/screenshots/audit-admin+pearl-admin-reports.png
+?? tests/Browser/screenshots/audit-admin+pearl-admin-services.png
+?? tests/Browser/screenshots/audit-admin+pearl-admin-settings.png
+?? tests/Browser/screenshots/audit-amina-branding-home.png
+?? tests/Browser/screenshots/audit-amina-chat-booking-confirmation.png
+?? tests/Browser/screenshots/audit-amina-chat-initial.png
+?? tests/Browser/screenshots/audit-amina-doctor-appointments.png
+?? tests/Browser/screenshots/audit-amina-doctor-availability.png
+?? tests/Browser/screenshots/audit-amina-doctor-create.png
+?? tests/Browser/screenshots/audit-amina-doctor-setup.png
+?? tests/Browser/screenshots/audit-amina-service-create.png
+?? tests/Browser/screenshots/audit-amina-service-list.png
+?? tests/Browser/screenshots/audit-amina-settings-branding.png
+?? tests/Browser/screenshots/audit-amina-settings-email.png
+?? tests/Browser/screenshots/audit-amina-settings-general.png
+?? tests/Browser/screenshots/audit-amina-settings-mpesa.png
+?? tests/Browser/screenshots/audit-amina-settings-sms.png
+?? tests/Browser/screenshots/audit-amina-settings-whatsapp.png
+?? tests/Browser/screenshots/audit-doctor-doctor-appointments.png
+?? tests/Browser/screenshots/audit-doctor-doctor-availability.png
+?? tests/Browser/screenshots/audit-doctor-doctor-dashboard.png
+?? tests/Browser/screenshots/audit-doctor-doctor-escalations.png
+?? tests/Browser/screenshots/audit-doctor-doctor-patients.png
+?? tests/Browser/screenshots/audit-doctor-doctor-profile.png
+?? tests/Browser/screenshots/audit-hospital-invitation-setup.png
+?? tests/Browser/screenshots/audit-new-hospital-create.png
+?? tests/Browser/screenshots/audit-new-hospital-created.png
+?? tests/Browser/screenshots/audit-patient-appointments.png
+?? tests/Browser/screenshots/audit-patient-dashboard.png
+?? tests/Browser/screenshots/audit-patient-profile.png
+?? tests/Browser/screenshots/audit-phaseB/admin-01.png
+?? tests/Browser/screenshots/audit-phaseB/admin-02.png
+?? tests/Browser/screenshots/audit-phaseB/admin-03.png
+?? tests/Browser/screenshots/audit-phaseB/admin-04.png
+?? tests/Browser/screenshots/audit-phaseB/admin-05.png
+?? tests/Browser/screenshots/audit-phaseB/admin-06.png
+?? tests/Browser/screenshots/audit-phaseB/admin-07.png
+?? tests/Browser/screenshots/audit-phaseB/admin-08.png
+?? tests/Browser/screenshots/audit-phaseB/admin-09.png
+?? tests/Browser/screenshots/audit-phaseB/admin-10.png
+?? tests/Browser/screenshots/audit-phaseB/admin-11.png
+?? tests/Browser/screenshots/audit-phaseB/admin-12.png
+?? tests/Browser/screenshots/audit-phaseB/doctor-01.png
+?? tests/Browser/screenshots/audit-phaseB/doctor-02.png
+?? tests/Browser/screenshots/audit-phaseB/doctor-03.png
+?? tests/Browser/screenshots/audit-phaseB/doctor-04.png
+?? tests/Browser/screenshots/audit-phaseB/doctor-05.png
+?? tests/Browser/screenshots/audit-phaseB/doctor-06.png
+?? tests/Browser/screenshots/audit-phaseB/patient-01.png
+?? tests/Browser/screenshots/audit-phaseB/patient-02.png
+?? tests/Browser/screenshots/audit-phaseB/patient-03.png
+?? tests/Browser/screenshots/audit-phaseB/superadmin-01.png
+?? tests/Browser/screenshots/audit-phaseB/superadmin-02.png
+?? tests/Browser/screenshots/audit-phaseB/superadmin-03.png
+?? tests/Browser/screenshots/audit-phaseB/superadmin-04.png
+?? tests/Browser/screenshots/audit-phaseB/superadmin-05.png
+?? tests/Browser/screenshots/audit-phaseB/superadmin-dashboard.png
+?? tests/Browser/screenshots/audit-public-01-landing.png
+?? tests/Browser/screenshots/audit-public-02-login.png
+?? tests/Browser/screenshots/audit-public-03-register.png
+?? tests/Browser/screenshots/audit-public-04-forgot.png
+?? tests/Browser/screenshots/audit-public-05-reset-invalid.png
+?? tests/Browser/screenshots/audit-public-06-pearl.png
+?? tests/Browser/screenshots/audit-public-07-pearl-chat.png
+?? tests/Browser/screenshots/audit-public-08-demo.png
+?? tests/Browser/screenshots/audit-public-09-demo-chat.png
+?? tests/Browser/screenshots/audit-resume-admin-01-dashboard.png
+?? tests/Browser/screenshots/audit-resume-admin-02-appointments.png
+?? tests/Browser/screenshots/audit-resume-admin-03-doctors.png
+?? tests/Browser/screenshots/audit-resume-admin-04-services.png
+?? tests/Browser/screenshots/audit-resume-admin-05-knowledge-services.png
+?? tests/Browser/screenshots/audit-resume-admin-06-knowledge-base.png
+?? tests/Browser/screenshots/audit-resume-admin-07-conversations.png
+?? tests/Browser/screenshots/audit-resume-admin-08-escalations.png
+?? tests/Browser/screenshots/audit-resume-admin-09-payments.png
+?? tests/Browser/screenshots/audit-resume-admin-10-reports.png
+?? tests/Browser/screenshots/audit-resume-admin-11-integration-settings.png
+?? tests/Browser/screenshots/audit-resume-admin-12-notification-logs.png
+?? tests/Browser/screenshots/audit-resume-doctor-01-dashboard.png
+?? tests/Browser/screenshots/audit-resume-doctor-02-appointments.png
+?? tests/Browser/screenshots/audit-resume-doctor-03-patients.png
+?? tests/Browser/screenshots/audit-resume-doctor-04-availability.png
+?? tests/Browser/screenshots/audit-resume-doctor-05-escalations.png
+?? tests/Browser/screenshots/audit-resume-doctor-06-profile.png
+?? tests/Browser/screenshots/audit-resume-patient-01-dashboard.png
+?? tests/Browser/screenshots/audit-resume-patient-02-appointments.png
+?? tests/Browser/screenshots/audit-resume-patient-03-profile.png
+?? tests/Browser/screenshots/audit-resume-public-01-landing.png
+?? tests/Browser/screenshots/audit-resume-public-02-login.png
+?? tests/Browser/screenshots/audit-resume-public-03-register.png
+?? tests/Browser/screenshots/audit-resume-public-04-forgot.png
+?? tests/Browser/screenshots/audit-resume-public-05-reset-invalid.png
+?? tests/Browser/screenshots/audit-resume-public-06-pearl.png
+?? tests/Browser/screenshots/audit-resume-public-07-pearl-chat-accessible.png
+?? tests/Browser/screenshots/audit-resume-public-07-pearl-chat.png
+?? tests/Browser/screenshots/audit-resume-public-08-demo.png
+?? tests/Browser/screenshots/audit-resume-public-09-demo-chat.png
+?? tests/Browser/screenshots/audit-resume-super-01-dashboard.png
+?? tests/Browser/screenshots/audit-resume-super-02-hospitals.png
+?? tests/Browser/screenshots/audit-resume-super-03-hospitals-create.png
+?? tests/Browser/screenshots/audit-resume-super-04-hospital-1.png
+?? tests/Browser/screenshots/audit-resume-super-05-hospital-1-edit.png
+?? tests/Browser/screenshots/audit-role-matrix-01-superadmin-patient-403.png
+?? tests/Browser/screenshots/audit-super-04-hospital.png
+?? tests/Browser/screenshots/audit-super-05-hospital-edit.png
+?? tests/Browser/screenshots/audit-super-superadmin-dashboard.png
+?? tests/Browser/screenshots/audit-super-superadmin-hospitals-create.png
+?? tests/Browser/screenshots/audit-super-superadmin-hospitals.png
+?? tests/Browser/screenshots/chat-01-service-recognised.png
+?? tests/Browser/screenshots/chat-02-contact-asked.png
+?? tests/Browser/screenshots/chat-03-confirmation.png
+?? tests/Browser/screenshots/chat-04-payment-blocked.png
+?? tests/Browser/screenshots/chat-05-dentist-only.png
+?? tests/Browser/screenshots/chat-06-confirmation.png
+?? tests/Browser/screenshots/chat-07-stk-fired.png
+?? tests/Browser/screenshots/chat-08-appointment-created.png
+?? tests/Browser/screenshots/date-format-guidance-swahili.png
+?? tests/Browser/screenshots/doctor-00-login.png
+?? tests/Browser/screenshots/doctor-01-dashboard.png
+?? tests/Browser/screenshots/doctor-02-appointments.png
+?? tests/Browser/screenshots/doctor-03-14.png
+?? tests/Browser/screenshots/doctor-04-availability.png
+?? tests/Browser/screenshots/doctor-05-patients.png
+?? tests/Browser/screenshots/doctor-06-escalations.png
+?? tests/Browser/screenshots/doctor-07-22.png
+?? tests/Browser/screenshots/doctor-08-profile.png
+?? tests/Browser/screenshots/doctor-09-profile.png
+?? tests/Browser/screenshots/doctor-availability-before-update.png
+?? tests/Browser/screenshots/doctor-availability-restored.png
+?? tests/Browser/screenshots/doctor-availability-updated.png
+?? tests/Browser/screenshots/doctor-escalation-23-before-claim.png
+?? tests/Browser/screenshots/doctor-escalation-23-claimed.png
+?? tests/Browser/screenshots/doctor-escalation-23-resolved.png
+?? tests/Browser/screenshots/doctor-escalation-before-resolve.png
+?? tests/Browser/screenshots/doctor-profile-updated.png
+?? tests/Browser/screenshots/doctor-security-admin.png
+?? tests/Browser/screenshots/doctor-security-superadmin.png
+?? tests/Browser/screenshots/final-esc-01-phone.png
+?? tests/Browser/screenshots/full/full-admin-01-dashboard.png
+?? tests/Browser/screenshots/full/full-admin-02-appointments.png
+?? tests/Browser/screenshots/full/full-admin-03-doctors.png
+?? tests/Browser/screenshots/full/full-admin-04-create-doctor.png
+?? tests/Browser/screenshots/full/full-admin-05-services.png
+?? tests/Browser/screenshots/full/full-admin-06-create-service.png
+?? tests/Browser/screenshots/full/full-admin-07-conversations.png
+?? tests/Browser/screenshots/full/full-admin-08-escalations.png
+?? tests/Browser/screenshots/full/full-admin-09-invites.png
+?? tests/Browser/screenshots/full/full-admin-10-knowledge-base.png
+?? tests/Browser/screenshots/full/full-admin-11-payments.png
+?? tests/Browser/screenshots/full/full-admin-12-reports.png
+?? tests/Browser/screenshots/full/full-admin-13-permissions.png
+?? tests/Browser/screenshots/full/full-admin-14-roles.png
+?? tests/Browser/screenshots/full/full-admin-15-settings.png
+?? tests/Browser/screenshots/full/full-admin-16-integration-settings.png
+?? tests/Browser/screenshots/full/full-admin-17-appointment-detail.png
+?? tests/Browser/screenshots/full/full-admin-after-login.png
+?? tests/Browser/screenshots/full/full-admin-before-appointment-detail.png
+?? tests/Browser/screenshots/full/full-admin-before-appointments.png
+?? tests/Browser/screenshots/full/full-admin-before-conversations.png
+?? tests/Browser/screenshots/full/full-admin-before-create-doctor.png
+?? tests/Browser/screenshots/full/full-admin-before-create-service.png
+?? tests/Browser/screenshots/full/full-admin-before-dashboard.png
+?? tests/Browser/screenshots/full/full-admin-before-doctors.png
+?? tests/Browser/screenshots/full/full-admin-before-escalations.png
+?? tests/Browser/screenshots/full/full-admin-before-integration-settings.png
+?? tests/Browser/screenshots/full/full-admin-before-invites.png
+?? tests/Browser/screenshots/full/full-admin-before-knowledge-base.png
+?? tests/Browser/screenshots/full/full-admin-before-login.png
+?? tests/Browser/screenshots/full/full-admin-before-payments.png
+?? tests/Browser/screenshots/full/full-admin-before-permissions.png
+?? tests/Browser/screenshots/full/full-admin-before-reports.png
+?? tests/Browser/screenshots/full/full-admin-before-roles.png
+?? tests/Browser/screenshots/full/full-admin-before-services.png
+?? tests/Browser/screenshots/full/full-admin-before-settings.png
+?? tests/Browser/screenshots/full/full-admin-branding-before-save.png
+?? tests/Browser/screenshots/full/full-admin-branding-before.png
+?? tests/Browser/screenshots/full/full-admin-branding-filled.png
+?? tests/Browser/screenshots/full/full-admin-branding-saved.png
+?? tests/Browser/screenshots/full/full-admin-form-before-branding.png
+?? tests/Browser/screenshots/full/full-admin-form-before-general.png
+?? tests/Browser/screenshots/full/full-admin-form-before-mpesa.png
+?? tests/Browser/screenshots/full/full-admin-form-branding.png
+?? tests/Browser/screenshots/full/full-admin-form-general.png
+?? tests/Browser/screenshots/full/full-admin-form-mpesa.png
+?? tests/Browser/screenshots/full/full-admin-general-600-filled.png
+?? tests/Browser/screenshots/full/full-admin-general-600-saved.png
+?? tests/Browser/screenshots/full/full-admin-general-before-restore.png
+?? tests/Browser/screenshots/full/full-admin-general-before.png
+?? tests/Browser/screenshots/full/full-admin-general-restored.png
+?? tests/Browser/screenshots/full/full-admin-login-filled.png
+?? tests/Browser/screenshots/full/full-admin-mpesa-configured.png
+?? tests/Browser/screenshots/full/full-admin-service-create-before.png
+?? tests/Browser/screenshots/full/full-admin-service-create-filled.png
+?? tests/Browser/screenshots/full/full-admin-service-created.png
+?? tests/Browser/screenshots/full/full-doctor-07-appointment-detail.png
+?? tests/Browser/screenshots/full/full-doctor-1-dashboard.png
+?? tests/Browser/screenshots/full/full-doctor-2-appointments.png
+?? tests/Browser/screenshots/full/full-doctor-3-availability.png
+?? tests/Browser/screenshots/full/full-doctor-4-patients.png
+?? tests/Browser/screenshots/full/full-doctor-5-escalations.png
+?? tests/Browser/screenshots/full/full-doctor-6-profile.png
+?? tests/Browser/screenshots/full/full-doctor-after-login.png
+?? tests/Browser/screenshots/full/full-doctor-availability-before-restore.png
+?? tests/Browser/screenshots/full/full-doctor-availability-before-toggle.png
+?? tests/Browser/screenshots/full/full-doctor-availability-saved.png
+?? tests/Browser/screenshots/full/full-doctor-availability-toggled.png
+?? tests/Browser/screenshots/full/full-doctor-before-appointment-detail.png
+?? tests/Browser/screenshots/full/full-doctor-before-appointments.png
+?? tests/Browser/screenshots/full/full-doctor-before-availability.png
+?? tests/Browser/screenshots/full/full-doctor-before-dashboard.png
+?? tests/Browser/screenshots/full/full-doctor-before-escalations.png
+?? tests/Browser/screenshots/full/full-doctor-before-login.png
+?? tests/Browser/screenshots/full/full-doctor-before-patients.png
+?? tests/Browser/screenshots/full/full-doctor-before-profile.png
+?? tests/Browser/screenshots/full/full-doctor-profile-before-bio.png
+?? tests/Browser/screenshots/full/full-doctor-profile-bio-before-restore.png
+?? tests/Browser/screenshots/full/full-doctor-profile-bio-filled.png
+?? tests/Browser/screenshots/full/full-doctor-profile-bio-saved.png
+?? tests/Browser/screenshots/full/full-escalation-admin-24-assigned.png
+?? tests/Browser/screenshots/full/full-escalation-admin-24-assignment-selected.png
+?? tests/Browser/screenshots/full/full-escalation-admin-24-before-assign.png
+?? tests/Browser/screenshots/full/full-escalation-admin-before-detail.png
+?? tests/Browser/screenshots/full/full-escalation-admin-detail.png
+?? tests/Browser/screenshots/full/full-escalation-admin-list.png
+?? tests/Browser/screenshots/full/full-escalation-doctor-24-before-claim.png
+?? tests/Browser/screenshots/full/full-escalation-doctor-24-before-reply.png
+?? tests/Browser/screenshots/full/full-escalation-doctor-24-before-resolve.png
+?? tests/Browser/screenshots/full/full-escalation-doctor-24-claimed.png
+?? tests/Browser/screenshots/full/full-escalation-doctor-24-replied.png
+?? tests/Browser/screenshots/full/full-escalation-doctor-24-reply-filled.png
+?? tests/Browser/screenshots/full/full-escalation-doctor-24-resolved.png
+?? tests/Browser/screenshots/full/full-patient-06-appointment-detail.png
+?? tests/Browser/screenshots/full/full-patient-1-dashboard.png
+?? tests/Browser/screenshots/full/full-patient-2-appointments.png
+?? tests/Browser/screenshots/full/full-patient-3-profile.png
+?? tests/Browser/screenshots/full/full-patient-4-tenant-home.png
+?? tests/Browser/screenshots/full/full-patient-5-tenant-chat.png
+?? tests/Browser/screenshots/full/full-patient-after-login.png
+?? tests/Browser/screenshots/full/full-patient-appointments-after-booking-attempt-before.png
+?? tests/Browser/screenshots/full/full-patient-appointments-after-booking-attempt.png
+?? tests/Browser/screenshots/full/full-patient-before-appointment-detail.png
+?? tests/Browser/screenshots/full/full-patient-before-appointments.png
+?? tests/Browser/screenshots/full/full-patient-before-dashboard.png
+?? tests/Browser/screenshots/full/full-patient-before-login.png
+?? tests/Browser/screenshots/full/full-patient-before-profile.png
+?? tests/Browser/screenshots/full/full-patient-before-tenant-chat.png
+?? tests/Browser/screenshots/full/full-patient-before-tenant-home.png
+?? tests/Browser/screenshots/full/full-patient-booking-before-continue.png
+?? tests/Browser/screenshots/full/full-patient-booking-before-message.png
+?? tests/Browser/screenshots/full/full-patient-booking-before-send.png
+?? tests/Browser/screenshots/full/full-patient-booking-chat-opened.png
+?? tests/Browser/screenshots/full/full-patient-booking-home-before-service.png
+?? tests/Browser/screenshots/full/full-patient-booking-message-filled.png
+?? tests/Browser/screenshots/full/full-patient-booking-retry-before-service.png
+?? tests/Browser/screenshots/full/full-patient-booking-retry-chat-opened.png
+?? tests/Browser/screenshots/full/full-patient-booking-retry-filled.png
+?? tests/Browser/screenshots/full/full-patient-booking-retry-service-selected.png
+?? tests/Browser/screenshots/full/full-patient-booking-retry-submitted.png
+?? tests/Browser/screenshots/full/full-patient-booking-service-selected.png
+?? tests/Browser/screenshots/full/full-patient-booking-submitted.png
+?? tests/Browser/screenshots/full/full-patient-escalation-before.png
+?? tests/Browser/screenshots/full/full-patient-escalation-filled.png
+?? tests/Browser/screenshots/full/full-patient-escalation-submitted.png
+?? tests/Browser/screenshots/full/full-public-01-landing.png
+?? tests/Browser/screenshots/full/full-public-2-login.png
+?? tests/Browser/screenshots/full/full-public-3-register.png
+?? tests/Browser/screenshots/full/full-public-4-forgot-password.png
+?? tests/Browser/screenshots/full/full-public-5-tenant-home.png
+?? tests/Browser/screenshots/full/full-public-6-tenant-chat.png
+?? tests/Browser/screenshots/full/full-public-before-forgot-password.png
+?? tests/Browser/screenshots/full/full-public-before-login.png
+?? tests/Browser/screenshots/full/full-public-before-register.png
+?? tests/Browser/screenshots/full/full-public-before-tenant-chat.png
+?? tests/Browser/screenshots/full/full-public-before-tenant-home.png
+?? tests/Browser/screenshots/full/full-public-forgot-before-fill.png
+?? tests/Browser/screenshots/full/full-public-forgot-before-submit.png
+?? tests/Browser/screenshots/full/full-public-forgot-filled.png
+?? tests/Browser/screenshots/full/full-public-forgot-form.png
+?? tests/Browser/screenshots/full/full-public-forgot-submitted.png
+?? tests/Browser/screenshots/full/full-security-admin-admin-dashboard.png
+?? tests/Browser/screenshots/full/full-security-admin-after-login.png
+?? tests/Browser/screenshots/full/full-security-admin-before-admin-dashboard.png
+?? tests/Browser/screenshots/full/full-security-admin-before-doctor-dashboard.png
+?? tests/Browser/screenshots/full/full-security-admin-before-login.png
+?? tests/Browser/screenshots/full/full-security-admin-before-superadmin-hospitals.png
+?? tests/Browser/screenshots/full/full-security-admin-doctor-dashboard.png
+?? tests/Browser/screenshots/full/full-security-admin-login-filled.png
+?? tests/Browser/screenshots/full/full-security-admin-superadmin-hospitals.png
+?? tests/Browser/screenshots/full/full-security-doctor-admin-dashboard.png
+?? tests/Browser/screenshots/full/full-security-doctor-after-login.png
+?? tests/Browser/screenshots/full/full-security-doctor-before-admin-dashboard.png
+?? tests/Browser/screenshots/full/full-security-doctor-before-doctor-dashboard.png
+?? tests/Browser/screenshots/full/full-security-doctor-before-login.png
+?? tests/Browser/screenshots/full/full-security-doctor-before-superadmin-hospitals.png
+?? tests/Browser/screenshots/full/full-security-doctor-doctor-dashboard.png
+?? tests/Browser/screenshots/full/full-security-doctor-login-filled.png
+?? tests/Browser/screenshots/full/full-security-doctor-superadmin-hospitals.png
+?? tests/Browser/screenshots/full/full-security-guest-admin-dashboard.png
+?? tests/Browser/screenshots/full/full-security-guest-before-admin-dashboard.png
+?? tests/Browser/screenshots/full/full-security-guest-before-doctor-dashboard.png
+?? tests/Browser/screenshots/full/full-security-guest-before-superadmin-hospitals.png
+?? tests/Browser/screenshots/full/full-security-guest-doctor-dashboard.png
+?? tests/Browser/screenshots/full/full-security-guest-superadmin-hospitals.png
+?? tests/Browser/screenshots/full/full-security-patient-admin-dashboard.png
+?? tests/Browser/screenshots/full/full-security-patient-after-login.png
+?? tests/Browser/screenshots/full/full-security-patient-before-admin-dashboard.png
+?? tests/Browser/screenshots/full/full-security-patient-before-doctor-dashboard.png
+?? tests/Browser/screenshots/full/full-security-patient-before-login.png
+?? tests/Browser/screenshots/full/full-security-patient-before-superadmin-hospitals.png
+?? tests/Browser/screenshots/full/full-security-patient-doctor-dashboard.png
+?? tests/Browser/screenshots/full/full-security-patient-login-filled.png
+?? tests/Browser/screenshots/full/full-security-patient-superadmin-hospitals.png
+?? tests/Browser/screenshots/full/full-security-superadmin-admin-dashboard.png
+?? tests/Browser/screenshots/full/full-security-superadmin-after-login.png
+?? tests/Browser/screenshots/full/full-security-superadmin-before-admin-dashboard.png
+?? tests/Browser/screenshots/full/full-security-superadmin-before-doctor-dashboard.png
+?? tests/Browser/screenshots/full/full-security-superadmin-before-login.png
+?? tests/Browser/screenshots/full/full-security-superadmin-before-superadmin-hospitals.png
+?? tests/Browser/screenshots/full/full-security-superadmin-doctor-dashboard.png
+?? tests/Browser/screenshots/full/full-security-superadmin-login-filled.png
+?? tests/Browser/screenshots/full/full-security-superadmin-superadmin-hospitals.png
+?? tests/Browser/screenshots/full/full-superadmin-1-dashboard.png
+?? tests/Browser/screenshots/full/full-superadmin-2-hospitals.png
+?? tests/Browser/screenshots/full/full-superadmin-3-create.png
+?? tests/Browser/screenshots/full/full-superadmin-4-show-1.png
+?? tests/Browser/screenshots/full/full-superadmin-5-edit-1.png
+?? tests/Browser/screenshots/full/full-superadmin-after-login.png
+?? tests/Browser/screenshots/full/full-superadmin-before-create.png
+?? tests/Browser/screenshots/full/full-superadmin-before-dashboard.png
+?? tests/Browser/screenshots/full/full-superadmin-before-edit-1.png
+?? tests/Browser/screenshots/full/full-superadmin-before-hospitals.png
+?? tests/Browser/screenshots/full/full-superadmin-before-login.png
+?? tests/Browser/screenshots/full/full-superadmin-before-show-1.png
+?? tests/Browser/screenshots/full/full-superadmin-login-filled.png
+?? tests/Browser/screenshots/guest-admin-dashboard-redirect.png
+?? tests/Browser/screenshots/live-admin-01-branding-saved.png
+?? tests/Browser/screenshots/live-doctor-01-dashboard.png
+?? tests/Browser/screenshots/live-doctor-02-appointments.png
+?? tests/Browser/screenshots/live-patient-01-branded-home.png
+?? tests/Browser/screenshots/live-superadmin-01-dashboard.png
+?? tests/Browser/screenshots/live-superadmin-02-hospitals.png
+?? tests/Browser/screenshots/live-superadmin-03-create.png
+?? tests/Browser/screenshots/login.png
+?? tests/Browser/screenshots/patient-00-login.png
+?? tests/Browser/screenshots/patient-01-dashboard.png
+?? tests/Browser/screenshots/patient-02-dashboard-appointments.png
+?? tests/Browser/screenshots/patient-03-appointments.png
+?? tests/Browser/screenshots/patient-04-appointments-14.png
+?? tests/Browser/screenshots/patient-05-profile.png
+?? tests/Browser/screenshots/patient-06-h-pearl.png
+?? tests/Browser/screenshots/patient-07-h-pearl-chat.png
+?? tests/Browser/screenshots/patient-08-chat-pearl.png
+?? tests/Browser/screenshots/patient-appointment-16-final.png
+?? tests/Browser/screenshots/patient-appointment-16.png
+?? tests/Browser/screenshots/patient-appointments-after-booking.png
+?? tests/Browser/screenshots/patient-appointments-final.png
+?? tests/Browser/screenshots/patient-booking-chat-selected.png
+?? tests/Browser/screenshots/patient-booking-confirmed.png
+?? tests/Browser/screenshots/patient-booking-service-selected.png
+?? tests/Browser/screenshots/patient-booking-submitted.png
+?? tests/Browser/screenshots/patient-chat-response.png
+?? tests/Browser/screenshots/patient-cross-role-admin-dashboard.png
+?? tests/Browser/screenshots/patient-cross-role-doctor-dashboard.png
+?? tests/Browser/screenshots/patient-cross-role-superadmin-hospitals.png
+?? tests/Browser/screenshots/patient-dashboard-final.png
+?? tests/Browser/screenshots/patient-escalation-chat-before.png
+?? tests/Browser/screenshots/patient-escalation-created.png
+?? tests/Browser/screenshots/patient-profile-logout.png
+?? tests/Browser/screenshots/readiness-admin-dashboard.png
+?? tests/Browser/screenshots/readiness-booking-01.png
+?? tests/Browser/screenshots/readiness-booking-02.png
+?? tests/Browser/screenshots/readiness-booking-03.png
+?? tests/Browser/screenshots/readiness-chat-01.png
+?? tests/Browser/screenshots/readiness-chat-02.png
+?? tests/Browser/screenshots/readiness-chat-03.png
+?? tests/Browser/screenshots/readiness-chat-04.png
+?? tests/Browser/screenshots/readiness-chat-05.png
+?? tests/Browser/screenshots/readiness-chat-06.png
+?? tests/Browser/screenshots/readiness-chat-07.png
+?? tests/Browser/screenshots/readiness-chat-08.png
+?? tests/Browser/screenshots/readiness-chat-09.png
+?? tests/Browser/screenshots/readiness-chat-10.png
+?? tests/Browser/screenshots/readiness-chat-11.png
+?? tests/Browser/screenshots/readiness-chat-12.png
+?? tests/Browser/screenshots/readiness-chat-13.png
+?? tests/Browser/screenshots/readiness-doctor-dashboard.png
+?? tests/Browser/screenshots/readiness-edge-01.png
+?? tests/Browser/screenshots/readiness-edge-02.png
+?? tests/Browser/screenshots/readiness-edge-03.png
+?? tests/Browser/screenshots/readiness-esc-01.png
+?? tests/Browser/screenshots/readiness-esc-02-assigned.png
+?? tests/Browser/screenshots/readiness-esc-02-before-assign.png
+?? tests/Browser/screenshots/readiness-esc-03-doctor-queue.png
+?? tests/Browser/screenshots/readiness-esc-04-claimed.png
+?? tests/Browser/screenshots/readiness-esc-05-reply-attempt.png
+?? tests/Browser/screenshots/readiness-esc-06-resolved.png
+?? tests/Browser/screenshots/readiness-esc-07-book-start.png
+?? tests/Browser/screenshots/readiness-esc-08-midbooking-handoff.png
+?? tests/Browser/screenshots/readiness-esc-09-handoff-created.png
+?? tests/Browser/screenshots/readiness-esc-10-booking-resumed.png
+?? tests/Browser/screenshots/readiness-esc-admin-list.png
+?? tests/Browser/screenshots/readiness-esc-doctor-list.png
+?? tests/Browser/screenshots/readiness-patient-dashboard.png
+?? tests/Browser/screenshots/readiness-patient-login.png
+?? tests/Browser/screenshots/superadmin-01-dashboard.png
+?? tests/Browser/screenshots/superadmin-02-hospitals.png
+?? tests/Browser/screenshots/superadmin-03-create.png
+?? tests/Browser/screenshots/superadmin-04-1.png
+?? tests/Browser/screenshots/superadmin-05-edit.png
+?? tests/Browser/screenshots/superadmin-06-home.png
+?? tests/Browser/screenshots/verify-01-landing.png
+?? tests/Browser/screenshots/verify-02-login.png
+?? tests/Browser/screenshots/verify-03-register.png
+?? tests/Browser/screenshots/verify-04-forgot-password.png
+?? tests/Browser/screenshots/verify-05-invalid-reset-token.png
+?? tests/Browser/screenshots/verify-06-pearl-home.png
+?? tests/Browser/screenshots/verify-07-demo-home.png
+?? tests/Browser/screenshots/verify-08-pearl-chat.png
+?? tests/Browser/screenshots/verify-09-demo-chat.png
+?? tests/Browser/screenshots/verify-10-guest-admin.png
+?? tests/Browser/screenshots/verify-11-guest-superadmin.png
+?? tests/Browser/screenshots/verify-12-guest-doctor.png
+?? tests/Browser/screenshots/verify-13-guest-patient.png
+?? tests/Browser/screenshots/verify-14-login-doctor.png
+?? tests/Browser/screenshots/verify-14-login-hospital-admin.png
+?? tests/Browser/screenshots/verify-14-login-patient.png
+?? tests/Browser/screenshots/verify-14-login-super-admin.png
+?? tests/Feature/Admin/EscalationAssignmentTest.php
+?? tests/Feature/Admin/OnboardingTest.php
+?? tests/Feature/AdminAppointmentConfirmationTest.php
+?? tests/Feature/AppServiceProviderTest.php
+?? tests/Feature/Auth/PasswordResetRateLimitTest.php
+?? tests/Feature/ChatRateLimitTest.php
+?? tests/Feature/ConversationCleanupTest.php
+?? tests/Feature/DoctorPatientsPageTest.php
+?? tests/Feature/EscalationNotificationServiceTest.php
+?? tests/Feature/EscalationReplyRetryTest.php
+?? tests/Feature/ExternalProviderLoggerTest.php
+?? tests/Feature/HospitalBrandingTest.php
+?? tests/Feature/NotificationLogAdminTest.php
+?? tests/Feature/PaymentEventTenantIndexTest.php
+?? tests/Feature/PruneConversationRetentionTest.php
+?? tests/Feature/PruneNotificationLogsTest.php
+?? tests/Feature/PrunePasswordResetTokensTest.php
+?? tests/Feature/PrunePaymentEventsTest.php
+?? tests/Feature/SecurityHeadersTest.php
+?? tests/Feature/SuperAdminLifecycleTest.php
+?? tests/Feature/TenantModelLookupTest.php
+?? tests/Unit/DateParserTest.php

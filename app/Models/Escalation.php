@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToHospital;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,16 +11,20 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Escalation extends Model
 {
-    use \App\Traits\BelongsToHospital, HasFactory;
+    use BelongsToHospital, HasFactory;
 
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_IN_PROGRESS = 'in_progress';
+
     public const STATUS_RESOLVED = 'resolved';
+
     public const STATUS_CLOSED = 'closed';
 
     protected $fillable = [
         'session_id',
         'user_message',
+        'user_phone',
         'ai_response',
         'status',
         'assigned_to',
@@ -47,6 +52,11 @@ class Escalation extends Model
     public function conversations(): HasMany
     {
         return $this->hasMany(Conversation::class, 'session_id', 'session_id');
+    }
+
+    public function replies(): HasMany
+    {
+        return $this->hasMany(EscalationReply::class);
     }
 
     public function appointmentRequests(): HasMany
@@ -78,7 +88,8 @@ class Escalation extends Model
 
     public function getPatientPhoneAttribute(): ?string
     {
-        $phone = $this->latestAppointment?->mpesa_phone ?: $this->latestAppointment?->phone;
+        $phone = $this->user_phone
+            ?: ($this->latestAppointment?->mpesa_phone ?: $this->latestAppointment?->phone);
 
         if ($phone) {
             return $phone;

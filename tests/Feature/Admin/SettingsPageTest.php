@@ -67,6 +67,31 @@ class SettingsPageTest extends TestCase
         $this->assertSame('08:00', $hospital->fresh()->business_hours['monday']['open']);
     }
 
+    public function test_admin_can_update_appointment_lifecycle_policy(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $admin = $this->createAdmin($hospital);
+
+        $this->actingAs($admin)->put(route('admin.integration-settings.general.update'), [
+            'deposit_amount' => 500,
+            'slot_duration_minutes' => 30,
+            'patient_cancellation_enabled' => '0',
+            'patient_rescheduling_enabled' => '1',
+            'cancellation_cutoff_hours' => 36,
+            'rescheduling_cutoff_hours' => 48,
+            'late_cancellation_fee' => 275.50,
+            'deposits_refundable' => '0',
+        ])->assertRedirect(route('admin.integration-settings.edit', ['tab' => 'general']));
+
+        $hospital->refresh();
+        $this->assertFalse($hospital->patient_cancellation_enabled);
+        $this->assertTrue($hospital->patient_rescheduling_enabled);
+        $this->assertSame(36, $hospital->cancellation_cutoff_hours);
+        $this->assertSame(48, $hospital->rescheduling_cutoff_hours);
+        $this->assertSame('275.50', $hospital->late_cancellation_fee);
+        $this->assertFalse($hospital->deposits_refundable);
+    }
+
     public function test_general_settings_validation_rejects_bad_values(): void
     {
         $hospital = Hospital::factory()->create(['deposit_amount' => 500]);

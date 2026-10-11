@@ -86,6 +86,18 @@ class ChatIntentTest extends TestCase
         $this->assertDatabaseCount('appointment_requests', 0);
     }
 
+    public function test_cancer_mention_does_not_cancel_an_in_progress_booking(): void
+    {
+        $this->createHospital();
+        $chat = app(BookingChatService::class);
+        $chat->handle('intent-cancer', 'I want to book an appointment', 'web');
+
+        $response = $chat->handle('intent-cancer', 'I have cancer', 'web');
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertSame('COLLECTING', $chat->getState('intent-cancer')['state']);
+    }
+
     private function createHospital(): Hospital
     {
         $hospital = Hospital::query()->create([

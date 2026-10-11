@@ -122,6 +122,34 @@ class PatientAppointmentsPageTest extends TestCase
             ->assertRedirect(route('login'));
     }
 
+    public function test_non_patient_roles_cannot_access_patient_appointments(): void
+    {
+        $hospital = $this->pearlHospital();
+        $actors = [
+            User::factory()->create([
+                'hospital_id' => $hospital->id,
+                'role' => 'hospital_admin',
+                'is_admin' => true,
+            ]),
+            User::factory()->create([
+                'hospital_id' => $hospital->id,
+                'role' => 'doctor',
+                'is_doctor' => true,
+            ]),
+            User::factory()->create([
+                'hospital_id' => $hospital->id,
+                'role' => 'super_admin',
+                'is_super_admin' => true,
+            ]),
+        ];
+
+        foreach ($actors as $actor) {
+            $this->actingAs($actor)
+                ->get(route('appointments.index'))
+                ->assertForbidden();
+        }
+    }
+
     private function pearlHospital(): Hospital
     {
         return Hospital::query()->where('slug', 'pearl')->firstOrFail();

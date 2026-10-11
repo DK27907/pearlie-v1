@@ -2,14 +2,18 @@
 
 namespace App\Services;
 
+use App\Models\Hospital;
 use App\Models\NotificationLog;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
 
 class NotificationService
 {
     public function sendSms(string $to, string $message): bool
     {
+        $this->ensureTenantContext();
+
         $smsTo = $to;
         $smsConfig = $this->smsConfig();
         $httpStatus = null;
@@ -89,7 +93,11 @@ class NotificationService
 
                     } catch (\Throwable $e) {
                         $failureCode = 'transport_error';
-                        Log::error('AfricaTalking SMS attempt exception: '.$e->getMessage(), ['attempt' => $attempt]);
+                        Log::error('AfricaTalking SMS attempt failed.', [
+                            'provider' => 'africastalking',
+                            'attempt' => $attempt,
+                            'exception_class' => $e::class,
+                        ]);
                         if ($attempt < $maxAttempts) {
                             $sleepMs = $baseBackoffMs * (2 ** ($attempt - 1));
                             usleep($sleepMs * 1000);
@@ -113,13 +121,13 @@ class NotificationService
                             report($ex);
                         }
                     } catch (\Throwable $_e) {
-                        Log::error('Failed to report AfricaTalking failure: '.$_e->getMessage());
+                        Log::error('Failed to report AfricaTalking failure.', ['exception_class' => $_e::class]);
                     }
                 }
                 Log::info('metric.notification_failure', ['provider' => 'africastalking']);
 
             } catch (\Throwable $e) {
-                Log::error('AfricaTalking SMS failed: '.$e->getMessage());
+                Log::error('AfricaTalking SMS delivery failed.', ['exception_class' => $e::class]);
             }
         }
 
@@ -189,7 +197,11 @@ class NotificationService
 
                     } catch (\Throwable $e) {
                         $failureCode = 'transport_error';
-                        Log::error('Twilio SMS attempt exception: '.$e->getMessage(), ['attempt' => $attempt]);
+                        Log::error('Twilio SMS attempt failed.', [
+                            'provider' => 'twilio',
+                            'attempt' => $attempt,
+                            'exception_class' => $e::class,
+                        ]);
                         if ($attempt < $maxAttempts) {
                             $sleepMs = $baseBackoffMs * (2 ** ($attempt - 1));
                             usleep($sleepMs * 1000);
@@ -212,13 +224,13 @@ class NotificationService
                             report($ex);
                         }
                     } catch (\Throwable $_e) {
-                        Log::error('Failed to report Twilio failure: '.$_e->getMessage());
+                        Log::error('Failed to report Twilio failure.', ['exception_class' => $_e::class]);
                     }
                 }
                 Log::info('metric.notification_failure', ['provider' => 'twilio']);
 
             } catch (\Throwable $e) {
-                Log::error('Twilio SMS failed: '.$e->getMessage());
+                Log::error('Twilio SMS delivery failed.', ['exception_class' => $e::class]);
             }
         }
 
@@ -238,6 +250,8 @@ class NotificationService
 
     public function sendWhatsApp(string $to, string $message): bool
     {
+        $this->ensureTenantContext();
+
         $whatsappConfig = $this->whatsappConfig();
         $waId = $whatsappConfig['phone_number_id'] ?? null;
         $waToken = $whatsappConfig['access_token'] ?? null;
@@ -294,7 +308,11 @@ class NotificationService
 
                     } catch (\Throwable $e) {
                         $failureCode = 'transport_error';
-                        Log::error('WhatsApp attempt exception: '.$e->getMessage(), ['attempt' => $attempt]);
+                        Log::error('WhatsApp attempt failed.', [
+                            'provider' => 'meta_whatsapp',
+                            'attempt' => $attempt,
+                            'exception_class' => $e::class,
+                        ]);
                         if ($attempt < $maxAttempts) {
                             $sleepMs = $baseBackoffMs * (2 ** ($attempt - 1));
                             usleep($sleepMs * 1000);
@@ -317,14 +335,14 @@ class NotificationService
                             report($ex);
                         }
                     } catch (\Throwable $_e) {
-                        Log::error('Failed to report WhatsApp failure: '.$_e->getMessage());
+                        Log::error('Failed to report WhatsApp failure.', ['exception_class' => $_e::class]);
                     }
                 }
                 Log::info('metric.notification_failure', ['provider' => 'whatsapp']);
 
             } catch (\Throwable $e) {
                 $failureCode = 'transport_error';
-                Log::error('WhatsApp send failed: '.$e->getMessage());
+                Log::error('WhatsApp delivery failed.', ['exception_class' => $e::class]);
             }
             $this->recordDelivery(
                 'whatsapp',
@@ -359,8 +377,10 @@ class NotificationService
         ?string $failureCode = null,
         ?string $providerResponse = null,
     ): void {
+        $this->ensureTenantContext();
+
         NotificationLog::query()->create([
-            'hospital_id' => hospital()?->id,
+            'hospital_id' => hospital()->id,
             'channel' => $channel,
             'provider' => $provider,
             'status' => $status,
@@ -369,6 +389,26 @@ class NotificationService
             'failure_code' => $failureCode,
             'provider_response' => $status === 'failed' ? $providerResponse : null,
         ]);
+        app(ExternalProviderLogger::class)->record(
+            $provider,
+            $channel,
+            $status,
+            $httpStatus,
+            $failureCode,
+        );
+    }
+
+    private function ensureTenantContext(): void
+    {
+        $tenantHospital = hospital();
+
+        if (
+            ! $tenantHospital?->exists
+            || $tenantHospital->getKey() === null
+            || ! Hospital::query()->whereKey($tenantHospital->getKey())->exists()
+        ) {
+            throw new RuntimeException('A hospital context is required to send tenant notifications.');
+        }
     }
 
     private function messageId(mixed $messageId): ?string

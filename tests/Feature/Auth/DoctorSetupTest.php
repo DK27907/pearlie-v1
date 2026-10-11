@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth;
 
 use App\Mail\DoctorInviteMail;
 use App\Models\DoctorInvite;
+use App\Models\Hospital;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -17,7 +18,15 @@ class DoctorSetupTest extends TestCase
     public function test_doctor_can_set_password_using_single_use_invite_token(): void
     {
         Mail::fake();
-        $admin = User::factory()->create(['is_admin' => true]);
+        $hospital = Hospital::factory()->create([
+            'slug' => 'doctor-setup-tenant',
+            'subscription_plan' => 'professional',
+            'subscription_status' => 'active',
+        ]);
+        $admin = User::factory()->create([
+            'hospital_id' => $hospital->id,
+            'is_admin' => true,
+        ]);
 
         $this->actingAs($admin)->post(route('admin.doctors.store'), [
             'name' => 'Dr. Ada Kamau',
@@ -35,11 +44,17 @@ class DoctorSetupTest extends TestCase
 
         auth()->logout();
 
-        $this->get(route('doctor.setup', $mail->token))
-            ->assertOk()
-            ->assertSee('Set up your doctor account');
+        $setupParameters = [
+            'token' => $mail->token,
+            'hospital' => $hospital->slug,
+        ];
 
-        $this->post(route('doctor.setup.store', $mail->token), [
+        $this->get(route('doctor.setup', $setupParameters))
+            ->assertOk()
+            ->assertSee('Set up your doctor account')
+            ->assertSee(route('doctor.setup.store', $setupParameters));
+
+        $this->post(route('doctor.setup.store', $setupParameters), [
             'password' => 'StrongDoctorPass123',
             'password_confirmation' => 'StrongDoctorPass123',
         ])->assertRedirect(route('doctor.dashboard'))

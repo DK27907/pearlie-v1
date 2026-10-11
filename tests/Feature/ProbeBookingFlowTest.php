@@ -14,6 +14,7 @@ class ProbeBookingFlowTest extends TestCase
 
     public function test_out_of_hours_and_multi_field_booking_messages_preserve_expected_state(): void
     {
+        $this->travelTo('2026-10-01 08:00:00');
         (new DuskSeedSeeder)->run();
         $hospital = Hospital::query()->where('slug', 'pearl')->firstOrFail();
         app()->instance('currentHospital', $hospital);

@@ -22,7 +22,12 @@ class DoctorAvailabilityService
     public function getAvailableSlots(int $doctorId, string $date): array
     {
         try {
-            if (! User::query()->whereKey($doctorId)->where('is_doctor', true)->exists()) {
+            if (! User::query()
+                ->whereKey($doctorId)
+                ->where('is_doctor', true)
+                ->where('is_active', true)
+                ->exists()
+            ) {
                 return [];
             }
 
@@ -131,6 +136,7 @@ class DoctorAvailabilityService
         try {
             return User::query()
                 ->where('is_doctor', true)
+                ->where('is_active', true)
                 ->orderBy('name')
                 ->get()
                 ->map(fn (User $doctor): array => [
@@ -200,12 +206,9 @@ class DoctorAvailabilityService
                 }
 
                 $doctors = User::query()
+                    ->where('hospital_id', $currentHospital?->id)
                     ->where('is_doctor', true)
                     ->where('is_active', true)
-                    ->when(
-                        filled($service?->requires_specialty),
-                        fn ($query) => $query->where('specialization', $service->requires_specialty),
-                    )
                     ->when(
                         $preferredDoctorId !== null,
                         fn ($query) => $query->whereKey($preferredDoctorId),
@@ -213,8 +216,16 @@ class DoctorAvailabilityService
                     ->orderBy('id')
                     ->get();
 
+                if (filled($service?->requires_specialty)) {
+                    $requiredSpecialty = mb_strtolower(trim((string) $service->requires_specialty));
+                    $doctors = $doctors
+                        ->filter(fn (User $doctor): bool => $this->doctorMatchesSpecialty($doctor, $requiredSpecialty))
+                        ->values();
+                }
+
                 if ($doctors->isEmpty() && filled($service?->requires_specialty)) {
                     $doctors = User::query()
+                        ->where('hospital_id', $currentHospital?->id)
                         ->where('is_doctor', true)
                         ->where('is_active', true)
                         ->when(
@@ -423,5 +434,17 @@ class DoctorAvailabilityService
             ->where('doctor_id', $doctorId)
             ->whereDate('date', $date->toDateString())
             ->exists();
+    }
+
+    public function doctorMatchesSpecialty(User $doctor, string $requiredSpecialty): bool
+    {
+        $requiredSpecialty = mb_strtolower(trim($requiredSpecialty));
+        $doctorSpecialty = mb_strtolower(trim((string) $doctor->specialization));
+
+        return $doctorSpecialty !== ''
+            && ($doctorSpecialty === $requiredSpecialty
+                || str_contains($requiredSpecialty, $doctorSpecialty)
+                || str_contains($doctorSpecialty, $requiredSpecialty)
+                || substr($requiredSpecialty, 0, 4) === substr($doctorSpecialty, 0, 4));
     }
 }

@@ -42,7 +42,15 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
+        $currentHospital = hospital();
+        app()->instance('currentHospital', null);
+        try {
+            $authenticated = Auth::attempt($this->only('email', 'password'), $this->boolean('remember'));
+        } finally {
+            app()->instance('currentHospital', $currentHospital);
+        }
+
+        if (! $authenticated) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
@@ -51,6 +59,35 @@ class LoginRequest extends FormRequest
         }
 
         RateLimiter::clear($this->throttleKey());
+
+        $user = Auth::user();
+        if (! $user?->is_active) {
+            Auth::logout();
+
+            throw ValidationException::withMessages([
+                'email' => trans('auth.failed'),
+            ]);
+        }
+
+        if ($user->isSuperAdmin()) {
+            return;
+        }
+
+        if ($user->isDoctor() || $user->isAdmin()) {
+            $hospital = $user->hospital;
+            $isHospitalAvailable = $hospital
+                && $hospital->is_active
+                && in_array($hospital->subscription_status, ['active', 'trial'], true)
+                && ! ($hospital->subscription_status === 'trial' && $hospital->trial_ends_at?->isPast());
+
+            if (! $isHospitalAvailable) {
+                Auth::logout();
+
+                throw ValidationException::withMessages([
+                    'email' => trans('auth.failed'),
+                ]);
+            }
+        }
     }
 
     /**

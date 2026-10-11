@@ -2,14 +2,16 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Bus;
 use App\Jobs\SendEscalationNotification;
-use App\Services\EscalationService;
 use App\Models\AppointmentRequest;
 use App\Models\Conversation;
 use App\Models\Escalation;
+use App\Services\EscalationService;
+use App\Services\NotificationService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Config;
+use Tests\TestCase;
 
 class EscalationServiceTest extends TestCase
 {
@@ -39,10 +41,10 @@ class EscalationServiceTest extends TestCase
         Bus::fake();
 
         // Ensure escalation email is configured so the service dispatches the job
-        \Illuminate\Support\Facades\Config::set('pearlie.escalation_email', 'frontdesk@example.com');
+        Config::set('pearlie.escalation_email', 'frontdesk@example.com');
 
         // Mock NotificationService to assert SMS and WhatsApp calls
-        $mock = \Mockery::mock(\App\Services\NotificationService::class);
+        $mock = \Mockery::mock(NotificationService::class);
         $mock->shouldReceive('sendSms')->once()->withArgs(function ($to, $message) {
             // basic assertions
             return is_string($to) && str_contains($message, 'ESCALATION #');
@@ -51,7 +53,7 @@ class EscalationServiceTest extends TestCase
             return is_string($to) && str_contains($message, 'ESCALATION #');
         })->andReturn(true);
 
-        $this->app->instance(\App\Services\NotificationService::class, $mock);
+        $this->app->instance(NotificationService::class, $mock);
 
         $svc = $this->app->make(EscalationService::class);
 
@@ -62,6 +64,36 @@ class EscalationServiceTest extends TestCase
         Bus::assertDispatched(SendEscalationNotification::class, fn (SendEscalationNotification $job): bool => $job->recipient === 'frontdesk@example.com');
 
         // Clean up Mockery
+        \Mockery::close();
+    }
+
+    public function test_create_escalation_persists_when_notification_provider_is_missing(): void
+    {
+        $sessionId = 'missing-provider-session';
+        Config::set('pearlie.escalation.notify_phone', '+254700000000');
+        Config::set('pearlie.escalation.notify_whatsapp', '+254700000000');
+        Config::set('pearlie.escalation_email', null);
+
+        $mock = \Mockery::mock(NotificationService::class);
+        $mock->shouldReceive('sendSms')->once()->andThrow(new \RuntimeException('SMS provider not configured.'));
+
+        $this->app->instance(NotificationService::class, $mock);
+
+        $escalation = $this->app->make(EscalationService::class)->createEscalation(
+            $sessionId,
+            'I need a human to call me',
+            'AI response',
+            '254748249882',
+        );
+
+        $this->assertDatabaseHas('escalations', [
+            'session_id' => $sessionId,
+            'user_message' => 'I need a human to call me',
+            'user_phone' => '254748249882',
+            'status' => 'pending',
+        ]);
+        $this->assertSame('pending', $escalation->status);
+
         \Mockery::close();
     }
 }

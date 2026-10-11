@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToHospital;
 use Database\Factories\DoctorInviteFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class DoctorInvite extends Model
 {
     /** @use HasFactory<DoctorInviteFactory> */
-    use \App\Traits\BelongsToHospital, HasFactory;
+    use BelongsToHospital, HasFactory;
 
     protected $fillable = [
         'doctor_id',

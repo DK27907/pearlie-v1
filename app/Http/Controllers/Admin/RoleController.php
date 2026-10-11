@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\User;
+use Illuminate\Http\Request;
 use Spatie\Permission\Models\Role;
 
 class RoleController extends Controller
@@ -20,7 +20,7 @@ class RoleController extends Controller
     public function assign(Request $request)
     {
         $request->validate([
-            'user_id' => 'required|integer|exists:users,id',
+            'user_id' => 'required|integer',
             'role' => 'required|string|exists:roles,name',
         ]);
 
@@ -35,7 +35,7 @@ class RoleController extends Controller
     public function remove(Request $request)
     {
         $request->validate([
-            'user_id' => 'required|integer|exists:users,id',
+            'user_id' => 'required|integer',
             'role' => 'required|string|exists:roles,name',
         ]);
 

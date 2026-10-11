@@ -11,11 +11,13 @@ class RestrictMpesaCallbackToSafaricom
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if (! (bool) config('mpesa.enforce_safaricom_ip_allowlist', true)) {
+        $isProduction = app()->environment('production');
+
+        if (! $isProduction && ! (bool) config('mpesa.enforce_safaricom_ip_allowlist', true)) {
             return $next($request);
         }
 
-        if (in_array(
+        if (! $isProduction && in_array(
             app()->environment(),
             config('mpesa.allowlist_bypass_environments', []),
             true,

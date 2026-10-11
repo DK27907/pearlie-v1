@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Conversation;
+use App\Models\Hospital;
 use App\Services\WhatsAppBookingService;
 use App\Services\WhatsAppService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -34,6 +35,8 @@ class WhatsAppIntegrationTest extends TestCase
 
     public function test_whatsapp_message_uses_the_configured_access_token(): void
     {
+        app()->instance('currentHospital', Hospital::factory()->create());
+
         config([
             'whatsapp.access_token' => 'test-token',
             'whatsapp.phone_number_id' => 'test-phone-number-id',

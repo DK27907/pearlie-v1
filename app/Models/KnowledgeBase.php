@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToHospital;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class KnowledgeBase extends Model
 {
-    use \App\Traits\BelongsToHospital, HasFactory;
+    use BelongsToHospital, HasFactory;
 
     /**
      * The attributes that are mass assignable.
@@ -63,11 +64,19 @@ class KnowledgeBase extends Model
      */
     public function getKeywordsStringAttribute(): string
     {
-        if (is_array($this->keywords)) {
-            return implode(', ', $this->keywords);
+        $keywords = $this->keywords;
+
+        if (is_string($keywords)) {
+            $decodedKeywords = json_decode($keywords, true);
+
+            if (is_array($decodedKeywords)) {
+                $keywords = $decodedKeywords;
+            }
         }
 
-        return $this->keywords ?? '';
+        return is_array($keywords)
+            ? implode(', ', $keywords)
+            : (string) ($keywords ?? '');
     }
 
     /**
@@ -78,11 +87,11 @@ class KnowledgeBase extends Model
         $answer = $this->answer;
 
         if ($this->source) {
-            $answer .= "\n\n_Source: " . $this->source;
+            $answer .= "\n\n_Source: ".$this->source;
         }
 
         if ($this->last_updated) {
-            $answer .= " (Last updated: " . $this->last_updated->format('M d, Y') . ")_";
+            $answer .= ' (Last updated: '.$this->last_updated->format('M d, Y').')_';
         }
 
         return $answer;
@@ -105,7 +114,7 @@ class KnowledgeBase extends Model
 
         return $query->where(function ($q) use ($words) {
             foreach ($words as $word) {
-                $q->orWhere('keywords', 'LIKE', '%' . $word . '%');
+                $q->orWhere('keywords', 'LIKE', '%'.$word.'%');
             }
         });
     }
@@ -121,10 +130,10 @@ class KnowledgeBase extends Model
             : $this->keywords;
 
         $searchableText = strtolower(
-            $this->question . ' ' .
-            $keywords . ' ' .
-            $this->answer . ' ' .
-            $this->category . ' ' .
+            $this->question.' '.
+            $keywords.' '.
+            $this->answer.' '.
+            $this->category.' '.
             $this->subcategory
         );
 

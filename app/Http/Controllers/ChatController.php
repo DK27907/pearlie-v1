@@ -9,7 +9,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class ChatController extends Controller
@@ -32,7 +31,6 @@ class ChatController extends Controller
             'aiName' => $hospital->chatbotName(),
             'chatSessionId' => $this->chatSessionId($request, $hospital),
             'services' => $hospital->services()->active()->orderBy('name')->get(),
-            'selectedServiceId' => $request->integer('service_id') ?: null,
         ]);
     }
 
@@ -42,25 +40,12 @@ class ChatController extends Controller
         abort_unless($hospital, 404);
 
         $validated = $request->validate([
-            'message' => ['required', 'string', 'max:1000'],
-            'service_id' => [
-                'nullable',
-                'integer',
-                Rule::exists('services', 'id')
-                    ->where('hospital_id', $hospital->id)
-                    ->where('is_active', true),
-            ],
+            'message' => ['present', 'nullable', 'string', 'max:5000'],
         ]);
 
-        $service = isset($validated['service_id'])
-            ? $hospital->services()->active()->findOrFail($validated['service_id'])
-            : null;
-        $message = $service
-            ? $service->name.'. '.$validated['message']
-            : $validated['message'];
         $result = $this->bookingChat->handle(
             $this->chatSessionId($request, $hospital),
-            $message,
+            $validated['message'] ?? '',
             'web',
         );
 

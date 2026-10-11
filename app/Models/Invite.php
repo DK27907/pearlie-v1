@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Traits\BelongsToHospital;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Invite extends Model
 {
-    use \App\Traits\BelongsToHospital, HasFactory;
+    use BelongsToHospital, HasFactory;
 
     protected $fillable = ['email', 'token', 'created_by', 'used_at', 'expires_at', 'used_by'];
 
@@ -34,7 +35,9 @@ class Invite extends Model
     public function markUsed($userId = null): void
     {
         $this->used_at = now();
-        if ($userId) $this->used_by = $userId;
+        if ($userId) {
+            $this->used_by = $userId;
+        }
         $this->save();
     }
 

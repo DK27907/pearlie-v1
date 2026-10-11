@@ -71,6 +71,8 @@ The reconciliation check warns if no reconciliation event was written in the las
 
 The callback routes are protected by `safaricom.ip`; the client-facing payment status routes are not. The configured ranges are in `config/mpesa.php` under `safaricom_ip_allowlist`. To update the list, verify new ranges against Safaricom's current Daraja documentation, edit that configuration array, deploy it, and restart long-running application processes. Do not add unverified ranges. The allowlist uses the request client IP; only configure trusted proxies when the deployment requires them and the proxy trust configuration is intentionally set.
 
+This integration does not validate a callback HMAC or shared-secret signature. In production, the application enforces the source-IP allowlist even if the opt-out flag is misconfigured; it also verifies successful callback results with Daraja's payment-status endpoint before applying payment state. These checks are defense in depth, not a cryptographic signature. Keep production ingress behind HTTPS, configure trusted proxies narrowly, monitor rejected callback IPs, and verify any Safaricom IP-range changes from current provider documentation before deploying them. The allowlist bypass and opt-out are restricted to non-production environments.
+
 ## Troubleshooting
 
 ### Sandbox callback never arrives

@@ -35,6 +35,9 @@ class DoctorManagementTest extends TestCase
             'email' => 'ada@example.test',
             'specialization' => 'General Medicine',
             'phone' => '+254 712 345 678',
+            'bio' => 'Focused on preventive and family medicine.',
+            'consultation_fee' => '2500.00',
+            'licence_number' => 'KMPDC-A12345',
         ]);
 
         $response->assertRedirect(route('admin.doctors.index'))
@@ -44,6 +47,9 @@ class DoctorManagementTest extends TestCase
             'email' => 'ada@example.test',
             'specialization' => 'General Medicine',
             'phone' => '+254 712 345 678',
+            'bio' => 'Focused on preventive and family medicine.',
+            'consultation_fee' => '2500.00',
+            'licence_number' => 'KMPDC-A12345',
             'is_doctor' => true,
         ]);
         $this->assertDatabaseCount('doctor_invites', 1);
@@ -54,6 +60,23 @@ class DoctorManagementTest extends TestCase
             return $mail->doctor->email === 'ada@example.test';
         });
         $this->assertSame("You're invited to the MediDesk AI Doctor Dashboard", $sentMail->envelope()->subject);
+    }
+
+    public function test_admin_cannot_create_doctor_with_a_negative_consultation_fee(): void
+    {
+        Mail::fake();
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->post(route('admin.doctors.store'), [
+            'name' => 'Dr. Ada Kamau',
+            'email' => 'ada@example.test',
+            'specialization' => 'General Medicine',
+            'phone' => '+254 712 345 678',
+            'consultation_fee' => '-1',
+        ])->assertSessionHasErrors('consultation_fee');
+
+        $this->assertDatabaseMissing('users', ['email' => 'ada@example.test']);
+        Mail::assertNothingOutgoing();
     }
 
     public function test_non_admin_cannot_create_doctor(): void

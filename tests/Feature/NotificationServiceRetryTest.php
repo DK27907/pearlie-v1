@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Hospital;
 use App\Services\NotificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -13,6 +14,8 @@ class NotificationServiceRetryTest extends TestCase
 
     public function test_africastalking_retries_then_succeeds_and_skips_twilio()
     {
+        app()->instance('currentHospital', Hospital::factory()->create());
+
         config([
             'services.sms_provider' => 'africastalking',
             'services.africastalking.username' => 'testuser',
@@ -52,6 +55,8 @@ class NotificationServiceRetryTest extends TestCase
 
     public function test_twilio_retries_when_selected_as_the_provider()
     {
+        app()->instance('currentHospital', Hospital::factory()->create());
+
         config([
             'services.sms_provider' => 'twilio',
             'services.africastalking.username' => null,

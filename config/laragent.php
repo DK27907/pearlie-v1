@@ -4,12 +4,10 @@ use LarAgent\Context\Drivers\CacheStorage;
 use LarAgent\Context\Drivers\FileStorage;
 use LarAgent\Context\Truncation\SimpleTruncationStrategy;
 use LarAgent\Drivers\Anthropic\ClaudeDriver;
-use LarAgent\Drivers\Groq\GroqDriver;
 use LarAgent\Drivers\OpenAi\GeminiDriver;
 use LarAgent\Drivers\OpenAi\OllamaDriver;
 use LarAgent\Drivers\OpenAi\OpenAiCompatible;
 use LarAgent\Drivers\OpenAi\OpenAiDriver;
-use LarAgent\Drivers\OpenAi\OpenAiResponsesDriver;
 use LarAgent\Drivers\OpenAi\OpenRouter;
 use LarAgent\History\InMemoryChatHistory;
 use Redberry\MCPClient\Enums\Transporters;
@@ -233,6 +231,3 @@ return [
     'track_usage' => false,
     'default_usage_storage' => null,
 ];
-
-
-

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Doctor;
 
 use App\Http\Controllers\Controller;
 use App\Models\Escalation;
+use App\Models\EscalationReply;
 use App\Services\EscalationConflictException;
 use App\Services\EscalationService;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -43,6 +44,7 @@ class EscalationController extends Controller
         return view('escalations.show', [
             'escalation' => $escalation,
             'conversation' => $this->escalations->conversation($escalation),
+            'replies' => $escalation->replies()->latest('id')->get(),
             'queueRoutePrefix' => 'doctor',
         ]);
     }
@@ -86,7 +88,7 @@ class EscalationController extends Controller
         ]);
 
         try {
-            $this->escalations->reply(
+            $reply = $this->escalations->reply(
                 Escalation::findOrFail($id),
                 $request->user(),
                 $validated['message'],
@@ -98,6 +100,10 @@ class EscalationController extends Controller
             return back()->withErrors(['message' => $exception->getMessage()]);
         }
 
-        return redirect()->route('doctor.escalations.show', $id)->with('status', 'Reply sent to the patient.');
+        $status = $reply->fresh()->status === EscalationReply::STATUS_SENT
+            ? 'Reply sent to the patient.'
+            : 'Reply queued for delivery.';
+
+        return redirect()->route('doctor.escalations.show', $id)->with('status', $status);
     }
 }

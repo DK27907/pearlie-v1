@@ -61,7 +61,13 @@ class SettingsController extends Controller
             'businessHours' => $settings->get('business_hours', []),
             'depositAmount' => $settings->get('deposit_amount', 500),
             'slotDuration' => $settings->get('slot_duration_minutes', 30),
-            'autoConfirm' => $settings->get('auto_confirm_paid_appointments', false),
+            'autoConfirm' => $settings->get('auto_confirm_paid_appointments', true),
+            'patientCancellationEnabled' => $hospital->patient_cancellation_enabled,
+            'patientReschedulingEnabled' => $hospital->patient_rescheduling_enabled,
+            'cancellationCutoffHours' => $hospital->cancellation_cutoff_hours,
+            'reschedulingCutoffHours' => $hospital->rescheduling_cutoff_hours,
+            'lateCancellationFee' => $hospital->late_cancellation_fee,
+            'depositsRefundable' => $hospital->deposits_refundable,
         ]);
     }
 
@@ -72,6 +78,17 @@ class SettingsController extends Controller
         $settings->set('deposit_amount', $data['deposit_amount']);
         $settings->set('slot_duration_minutes', $data['slot_duration_minutes']);
         $settings->set('auto_confirm_paid_appointments', $data['auto_confirm_paid_appointments'] ?? false);
+        $policyFields = array_intersect_key($data, array_flip([
+            'patient_cancellation_enabled',
+            'patient_rescheduling_enabled',
+            'cancellation_cutoff_hours',
+            'rescheduling_cutoff_hours',
+            'late_cancellation_fee',
+            'deposits_refundable',
+        ]));
+        if ($policyFields !== []) {
+            $this->currentHospital()->forceFill($policyFields)->save();
+        }
         $businessHours = $data['business_hours'] ?? [];
         foreach ($businessHours as &$hours) {
             $hours['closed'] = (bool) ($hours['closed'] ?? false);

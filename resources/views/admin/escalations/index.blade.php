@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+<div class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 py-10 sm:px-6 lg:px-8">
     <div class="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div><p class="text-sm font-semibold uppercase tracking-widest text-rose-600">Needs attention</p><h1 class="mt-2 text-3xl font-bold text-slate-900">Escalations</h1><p class="mt-2 text-slate-500">Review conversations that need human follow-up.</p></div>
         <a class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-rose-300" href="{{ route('admin.escalations.exportCsv') }}">Export CSV</a>

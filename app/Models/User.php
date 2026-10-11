@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Traits\BelongsToHospital;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -19,17 +20,25 @@ use Spatie\Permission\Traits\HasRoles;
     'email',
     'password',
     'role',
+    'is_active',
     'is_admin',
     'is_super_admin',
     'is_doctor',
     'specialization',
     'phone',
+    'bio',
+    'consultation_fee',
+    'licence_number',
 ])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
+    protected $attributes = [
+        'is_active' => true,
+    ];
+
     /** @use HasFactory<UserFactory> */
-    use \App\Traits\BelongsToHospital, HasFactory, Notifiable;
+    use BelongsToHospital, HasFactory, Notifiable;
 
     /**
      * Get the attributes that should be cast.
@@ -44,6 +53,8 @@ class User extends Authenticatable
             'is_admin' => 'boolean',
             'is_doctor' => 'boolean',
             'is_super_admin' => 'boolean',
+            'is_active' => 'boolean',
+            'consultation_fee' => 'decimal:2',
         ];
     }
 
@@ -67,6 +78,11 @@ class User extends Authenticatable
     public function doctorAppointments(): HasMany
     {
         return $this->hasMany(AppointmentRequest::class, 'doctor_id');
+    }
+
+    public function appointments(): HasMany
+    {
+        return $this->hasMany(AppointmentRequest::class, 'patient_id');
     }
 
     public function doctorInvites(): HasMany

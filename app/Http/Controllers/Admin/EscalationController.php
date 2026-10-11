@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SendEscalationReply;
 use App\Models\Escalation;
-use App\Services\EscalationService;
+use App\Models\EscalationReply;
 use App\Services\EscalationConflictException;
+use App\Services\EscalationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -36,7 +38,7 @@ class EscalationController extends Controller
 
     public function exportCsv(): Response
     {
-        $items = Escalation::orderBy('created_at','desc')->get();
+        $items = Escalation::orderBy('created_at', 'desc')->get();
         $handle = fopen('php://temp', 'r+');
         fputcsv($handle, ['id', 'session_id', 'user_message', 'ai_response', 'status', 'created_at']);
         foreach ($items as $i) {
@@ -56,12 +58,41 @@ class EscalationController extends Controller
     {
         $esc = Escalation::findOrFail($id);
         $esc->load(['assignedWorker', 'resolvedBy', 'latestAppointment', 'latestConversation', 'latestScoredConversation']);
+        $currentHospital = hospital();
+        abort_unless($currentHospital, 404);
+        $doctors = $currentHospital->users()
+            ->where('is_doctor', true)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['users.id', 'users.name']);
 
         return view('escalations.show', [
             'escalation' => $esc,
             'conversation' => $this->escalationService->conversation($esc),
+            'replies' => $esc->replies()->latest('id')->get(),
             'queueRoutePrefix' => 'admin',
+            'doctors' => $doctors,
         ]);
+    }
+
+    public function assign(Request $request, Escalation $escalation): RedirectResponse
+    {
+        $validated = $request->validate([
+            'doctor_id' => ['required', 'integer'],
+        ]);
+        $currentHospital = hospital();
+        abort_unless($currentHospital, 404);
+        $doctor = $currentHospital->users()
+            ->whereKey($validated['doctor_id'])
+            ->where('is_doctor', true)
+            ->where('is_active', true)
+            ->firstOrFail();
+
+        $escalation->update(['assigned_worker_id' => $doctor->id]);
+
+        return redirect()
+            ->route('admin.escalations.show', $escalation)
+            ->with('status', 'Escalation assigned.');
     }
 
     public function claim(Request $request, int $id): RedirectResponse
@@ -96,7 +127,7 @@ class EscalationController extends Controller
         ]);
 
         try {
-            $this->escalationService->reply(
+            $reply = $this->escalationService->reply(
                 Escalation::findOrFail($id),
                 $request->user(),
                 $validated['message'],
@@ -106,7 +137,34 @@ class EscalationController extends Controller
             return back()->withErrors(['message' => $exception->getMessage()]);
         }
 
-        return redirect()->route('admin.escalations.show', $id)->with('status', 'Reply sent to the patient.');
+        $status = $reply->fresh()->status === EscalationReply::STATUS_SENT
+            ? 'Reply sent to the patient.'
+            : 'Reply queued for delivery.';
+
+        return redirect()->route('admin.escalations.show', $id)->with('status', $status);
+    }
+
+    public function retryReply(int $replyId): RedirectResponse
+    {
+        $hospital = hospital();
+        abort_unless($hospital, 404);
+
+        $reply = EscalationReply::query()
+            ->where('hospital_id', $hospital->id)
+            ->whereKey($replyId)
+            ->firstOrFail();
+        abort_unless($reply->status === EscalationReply::STATUS_FAILED, 409);
+
+        $reply->forceFill([
+            'status' => EscalationReply::STATUS_PENDING,
+            'last_error' => null,
+        ])->save();
+
+        SendEscalationReply::dispatch($reply->id, (int) $reply->hospital_id)->afterCommit();
+
+        return redirect()
+            ->route('admin.escalations.show', $reply->escalation_id)
+            ->with('status', 'Failed reply queued for retry.');
     }
 
     public function updateStatus(Request $request, int $id): RedirectResponse
@@ -148,12 +206,14 @@ class EscalationController extends Controller
         $validated = $request->validate([
             'action' => 'required|string|in:update_status,delete,export',
             'ids' => ['required', 'array', 'min:1'],
-            'ids.*' => ['integer', 'exists:escalations,id'],
+            'ids.*' => ['integer', 'distinct'],
             'status' => ['required_if:action,update_status', Rule::in(Escalation::statuses())],
         ]);
 
         $ids = $validated['ids'];
         $action = $validated['action'];
+        $visibleIds = Escalation::query()->whereIn('id', $ids)->pluck('id')->all();
+        abort_unless(count($visibleIds) === count($ids), 404);
 
         if ($action === 'update_status') {
             foreach (Escalation::query()->whereIn('id', $ids)->get() as $escalation) {

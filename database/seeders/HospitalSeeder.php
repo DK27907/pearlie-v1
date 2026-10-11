@@ -26,6 +26,8 @@ class HospitalSeeder extends Seeder
                 'site_footer_text' => '© 2026 Pearl Hospital. All rights reserved.',
                 'deposit_amount' => 500,
                 'slot_duration_minutes' => 30,
+                'auto_confirm_paid_appointments' => true,
+                'settings' => ['auto_confirm_paid_appointments' => true],
                 'no_show_grace_minutes' => 30,
                 'hours_emergency' => '24/7',
                 'hours_outpatient' => '8:00 AM - 6:00 PM, Mon-Sat',

@@ -28,6 +28,9 @@ class RegistrationTest extends TestCase
 
     public function test_new_users_can_register(): void
     {
+        $this->get('/register');
+        $sessionIdBeforeRegistration = session()->getId();
+
         $response = $this->post('/register', [
             'name' => 'Test User',
             'email' => 'test@example.com',
@@ -36,6 +39,21 @@ class RegistrationTest extends TestCase
         ]);
 
         $this->assertAuthenticated();
+        $this->assertNotSame($sessionIdBeforeRegistration, session()->getId());
         $response->assertRedirect(route('dashboard', absolute: false));
+    }
+
+    public function test_registration_is_rate_limited_after_six_requests(): void
+    {
+        for ($attempt = 1; $attempt <= 6; $attempt++) {
+            $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.64'])
+                ->post('/register', [])
+                ->assertRedirect();
+        }
+
+        $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.64'])
+            ->post('/register', [])
+            ->assertTooManyRequests()
+            ->assertHeader('Retry-After');
     }
 }

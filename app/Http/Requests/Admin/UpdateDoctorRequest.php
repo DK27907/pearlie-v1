@@ -26,6 +26,9 @@ class UpdateDoctorRequest extends FormRequest
             ],
             'specialization' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'string', 'max:30', 'regex:/^\+?[0-9\s().-]{7,30}$/'],
+            'bio' => ['sometimes', 'nullable', 'string', 'max:3000'],
+            'consultation_fee' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:1000000'],
+            'licence_number' => ['sometimes', 'nullable', 'string', 'max:100'],
         ];
     }
 }

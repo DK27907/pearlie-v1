@@ -7,7 +7,9 @@ use App\Models\HospitalIntegrationCredential;
 use App\Models\NotificationLog;
 use App\Services\HospitalSettings;
 use App\Services\NotificationService;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -180,6 +182,106 @@ class MessagingProviderTest extends TestCase
             'failure_code' => 'credentials_missing',
         ]);
         Http::assertNothingSent();
+    }
+
+    public function test_notification_logs_reject_rows_without_a_hospital(): void
+    {
+        $this->expectException(QueryException::class);
+
+        NotificationLog::query()->create([
+            'channel' => 'sms',
+            'provider' => 'twilio',
+            'status' => 'failed',
+        ]);
+    }
+
+    public function test_hospitals_with_notification_logs_cannot_be_deleted(): void
+    {
+        $hospital = Hospital::factory()->create();
+        NotificationLog::query()->create([
+            'hospital_id' => $hospital->id,
+            'channel' => 'sms',
+            'provider' => 'twilio',
+            'status' => 'sent',
+        ]);
+        $this->expectException(QueryException::class);
+
+        $hospital->delete();
+    }
+
+    public function test_provider_response_scrubs_phone_tokens_and_message_bodies(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $log = NotificationLog::factory()->for($hospital)->create([
+            'provider_response' => json_encode([
+                'to' => '254748249882',
+                'authorization' => 'Bearer stored-access-token',
+                'details' => 'Bearer inline-secret for 254748249882',
+                'body' => 'Sensitive appointment message',
+            ], JSON_THROW_ON_ERROR),
+        ]);
+        $storedResponse = (string) DB::table('notification_logs')
+            ->where('id', $log->id)
+            ->value('provider_response');
+
+        $this->assertStringContainsString('[REDACTED_PHONE]', $storedResponse);
+        $this->assertStringContainsString('[REDACTED_MESSAGE]', $storedResponse);
+        $this->assertStringContainsString('[REDACTED]', $storedResponse);
+        $this->assertStringNotContainsString('254748249882', $storedResponse);
+        $this->assertStringNotContainsString('stored-access-token', $storedResponse);
+        $this->assertStringNotContainsString('inline-secret', $storedResponse);
+        $this->assertStringNotContainsString('Sensitive appointment message', $storedResponse);
+        $this->assertArrayNotHasKey('provider_response', $log->fresh()->toArray());
+        $this->assertSame($storedResponse, $log->fresh()->toArray()['scrubbed_provider_response']);
+    }
+
+    public function test_messaging_without_a_hospital_fails_before_sending(): void
+    {
+        config([
+            'whatsapp.phone_number_id' => 'test-phone-number-id',
+            'whatsapp.access_token' => 'test-access-token',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake();
+
+        try {
+            app(NotificationService::class)->sendWhatsApp('254748249882', 'Appointment update');
+            $this->fail('Sending a tenant notification without a hospital must fail.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame(
+                'A hospital context is required to send tenant notifications.',
+                $exception->getMessage(),
+            );
+        }
+
+        Http::assertNothingSent();
+        $this->assertDatabaseCount('notification_logs', 0);
+    }
+
+    public function test_messaging_with_a_deleted_hospital_context_fails_before_sending(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $hospital->delete();
+        app()->instance('currentHospital', $hospital);
+        config([
+            'whatsapp.phone_number_id' => 'test-phone-number-id',
+            'whatsapp.access_token' => 'test-access-token',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake();
+
+        try {
+            app(NotificationService::class)->sendWhatsApp('254748249882', 'Appointment update');
+            $this->fail('Sending with a deleted hospital context must fail.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame(
+                'A hospital context is required to send tenant notifications.',
+                $exception->getMessage(),
+            );
+        }
+
+        Http::assertNothingSent();
+        $this->assertDatabaseCount('notification_logs', 0);
     }
 
     public function test_live_whatsapp_delivery_can_be_verified_when_explicitly_enabled(): void

@@ -55,7 +55,7 @@ class MpesaCallbackIpAllowlistTest extends TestCase
         ]);
     }
 
-    public function test_allowlist_can_be_disabled_for_any_client_ip(): void
+    public function test_production_allowlist_cannot_be_disabled_for_an_untrusted_client_ip(): void
     {
         app()->detectEnvironment(static fn (): string => 'production');
         config([
@@ -67,8 +67,11 @@ class MpesaCallbackIpAllowlistTest extends TestCase
 
         $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.5'])
             ->postJson('/api/mpesa/callback', $this->callbackPayload('checkout-disabled'))
-            ->assertOk()
-            ->assertExactJson(['ResultCode' => 0, 'ResultDesc' => 'Accepted']);
+            ->assertForbidden()
+            ->assertExactJson([
+                'ResultCode' => 1,
+                'ResultDesc' => 'Unauthorized source',
+            ]);
     }
 
     public function test_testing_environment_bypasses_the_allowlist_by_default(): void

@@ -1,18 +1,23 @@
 const messagesEl = document.getElementById('messages');
+const formEl = document.getElementById('chatForm');
 const inputEl = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
 const typingEl = document.getElementById('typingIndicator');
 const resetBtn = document.getElementById('resetChat');
 const languageToggle = document.getElementById('languageToggle');
 const quickReplyButtons = document.querySelectorAll('.quick-reply');
-const welcomeEl = messagesEl.querySelector('[data-welcome-en]');
-const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+const welcomeEl = messagesEl ? messagesEl.querySelector('[data-welcome-en]') : null;
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 
 function updateLanguage() {
+    if (!languageToggle || !welcomeEl || !inputEl || !sendBtn || !resetBtn || !typingEl) {
+        return;
+    }
+
     const language = languageToggle.value === 'sw' ? 'sw' : 'en';
     const welcome = language === 'sw' ? welcomeEl.dataset.welcomeSw : welcomeEl.dataset.welcomeEn;
 
-    if (messagesEl.children.length === 1) {
+    if (messagesEl && messagesEl.children.length === 1) {
         welcomeEl.textContent = welcome;
     }
 
@@ -21,7 +26,8 @@ function updateLanguage() {
         : inputEl.dataset.placeholderEn;
     sendBtn.textContent = language === 'sw' ? 'Tuma' : 'Send';
     resetBtn.textContent = language === 'sw' ? 'Anza upya' : 'New Chat';
-    typingEl.querySelector('span').textContent = language === 'sw' ? 'Pearlie anafikiria' : 'Pearlie is thinking';
+    const typingLabel = typingEl.querySelector('span');
+    typingLabel.textContent = language === 'sw' ? typingLabel.dataset.labelSw : typingLabel.dataset.labelEn;
 
     quickReplyButtons.forEach((button) => {
         button.textContent = language === 'sw' ? button.dataset.labelSw : button.dataset.labelEn;
@@ -29,6 +35,10 @@ function updateLanguage() {
 }
 
 function appendMessage(text, type) {
+    if (!messagesEl) {
+        return;
+    }
+
     const div = document.createElement('div');
     div.className = `message ${type}`;
     div.innerText = text;
@@ -37,15 +47,49 @@ function appendMessage(text, type) {
 }
 
 function showTyping() {
+    if (!typingEl || !messagesEl) {
+        return;
+    }
+
     typingEl.style.display = 'flex';
     messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
 function hideTyping() {
-    typingEl.style.display = 'none';
+    if (typingEl) {
+        typingEl.style.display = 'none';
+    }
 }
 
-function resetChat() {
+async function resetChat() {
+    if (!messagesEl || !welcomeEl || !inputEl || !formEl) {
+        return;
+    }
+
+    try {
+        const resetUrl = formEl.dataset.resetUrl;
+        if (!resetUrl) {
+            throw new Error('Chat reset endpoint is missing.');
+        }
+
+        const response = await fetch(resetUrl, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': csrfToken,
+                Accept: 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('The chat session could not be reset.');
+        }
+    } catch (error) {
+        appendMessage('Could not start a new chat. Please try again.', 'ai');
+        console.error('Chat Reset Error:', error);
+
+        return;
+    }
+
     messagesEl.replaceChildren(welcomeEl);
     updateLanguage();
     inputEl.value = '';
@@ -53,7 +97,11 @@ function resetChat() {
 }
 
 async function sendMessage(suggestedMessage = null) {
-    const message = (suggestedMessage ?? inputEl.value).trim();
+    if (!inputEl || !sendBtn || !messagesEl || !formEl) {
+        return;
+    }
+
+    const message = (typeof suggestedMessage === 'string' ? suggestedMessage : inputEl.value).trim();
 
     if (!message) {
         return;
@@ -66,7 +114,12 @@ async function sendMessage(suggestedMessage = null) {
     showTyping();
 
     try {
-        const response = await fetch(messages.dataset.chatUrl || '/pearlie/chat', {
+        const chatUrl = formEl.dataset.chatUrl || messagesEl.dataset.chatUrl;
+        if (!chatUrl) {
+            throw new Error('Chat endpoint is missing.');
+        }
+
+        const response = await fetch(chatUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -95,22 +148,35 @@ async function sendMessage(suggestedMessage = null) {
     }
 }
 
-sendBtn.addEventListener('click', sendMessage);
-languageToggle.addEventListener('change', updateLanguage);
-quickReplyButtons.forEach((button) => {
-    button.addEventListener('click', () => {
-        sendMessage(languageToggle.value === 'sw' ? button.dataset.messageSw : button.dataset.messageEn);
-    });
-});
-resetBtn.addEventListener('click', (event) => {
-    event.preventDefault();
-    resetChat();
-});
-inputEl.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
+if (formEl) {
+    formEl.addEventListener('submit', (event) => {
         event.preventDefault();
         sendMessage();
-    }
+    });
+}
+if (inputEl) {
+    inputEl.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.isComposing) {
+            event.preventDefault();
+            sendMessage();
+        }
+    });
+}
+if (languageToggle) {
+    languageToggle.addEventListener('change', updateLanguage);
+}
+quickReplyButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+        sendMessage(languageToggle && languageToggle.value === 'sw' ? button.dataset.messageSw : button.dataset.messageEn);
+    });
 });
+if (resetBtn) {
+    resetBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        resetChat();
+    });
+}
 updateLanguage();
-inputEl.focus();
+if (inputEl) {
+    inputEl.focus();
+}

@@ -15,6 +15,7 @@ class HospitalManagementService
     public function create(array $attributes, int $inviterId): Hospital
     {
         $adminEmail = (string) $attributes['admin_email'];
+
         return DB::transaction(function () use ($attributes, $adminEmail, $inviterId): Hospital {
             $trialDays = (int) ($attributes['trial_days'] ?? 14);
             unset($attributes['trial_days'], $attributes['admin_email']);

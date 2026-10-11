@@ -4,15 +4,16 @@ namespace App\Mail;
 
 use App\Models\Escalation;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Contracts\Queue\ShouldQueue;
 
 class EscalationNotification extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
     public Escalation $escalation;
+
     public array $meta;
 
     public function __construct(Escalation $escalation, array $meta = [])

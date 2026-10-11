@@ -214,6 +214,7 @@ class MultiTenancyTest extends TestCase
 
         $this->get(route('tenant.chat.page', 'chat-alias'))
             ->assertOk()
+            ->assertSee('aria-label="Message the hospital assistant"', false)
             ->assertSee('data-chat-url="'.route('tenant.chat.post', 'chat-alias').'"', false)
             ->assertSee('data-reset-url="'.route('tenant.chat.reset', 'chat-alias').'"', false)
             ->assertSee('href="'.route('tenant.home', 'chat-alias').'"', false)
@@ -303,13 +304,15 @@ class MultiTenancyTest extends TestCase
         ]);
     }
 
-    public function test_tenant_chat_post_rejects_an_empty_message(): void
+    public function test_tenant_chat_post_returns_a_prompt_for_an_empty_message(): void
     {
         $hospital = $this->createHospital('chat-validation');
 
         $this->postJson(route('tenant.chat.post', $hospital->slug), ['message' => ''])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('message');
+            ->assertOk()
+            ->assertJsonPath('response', 'Please type a message so I can help.');
+
+        $this->assertDatabaseCount('conversations', 1);
     }
 
     public function test_tenant_specific_whatsapp_webhook_resolves_the_requested_hospital(): void

@@ -157,8 +157,7 @@ class DoctorDashboardTest extends TestCase
 
         $firstReply = $service->processMessage('Ninataka kuweka miadi', 'swahili-booking');
         $this->assertSame('booking_details', $firstReply['source']);
-        $this->assertStringContainsString('tarehe unayopendelea', $firstReply['response']);
-        $this->assertStringContainsString('huduma unayohitaji', $firstReply['response']);
+        $this->assertStringContainsString('jina lako kamili', mb_strtolower($firstReply['response']));
 
         $slotReply = $service->processMessage(
             'Jina langu ni Amina, namba yangu ni 0700000004, 2026-09-28, ninahitaji dental, amina@example.com',
@@ -168,8 +167,11 @@ class DoctorDashboardTest extends TestCase
         $this->assertStringContainsString('nafasi za miadi', mb_strtolower($slotReply['response']));
         $this->assertStringContainsString('09:00', $slotReply['response']);
 
-        $paymentReply = $service->processMessage('09:00', 'swahili-booking');
+        $confirmationReply = $service->processMessage('09:00', 'swahili-booking');
 
+        $this->assertSame('booking_confirmation', $confirmationReply['source']);
+        $this->assertStringContainsString('Jibu NDIYO', $confirmationReply['response']);
+        $paymentReply = $service->processMessage('NDIYO', 'swahili-booking');
         $this->assertSame('appointment_payment', $paymentReply['source']);
         $this->assertStringContainsString('Ombi lako la miadi', $paymentReply['response']);
         $this->assertDatabaseHas('appointment_requests', [
@@ -215,6 +217,10 @@ class DoctorDashboardTest extends TestCase
             'I would like to book an appointment on 2026-09-28 at 9:00 AM. My name is Jane Doe and my phone is 0700000003 for a consultation. jane@example.com',
             'booking-session',
         );
+
+        $this->assertSame('booking_confirmation', $result['source']);
+        $this->assertNull($result['appointment_id']);
+        $result = app(PearlieService::class)->processMessage('YES', 'booking-session');
 
         $this->assertSame('appointment_payment', $result['source']);
         $this->assertNotNull($result['appointment_id']);

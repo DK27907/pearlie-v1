@@ -104,6 +104,7 @@ class PaymentLifecycleService
     public function releaseSlot(AppointmentRequest $appointment): void
     {
         SlotHold::query()
+            ->where('hospital_id', $appointment->hospital_id)
             ->where('appointment_request_id', $appointment->id)
             ->delete();
     }

@@ -1,3 +1,33 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+    html {
+        font-size: 16px;
+    }
+
+    @media (min-width: 1920px) {
+        html {
+            font-size: 17px;
+        }
+    }
+
+    @media (min-width: 2560px) {
+        html {
+            font-size: 18px;
+        }
+    }
+
+    @media (min-width: 3840px) {
+        html {
+            font-size: 20px;
+        }
+    }
+}
+
+@layer utilities {
+    .max-shell {
+        @apply mx-auto max-w-screen-2xl px-4 sm:px-6 lg:px-8 2xl:max-w-[110rem];
+    }
+}

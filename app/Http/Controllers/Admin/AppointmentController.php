@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Exceptions\AppointmentLifecycleException;
 use App\Http\Controllers\Controller;
 use App\Models\AppointmentRequest;
+use App\Services\AppointmentLifecycleService;
 use App\Services\NoShowService;
 use App\Services\NotificationService;
 use Illuminate\Http\RedirectResponse;
@@ -60,14 +62,18 @@ class AppointmentController extends Controller
     public function confirm(int $id)
     {
         $appt = AppointmentRequest::findOrFail($id);
-        abort_unless(
-            $appt->status !== AppointmentRequest::STATUS_NO_SHOW,
-            422,
-            'A no-show appointment cannot be confirmed again.',
-        );
+        abort_unless(in_array($appt->status, [
+            AppointmentRequest::STATUS_PENDING,
+            AppointmentRequest::STATUS_CONFIRMED,
+            AppointmentRequest::STATUS_EXPIRED,
+        ], true), 422, 'This appointment cannot be confirmed again.');
         $wasConfirmed = $appt->status === AppointmentRequest::STATUS_CONFIRMED;
-        $appt->status = AppointmentRequest::STATUS_CONFIRMED;
-        $appt->save();
+        if (! $wasConfirmed) {
+            $appt->forceFill([
+                'status' => AppointmentRequest::STATUS_CONFIRMED,
+                'status_updated_at' => now(),
+            ])->save();
+        }
 
         $notified = $wasConfirmed || $this->notifyPatientOfConfirmation($appt);
 
@@ -83,6 +89,7 @@ class AppointmentController extends Controller
 
         return view('admin.appointments.show', [
             'appt' => $appt,
+            'doctors' => hospital()->doctors()->where('is_active', true)->orderBy('name')->get(),
             'repeatNoShowCount' => max(
                 0,
                 AppointmentRequest::getNoShowCount((string) $appt->phone) - ($appt->isNoShow() ? 1 : 0),
@@ -104,18 +111,43 @@ class AppointmentController extends Controller
             ->with('status', 'Appointment marked as a no-show.');
     }
 
-    public function updateStatus(Request $request, int $id)
-    {
-        $request->validate([
+    public function updateStatus(
+        Request $request,
+        int $id,
+        AppointmentLifecycleService $lifecycle,
+    ): RedirectResponse {
+        $validated = $request->validate([
             'status' => ['required', 'string', Rule::in(array_diff(
                 AppointmentRequest::statuses(),
                 [AppointmentRequest::STATUS_NO_SHOW],
             ))],
+            'reason' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $appt = AppointmentRequest::findOrFail($id);
+        if ($validated['status'] === AppointmentRequest::STATUS_CANCELLED) {
+            try {
+                $lifecycle->cancel(
+                    $appt->id,
+                    (int) $appt->hospital_id,
+                    $request->user(),
+                    staffOverride: true,
+                    reason: $validated['reason'] ?? 'Cancelled by hospital administrator',
+                );
+            } catch (AppointmentLifecycleException $exception) {
+                return back()->withErrors(['status' => $exception->getMessage()]);
+            }
+
+            return redirect()->route('admin.appointments.show', $appt->id)->with('status', 'Appointment cancelled by hospital staff.');
+        }
+        if ($appt->status === AppointmentRequest::STATUS_CANCELLED
+            && $validated['status'] !== AppointmentRequest::STATUS_CANCELLED
+        ) {
+            return back()->withErrors(['status' => 'Cancelled appointments cannot be reactivated.']);
+        }
+
         $wasConfirmed = $appt->status === AppointmentRequest::STATUS_CONFIRMED;
-        $appt->status = $request->input('status');
+        $appt->status = $validated['status'];
         $appt->save();
 
         $statusMessage = 'Appointment status updated.';

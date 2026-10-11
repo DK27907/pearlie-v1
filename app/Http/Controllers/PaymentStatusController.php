@@ -13,6 +13,13 @@ class PaymentStatusController extends Controller
             ->with('appointment:id,status,payment_status,paid_at')
             ->findOrFail($paymentId);
 
+        $tenantHospital = hospital();
+        abort_unless(
+            $tenantHospital !== null
+                && (int) $payment->hospital_id === (int) $tenantHospital->id,
+            404,
+        );
+
         return response()->json([
             'success' => true,
             'data' => [

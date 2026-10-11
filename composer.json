@@ -12,6 +12,7 @@
         "laravel/tinker": "^3.0",
         "maestroerror/laragent": "^1.4",
         "mozex/anthropic-laravel": "^1.8",
+        "resend/resend-laravel": "^1.6",
         "resend/resend-php": "^1.16",
         "spatie/laravel-permission": "^8.3",
         "symfony/http-client": "^8.1",

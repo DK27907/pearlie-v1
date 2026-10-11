@@ -6,6 +6,6 @@ return [
     'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
     'app_secret' => env('WHATSAPP_APP_SECRET'),
     'business_account_id' => env('WHATSAPP_BUSINESS_ACCOUNT_ID'),
-    'api_version' => env('WHATSAPP_VERSION', 'v18.0'),
+    'api_version' => env('WHATSAPP_API_VERSION', env('WHATSAPP_VERSION', 'v20.0')),
     'base_url' => 'https://graph.facebook.com',
 ];

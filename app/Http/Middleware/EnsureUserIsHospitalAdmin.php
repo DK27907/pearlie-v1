@@ -15,7 +15,7 @@ class EnsureUserIsHospitalAdmin
             && $request->hasSession()
             && $request->session()->has('impersonating_hospital_id');
         abort_unless(
-            $user && ($isImpersonating || (! $user->isSuperAdmin() && $user->isAdmin())),
+            $user && $user->is_active && ($isImpersonating || (! $user->isSuperAdmin() && $user->isAdmin())),
             403,
             'Hospital administrator access required.',
         );
@@ -23,8 +23,7 @@ class EnsureUserIsHospitalAdmin
         abort_if(
             ! $isImpersonating
                 && (! hospital() || (int) $user->hospital_id !== (int) hospital()->id),
-            403,
-            'You cannot access another hospital.',
+            404,
         );
 
         return $next($request);

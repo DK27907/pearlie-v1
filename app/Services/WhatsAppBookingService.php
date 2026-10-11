@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\AppointmentRequest;
 use App\Models\Conversation;
+use App\Models\Service;
+use App\Support\DateParser;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -38,6 +40,7 @@ class WhatsAppBookingService
         if (! $appointment) {
             $appointment = AppointmentRequest::create([
                 'session_id' => $sessionId,
+                'patient_id' => auth()->user()?->role === 'patient' ? auth()->id() : null,
                 'phone' => $phone,
                 'mpesa_phone' => $phone,
                 'booking_fee' => pearlie_config('appointment.deposit_amount'),
@@ -50,6 +53,7 @@ class WhatsAppBookingService
         }
 
         $this->extractDetails($appointment, $message);
+        $this->selectService($appointment, $message);
         $appointment->save();
 
         $missing = $this->missingDetails($appointment);
@@ -78,13 +82,23 @@ class WhatsAppBookingService
             return $this->recordResponse($sessionId, $message, $response, $appointment->id);
         }
 
+        $amount = (float) ($appointment->payment_amount ?? $appointment->booking_fee);
+        if ($amount <= 0) {
+            $this->storeState($phone, $appointment->id, 'done', $language);
+            $response = $language === 'sw'
+                ? 'Ombi lako la miadi limepokelewa. Hakuna malipo ya M-Pesa yanayohitajika kwa huduma hii.'
+                : 'Your appointment request has been received. No M-Pesa payment is required for this service.';
+
+            return $this->recordResponse($sessionId, $message, $response, $appointment->id);
+        }
+
         try {
             $this->storeState($phone, $appointment->id, 'processing_payment', $language);
             $this->mpesa->initiateStkPush($appointment);
             $this->storeState($phone, $appointment->id, 'await_payment', $language);
             $response = $language === 'sw'
-                ? 'Asante '.$appointment->name.'. Tumetuma ombi la M-Pesa kwa '.$appointment->mpesa_phone.' la KSh '.$appointment->booking_fee.'. Weka PIN yako; miadi itathibitishwa baada ya malipo kuthibitishwa.'
-                : 'Thanks '.$appointment->name.'. We sent an M-Pesa prompt to '.$appointment->mpesa_phone.' for KSh '.$appointment->booking_fee.'. Enter your PIN; your appointment is confirmed only after Safaricom verifies payment.';
+                ? 'Asante '.$appointment->name.'. Tumetuma ombi la M-Pesa kwa '.$appointment->mpesa_phone.' la KSh '.number_format($amount, 2).'. Weka PIN yako; miadi itathibitishwa baada ya malipo kuthibitishwa.'
+                : 'Thanks '.$appointment->name.'. We sent an M-Pesa prompt to '.$appointment->mpesa_phone.' for KSh '.number_format($amount, 2).'. Enter your PIN; your appointment is confirmed only after Safaricom verifies payment.';
         } catch (\Throwable $e) {
             Log::error('Unable to initiate WhatsApp booking payment.', [
                 'appointment_id' => $appointment->id,
@@ -134,9 +148,15 @@ class WhatsAppBookingService
             throw new RuntimeException('This appointment is not eligible for a new payment request.');
         }
 
+        if ($appointment->service_id !== null) {
+            $service = $appointment->hospital->services()->active()->findOrFail($appointment->service_id);
+            $amount = (float) $service->price;
+        }
+
         $appointment->update([
             'mpesa_phone' => $normalizedPhone,
-            'booking_fee' => $amount,
+            'booking_fee' => (int) round($amount),
+            'payment_amount' => $amount,
         ]);
         $state = Cache::get($this->stateCacheKey($normalizedPhone));
         $language = is_array($state)
@@ -203,15 +223,7 @@ class WhatsAppBookingService
         }
 
         if (! $appointment->preferred_date) {
-            if (preg_match('/\b(\d{4}-\d{2}-\d{2})\b/', $detailsMessage, $match)) {
-                $appointment->preferred_date = $match[1];
-            } elseif (preg_match('/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/', $detailsMessage, $match)) {
-                $appointment->preferred_date = sprintf('%04d-%02d-%02d', $match[3], $match[2], $match[1]);
-            } elseif (str_contains($lower, 'tomorrow') || str_contains($lower, 'kesho')) {
-                $appointment->preferred_date = now()->addDay()->toDateString();
-            } elseif (str_contains($lower, 'today') || str_contains($lower, 'leo')) {
-                $appointment->preferred_date = now()->toDateString();
-            }
+            $appointment->preferred_date = DateParser::parse($detailsMessage)?->toDateString();
         }
 
         if (! $appointment->reason && preg_match('/(?:reason is|for|because|sababu ni|ninahitaji|kwa ajili ya)\s+(.+)/iu', $detailsMessage, $match)) {
@@ -233,6 +245,32 @@ class WhatsAppBookingService
         ) {
             $appointment->reason = $detailsMessage;
         }
+    }
+
+    private function selectService(AppointmentRequest $appointment, string $message): void
+    {
+        if ($appointment->mpesa_checkout_request_id) {
+            return;
+        }
+
+        $service = $appointment->hospital
+            ->services()
+            ->active()
+            ->get()
+            ->first(fn (Service $candidate): bool => preg_match(
+                '/(?<![\pL\pN])'.preg_quote($candidate->name, '/').'(?![\pL\pN])/iu',
+                $message,
+            ) === 1);
+
+        if (! $service) {
+            return;
+        }
+
+        $appointment->forceFill([
+            'service_id' => $service->id,
+            'booking_fee' => (int) round((float) $service->price),
+            'payment_amount' => (float) $service->price,
+        ]);
     }
 
     private function missingDetails(AppointmentRequest $appointment): array
@@ -312,7 +350,7 @@ class WhatsAppBookingService
 
     private function isDateOnly(string $message): bool
     {
-        return (bool) preg_match('/^\s*(today|tomorrow|leo|kesho|\d{4}-\d{2}-\d{2}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s*[.!]?\s*$/iu', $message);
+        return DateParser::parse($message) !== null;
     }
 
     private function stateForMissingDetails(array $missing): string

@@ -112,7 +112,7 @@
         @if ($escalation->status === 'in_progress' && ($isAdmin || $isAssignedWorker))
             <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h2 class="text-lg font-bold text-slate-900">Reply to patient</h2>
-                <p class="mt-1 text-sm text-slate-500">The reply is sent through the selected channel to the patient’s saved phone.</p>
+                <p class="mt-1 text-sm text-slate-500">The reply is queued for delivery through the selected channel to the patient’s saved phone.</p>
                 <form method="POST" action="{{ route($queueRoutePrefix.'.escalations.reply', $escalation->id) }}" class="mt-4 space-y-4">
                     @csrf
                     <label class="block text-sm font-medium text-slate-700" for="reply-channel">Delivery channel</label>
@@ -126,6 +126,32 @@
                 </form>
             </section>
         @endif
+
+        <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 class="text-lg font-bold text-slate-900">Reply delivery history</h2>
+            <div class="mt-4 space-y-3">
+                @forelse ($replies as $reply)
+                    <article class="rounded-xl border border-slate-100 p-4">
+                        <p class="whitespace-pre-wrap text-sm text-slate-800">{{ $reply->message }}</p>
+                        <p class="mt-2 text-xs text-slate-500">
+                            {{ ucfirst($reply->channel) }} · {{ str_replace('_', ' ', $reply->status) }} ·
+                            {{ $reply->attempts }} attempts · {{ $reply->created_at?->format('M j, g:i A') }}
+                            @if ($reply->last_error)
+                                · {{ $reply->last_error }}
+                            @endif
+                        </p>
+                        @if ($queueRoutePrefix === 'admin' && $reply->status === 'failed')
+                            <form method="POST" action="{{ route('admin.escalation-replies.retry', $reply->id) }}" class="mt-3">
+                                @csrf
+                                <button type="submit" class="rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50">Retry delivery</button>
+                            </form>
+                        @endif
+                    </article>
+                @empty
+                    <p class="text-sm text-slate-500">No patient replies have been sent from this escalation.</p>
+                @endforelse
+            </div>
+        </section>
 
         <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div class="flex items-center justify-between gap-3">

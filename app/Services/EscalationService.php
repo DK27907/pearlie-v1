@@ -2,9 +2,11 @@
 
 namespace App\Services;
 
+use App\Jobs\SendEscalationReply;
 use App\Models\AppointmentRequest;
 use App\Models\Conversation;
 use App\Models\Escalation;
+use App\Models\EscalationReply;
 use App\Models\User;
 use App\Notifications\EscalationPatientMessage;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -87,7 +89,7 @@ class EscalationService
         } catch (Throwable $exception) {
             Log::error('Unable to create or rate-limit an escalation.', [
                 'session_id' => $sessionId,
-                'exception' => $exception,
+                'exception_class' => $exception::class,
             ]);
 
             throw $exception;
@@ -144,7 +146,7 @@ class EscalationService
                 Log::error('Unable to notify the assigned worker of a patient reply.', [
                     'escalation_id' => $escalation->id,
                     'worker_id' => $escalation->assigned_worker_id,
-                    'exception' => $exception,
+                    'exception_class' => $exception::class,
                 ]);
             }
         }
@@ -257,7 +259,7 @@ class EscalationService
         ])->save();
     }
 
-    public function reply(Escalation $escalation, User $worker, string $message, string $channel): void
+    public function reply(Escalation $escalation, User $worker, string $message, string $channel): EscalationReply
     {
         if (! $worker->isAdmin() && $escalation->assigned_worker_id !== $worker->id) {
             throw new AuthorizationException;
@@ -268,36 +270,18 @@ class EscalationService
             throw new RuntimeException('No patient phone number is available for this conversation.');
         }
 
-        $botName = hospital()?->chatbotName() ?? 'Assistant';
-        $body = sprintf('%s escalation #%d — %s', $botName, $escalation->id, $message);
+        $reply = EscalationReply::query()->create([
+            'hospital_id' => $escalation->hospital_id,
+            'escalation_id' => $escalation->id,
+            'worker_id' => $worker->id,
+            'channel' => $channel,
+            'message' => $message,
+            'status' => EscalationReply::STATUS_PENDING,
+        ]);
 
-        try {
-            $sent = $channel === 'whatsapp'
-                ? $this->whatsApp->sendMessage($phone, $body)['success']
-                : $this->notificationService->sendSms($phone, $body);
+        SendEscalationReply::dispatch($reply->id, (int) $reply->hospital_id)->afterCommit();
 
-            if (! $sent) {
-                throw new RuntimeException('The selected patient messaging channel did not accept the reply.');
-            }
-
-            Conversation::query()->create([
-                'session_id' => $escalation->session_id,
-                'user_message' => '',
-                'ai_response' => $body,
-                'confidence_score' => null,
-                'channel' => 'human',
-                'escalated' => true,
-            ]);
-        } catch (Throwable $exception) {
-            Log::error('Unable to send a health-worker reply to the patient.', [
-                'escalation_id' => $escalation->id,
-                'worker_id' => $worker->id,
-                'channel' => $channel,
-                'exception' => $exception,
-            ]);
-
-            throw $exception;
-        }
+        return $reply->fresh();
     }
 
     public function conversation(Escalation $escalation): array
@@ -341,7 +325,7 @@ class EscalationService
         } catch (Throwable $exception) {
             Log::error('Unable to notify patient by WhatsApp after an escalation was claimed.', [
                 'escalation_id' => $escalation->id,
-                'exception' => $exception,
+                'exception_class' => $exception::class,
             ]);
         }
 
@@ -352,7 +336,7 @@ class EscalationService
         } catch (Throwable $exception) {
             Log::error('Unable to notify patient by SMS after an escalation was claimed.', [
                 'escalation_id' => $escalation->id,
-                'exception' => $exception,
+                'exception_class' => $exception::class,
             ]);
         }
 

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class AppointmentRequest extends Model
@@ -27,6 +28,7 @@ class AppointmentRequest extends Model
 
     protected $fillable = [
         'session_id',
+        'patient_id',
         'name',
         'phone',
         'email',
@@ -52,6 +54,10 @@ class AppointmentRequest extends Model
         'marked_no_show_at',
         'no_show_reason',
         'service_id',
+        'cancelled_at',
+        'cancelled_by_id',
+        'cancellation_reason',
+        'forfeited_amount',
     ];
 
     protected $casts = [
@@ -63,6 +69,8 @@ class AppointmentRequest extends Model
         'status_updated_at' => 'datetime',
         'confirmed_by_doctor_at' => 'datetime',
         'marked_no_show_at' => 'datetime',
+        'cancelled_at' => 'datetime',
+        'forfeited_amount' => 'decimal:2',
     ];
 
     public function mpesaPayment(): HasOne
@@ -75,9 +83,21 @@ class AppointmentRequest extends Model
         return $this->belongsTo(User::class, 'doctor_id');
     }
 
+    public function patient(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'patient_id');
+    }
+
     public function service(): BelongsTo
     {
         return $this->belongsTo(Service::class);
+    }
+
+    public function histories(): HasMany
+    {
+        return $this->hasMany(AppointmentHistory::class, 'appointment_request_id')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
     }
 
     public static function statuses(): array

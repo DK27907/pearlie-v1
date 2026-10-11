@@ -6,7 +6,9 @@ use App\Http\Middleware\ApplyHospitalMailSettings;
 use App\Models\Hospital;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Throwable;
 
 class HospitalMailService
 {
@@ -19,10 +21,21 @@ class HospitalMailService
             $this->attachHospitalMiddleware($mailable, $hospital);
         }
 
-        return $this->withMailConfig(
-            fn (): mixed => Mail::to($recipient)->send($mailable),
-            $credentials,
-        );
+        $provider = (string) ($credentials['mailer'] ?? config('mail.default'));
+
+        return $this->withMailConfig(function () use ($recipient, $mailable, $provider): mixed {
+            try {
+                $result = Mail::to($recipient)->send($mailable);
+                app(ExternalProviderLogger::class)->record($provider, 'email_send', 'sent');
+
+                return $result;
+            } catch (Throwable $exception) {
+                app(ExternalProviderLogger::class)->record($provider, 'email_send', 'failed', null, null, $exception);
+                Log::error('Email provider delivery failed.', ['exception_class' => $exception::class]);
+
+                throw $exception;
+            }
+        }, $credentials);
     }
 
     public function queue(string $recipient, Mailable $mailable): mixed
@@ -33,10 +46,21 @@ class HospitalMailService
             $this->attachHospitalMiddleware($mailable, $hospital);
         }
 
-        return $this->withMailConfig(
-            fn (): mixed => Mail::to($recipient)->queue($mailable),
-            $credentials,
-        );
+        $provider = (string) ($credentials['mailer'] ?? config('mail.default'));
+
+        return $this->withMailConfig(function () use ($recipient, $mailable, $provider): mixed {
+            try {
+                $result = Mail::to($recipient)->queue($mailable);
+                app(ExternalProviderLogger::class)->record($provider, 'email_queue', 'queued');
+
+                return $result;
+            } catch (Throwable $exception) {
+                app(ExternalProviderLogger::class)->record($provider, 'email_queue', 'failed', null, null, $exception);
+                Log::error('Email provider queueing failed.', ['exception_class' => $exception::class]);
+
+                throw $exception;
+            }
+        }, $credentials);
     }
 
     /**

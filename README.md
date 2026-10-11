@@ -36,10 +36,11 @@ Local `php artisan db:seed` creates Pearl Hospital, Demo Hospital, and AxiomForg
 | Role | Email |
 | --- | --- |
 | Platform super-admin | `super@axiomforge.co.ke` |
-| Pearl Hospital admin | `admin@pearlhospital.co.ke` |
-| Demo Hospital admin | `admin@demohospital.co.ke` |
-| Pearl doctors | `doctor1@pearlhospital.co.ke`, `doctor2@pearlhospital.co.ke` |
+| Pearl Hospital admin | `admin+pearl@example.test` (or the configured `ADMIN_EMAIL`) |
+| Demo Hospital admin | `admin+demo@example.test` |
+| Pearl doctors | `doctor1@pearl.test`, `doctor2@pearl.test` |
 | Demo Hospital doctors | `doctor1@demohospital.co.ke`, `doctor2@demohospital.co.ke` |
+| Pearl patient | `patient@pearl.test` |
 
 These credentials are for local development only. Configure `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_PASSWORD` before provisioning a production platform administrator. Production seeding does not create demo tenants or sample users. Never reuse development passwords.
 
@@ -61,12 +62,25 @@ Set `PEARLIE_ESCALATION_PHONE`, `PEARLIE_ESCALATION_WHATSAPP`, and `PEARLIE_ESCA
 
 ## Integrations and setup
 
-- Set `GROQ_API_KEY` to enable Groq-backed chat. The assistant can also answer from the local knowledge base.
-- **WhatsApp setup:** Create/configure a Meta Business app with the WhatsApp product, add a WhatsApp Business phone number, and set each hospital's `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_ACCOUNT_ID`, and `WHATSAPP_ACCESS_TOKEN`. Choose a private random verify token and configure the Meta app secret; incoming messages without a valid HMAC signature are rejected. Set `WHATSAPP_VERSION` if required by your Meta app. Register `https://<your-host>/api/whatsapp/webhook/<hospital-slug>` as the callback URL in Meta, enter that hospital's verify token, and subscribe the app to the `messages` webhook field. Keep the access token, verify token, and app secret in the deployment secret store.
-- Configure each hospital's Daraja credentials (`MPESA_CONSUMER_KEY`, `MPESA_CONSUMER_SECRET`, `MPESA_PASSKEY`, and `MPESA_SHORTCODE`) and set `MPESA_CALLBACK_URL` to the reachable public callback base. The tenant callback is routed at `/api/mpesa/callback/<hospital-slug>`; successful callbacks are verified with Daraja's STK query API before an appointment is marked paid.
+- **Groq AI:** Obtain `GROQ_API_KEY` from [console.groq.com](https://console.groq.com/) and set it with `GROQ_MODEL` as needed. The assistant can also answer from the local knowledge base.
+- **M-Pesa Daraja:** Obtain `MPESA_CONSUMER_KEY`, `MPESA_CONSUMER_SECRET`, and `MPESA_PASSKEY` from the Safaricom Daraja portal. Configure `MPESA_SHORTCODE`, `MPESA_ENVIRONMENT`, and `MPESA_CALLBACK_URL` as well. These global values are the fallback for hospitals; each hospital can instead configure its encrypted credentials in onboarding. The tenant callback is routed at `/api/mpesa/callback/<hospital-slug>`; callbacks are verified with Daraja's STK query API except when local sandbox verification is explicitly enabled.
+- **WhatsApp Business:** Create/configure a Meta Business app with the WhatsApp product and add a WhatsApp Business phone number. Set `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`, and `WHATSAPP_VERIFY_TOKEN`; `WHATSAPP_BUSINESS_ACCOUNT_ID` and `WHATSAPP_VERSION` are also supported. Obtain these values from the Meta Business app settings. Register `https://<your-host>/api/whatsapp/webhook/<hospital-slug>` as the callback URL, enter that hospital's verify token, and subscribe the app to the `messages` webhook field. Keep all tokens and app secrets in the deployment secret store.
+- **SMS:** Configure either Africa's Talking (`AFRICASTALKING_USERNAME`, `AFRICASTALKING_API_KEY`, and optional `AFRICASTALKING_FROM`) or Twilio. Twilio supports `TWILIO_ACCOUNT_SID` plus `TWILIO_TOKEN` (legacy account SID/token names are also supported), or `TWILIO_API_KEY` plus `TWILIO_API_SECRET`; set `TWILIO_FROM_NUMBER` (or the supported legacy `TWILIO_FROM`) for the sender.
+- **Mail:** Select a delivery provider with `MAIL_MAILER`. Resend uses `RESEND_API_KEY`; Mailgun uses `MAILGUN_DOMAIN` and `MAILGUN_SECRET`; SMTP uses `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, and `MAIL_ENCRYPTION`. Also configure `MAIL_FROM_ADDRESS` and `MAIL_FROM_NAME` for the sending identity. Obtain credentials from the selected provider. Local development defaults to `MAIL_MAILER=log`, which does not deliver external email.
+- `.env.example` documents the supported variables with empty values; supply real credentials through the deployment secret store, never in source control. Application startup logs a warning for missing integration credentials without logging their values.
 - WhatsApp and web appointment bookings collect a patient email address so no-show notices can also be sent by email. Email is stored on the appointment request.
 - `php artisan db:seed --class=DoctorUserSeeder` creates the local Pearl and Demo Hospital doctor accounts. The seeder refuses to run in production.
 - `php artisan db:seed --class=AdminUserSeeder` provisions local hospital administrator accounts. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` for production provisioning; production requires an explicit password.
+
+## M-Pesa Sandbox Testing
+
+Safaricom's sandbox does not send real callbacks. To test M-Pesa end-to-end locally:
+
+1. Set `MPESA_SKIP_VERIFY_LOCAL=true` in `.env`.
+2. Ensure `APP_ENV=local`.
+3. Run `php artisan mpesa:simulate-callback ws_CO_XXXXX --receipt=TEST123`.
+
+The command simulates a callback for an existing sandbox payment and bypasses STK Query verification only when both the M-Pesa environment is sandbox and the application environment is local. In production, set `MPESA_SKIP_VERIFY_LOCAL=false`; real callbacks will be verified.
 
 ## Mail setup
 
