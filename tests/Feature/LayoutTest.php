@@ -94,6 +94,34 @@ class LayoutTest extends TestCase
             ->assertSee('Powered by MediDesk AI');
     }
 
+    public function test_tenant_footer_does_not_fall_back_to_another_hospitals_contacts(): void
+    {
+        config([
+            'pearlie.hospital.appointment_phone' => '0700111222',
+            'pearlie.hospital.emergency_phone' => '0700333444',
+            'pearlie.hospital.email' => 'pearl-config@example.test',
+            'pearlie.hospital.website' => 'https://pearl-config.example.test',
+        ]);
+
+        $tenant = Hospital::factory()->create([
+            'name' => 'Verification Medical Center',
+            'slug' => 'verify-medical',
+            'phone' => null,
+            'emergency_phone' => null,
+            'email' => null,
+            'website' => null,
+        ]);
+        app()->instance('currentHospital', $tenant);
+
+        $footer = view('components.site-footer')->render();
+
+        $this->assertStringContainsString($tenant->name, $footer);
+        $this->assertStringNotContainsString('0700111222', $footer);
+        $this->assertStringNotContainsString('0700333444', $footer);
+        $this->assertStringNotContainsString('pearl-config@example.test', $footer);
+        $this->assertStringNotContainsString('pearl-config.example.test', $footer);
+    }
+
     public function test_header_shows_admin_link_for_admin(): void
     {
         $admin = User::factory()->create([

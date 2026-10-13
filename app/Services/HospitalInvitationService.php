@@ -20,6 +20,14 @@ class HospitalInvitationService
 
     public function send(Hospital $hospital, string $email, int $inviterId): Invite
     {
+        $invite = $this->create($hospital, $email, $inviterId);
+        $this->deliver($hospital, $invite);
+
+        return $invite;
+    }
+
+    public function create(Hospital $hospital, string $email, int $inviterId): Invite
+    {
         $user = User::withoutGlobalScopes()->where('email', $email)->first();
         if ($user && (
             (int) $user->hospital_id !== (int) $hospital->id
@@ -57,6 +65,11 @@ class HospitalInvitationService
             'expires_at' => now()->addDays(7),
         ]);
 
+        return $invite;
+    }
+
+    public function deliver(Hospital $hospital, Invite $invite): void
+    {
         try {
             $url = URL::temporarySignedRoute(
                 'hospital.invitation.setup',
@@ -74,7 +87,5 @@ class HospitalInvitationService
 
             throw $exception;
         }
-
-        return $invite;
     }
 }

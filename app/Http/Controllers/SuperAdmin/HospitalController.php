@@ -76,10 +76,12 @@ class HospitalController extends Controller
 
         $data['slug'] = Str::slug($data['slug']);
         $this->removeBlankSecrets($data);
-        $hospital = $hospitals->create($data, (int) $request->user()->id);
+        $result = $hospitals->create($data, (int) $request->user()->id);
 
-        return redirect()->route('superadmin.hospitals.show', $hospital)
-            ->with('status', 'Hospital created. Its administrator invitation has been sent.');
+        return redirect()->route('superadmin.hospitals.show', $result['hospital'])
+            ->with('status', $result['invitation_sent']
+                ? 'Hospital created. Its administrator invitation has been sent.'
+                : 'Hospital created, but the administrator invitation could not be delivered. Check email settings and resend the invitation.');
     }
 
     public function show(Hospital $hospital): View

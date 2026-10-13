@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\Hospital;
 use App\Models\User;
+use App\Services\HospitalMailService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\TestCase;
 
 class SuperAdminLifecycleTest extends TestCase
@@ -97,6 +99,10 @@ class SuperAdminLifecycleTest extends TestCase
 
         $hospital = Hospital::query()->where('slug', 'test-clinic')->firstOrFail();
         $this->assertSame('Test Clinic', $hospital->name);
+        $this->assertSame(
+            $hospital->id,
+            User::withoutGlobalScopes()->where('email', 'admin@test-clinic.example')->value('hospital_id'),
+        );
 
         $this->post(route('logout'));
 
@@ -122,5 +128,49 @@ class SuperAdminLifecycleTest extends TestCase
             ->assertDontSee('Test Clinic')
             ->assertDontSee('42 Clinic Road')
             ->assertDontSee('0700111222');
+    }
+
+    public function test_super_admin_creation_preserves_the_tenant_and_reports_invitation_delivery_failure(): void
+    {
+        $pearl = Hospital::query()->where('slug', 'pearl')->firstOrFail();
+        $superAdmin = User::factory()->create([
+            'hospital_id' => $pearl->id,
+            'role' => 'super_admin',
+            'is_super_admin' => true,
+        ]);
+        $this->mock(HospitalMailService::class)
+            ->shouldReceive('send')
+            ->once()
+            ->andThrow(new TransportException('Mail transport unavailable.'));
+
+        $response = $this->actingAs($superAdmin)->post(route('superadmin.hospitals.store'), [
+            'name' => 'Delivery Failure Hospital',
+            'slug' => 'delivery-failure-hospital',
+            'deposit_amount' => 500,
+            'slot_duration_minutes' => 30,
+            'no_show_grace_minutes' => 30,
+            'hours_emergency' => '24/7',
+            'hours_outpatient' => '9:00 AM - 5:00 PM',
+            'default_language' => 'en',
+            'supported_languages' => ['en'],
+            'subscription_plan' => 'starter',
+            'trial_days' => 14,
+            'admin_email' => 'admin@delivery-failure.example',
+        ]);
+
+        $hospital = Hospital::query()->where('slug', 'delivery-failure-hospital')->firstOrFail();
+
+        $response->assertRedirect(route('superadmin.hospitals.show', $hospital))
+            ->assertSessionHas(
+                'status',
+                'Hospital created, but the administrator invitation could not be delivered. Check email settings and resend the invitation.',
+            );
+        $this->assertSame(
+            $hospital->id,
+            User::withoutGlobalScopes()->where('email', 'admin@delivery-failure.example')->value('hospital_id'),
+        );
+        $this->assertDatabaseMissing('invites', [
+            'email' => 'admin@delivery-failure.example',
+        ]);
     }
 }

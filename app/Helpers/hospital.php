@@ -25,8 +25,11 @@ if (! function_exists('pearlie_config')) {
                 'appointment_phone' => 'phone',
                 default => $field,
             };
-            $value = $hospital->getAttribute($field);
-        } elseif ($hospital && $key === 'appointment.deposit_amount') {
+
+            return $hospital->getAttribute($field) ?? $default;
+        }
+
+        if ($hospital && $key === 'appointment.deposit_amount') {
             $value = $hospital->deposit_amount;
         } elseif ($hospital && $key === 'appointment.slot_duration_minutes') {
             $value = $hospital->slot_duration_minutes;

@@ -3,8 +3,10 @@
 namespace App\Http\Middleware;
 
 use App\Models\Hospital;
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -20,7 +22,7 @@ class ResolveHospital
             return $next($request);
         }
 
-        $user = $request->user();
+        $user = $this->authenticatedUser($request);
         $hospital = null;
 
         $impersonating = false;
@@ -113,6 +115,31 @@ class ResolveHospital
         }
 
         return null;
+    }
+
+    private function authenticatedUser(Request $request): ?User
+    {
+        $user = $request->user();
+        if ($user instanceof User) {
+            return $user;
+        }
+
+        if ($user !== null || ! $request->hasSession()) {
+            return null;
+        }
+
+        $guard = Auth::guard('web');
+        $userId = $request->session()->get($guard->getName());
+        if (! is_int($userId) && (! is_string($userId) || ! ctype_digit($userId))) {
+            return null;
+        }
+
+        $user = User::withoutGlobalScope('hospital')->find($userId);
+        if ($user) {
+            $guard->setUser($user);
+        }
+
+        return $user;
     }
 
     private function isAuthenticationRoute(Request $request): bool

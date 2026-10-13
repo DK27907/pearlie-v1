@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use App\Models\Hospital;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -171,6 +172,34 @@ class AuthenticationTest extends TestCase
         ])->assertRedirect(route('admin.dashboard'));
 
         $this->assertAuthenticatedAs($admin);
+    }
+
+    public function test_tenant_admin_session_survives_a_fresh_request_with_stale_hospital_context(): void
+    {
+        $pearl = Hospital::query()->where('slug', 'pearl')->firstOrFail();
+        $hospital = Hospital::query()->create([
+            'name' => 'Verification Clinic',
+            'slug' => 'verification-session-clinic',
+            'subscription_plan' => 'enterprise',
+            'subscription_status' => 'active',
+        ]);
+        $admin = User::factory()->create([
+            'hospital_id' => $hospital->id,
+            'is_admin' => true,
+            'role' => 'hospital_admin',
+        ]);
+
+        $this->post('/login', [
+            'email' => $admin->email,
+            'password' => 'password',
+        ])->assertRedirect(route('admin.dashboard'));
+
+        Auth::forgetGuards();
+        app()->instance('currentHospital', $pearl);
+
+        $this->get(route('admin.dashboard'))
+            ->assertOk()
+            ->assertSee('Admin dashboard');
     }
 
     public function test_super_admin_login_redirects_to_the_platform_dashboard(): void
