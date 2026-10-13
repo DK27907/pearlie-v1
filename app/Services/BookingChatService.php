@@ -2626,6 +2626,15 @@ class BookingChatService
     {
         $service = $this->serviceById((int) $state['service_id'], $hospital);
         $doctor = $this->eligibleDoctors($hospital, $service)->firstWhere('id', (int) $state['doctor_id']);
+        $paymentAmount = (float) ($service->price ?? 0);
+        $paymentAmountSummary = $hospital->hasFeature('mpesa') && $paymentAmount > 0
+            ? sprintf(
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? ' Kiasi cha M-Pesa ni KSh %s.'
+                    : ' M-Pesa amount: KSh %s.',
+                number_format($paymentAmount, 2, '.', ','),
+            )
+            : '';
         $date = $state['language'] === self::LANGUAGE_SWAHILI
             ? CarbonImmutable::parse((string) $state['date'])->format('d/m/Y')
             : CarbonImmutable::parse((string) $state['date'])->toFormattedDateString();
@@ -2639,7 +2648,7 @@ class BookingChatService
                 $state['time'],
                 $state['patient_name'],
                 $state['patient_phone'],
-            )
+            ).$paymentAmountSummary
             : sprintf(
                 'Please confirm: %s with %s on %s at %s for %s, phone %s.',
                 $service->name,
@@ -2648,7 +2657,7 @@ class BookingChatService
                 $state['time'],
                 $state['patient_name'],
                 $state['patient_phone'],
-            );
+            ).$paymentAmountSummary;
     }
 
     private function serviceById(int $serviceId, Hospital $hospital): Service

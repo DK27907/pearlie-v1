@@ -1051,11 +1051,14 @@ class BookingChatServiceTest extends TestCase
         [$hospital] = $this->createContext(price: 1, mpesaEnabled: true);
         $this->configureMpesaFakes();
         $chat = app(BookingChatService::class);
-        $chat->handle(
+        $summary = $chat->handle(
             'state-confirm-yes',
             'Book Dental Cleaning with Dr. Amina Njeri tomorrow at 9am. My name is Test Patient, phone 254748249882, email patient@test.com.',
             'web',
         );
+
+        $this->assertSame('CONFIRMING', $summary->state);
+        $this->assertStringContainsString('M-Pesa amount: KSh 1.00', $summary->message);
 
         $response = $chat->handle('state-confirm-yes', 'yes', 'web');
 
@@ -1733,7 +1736,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame('appointment_status', $response->source);
     }
 
-    public function test_chat_never_shows_prices_in_the_booking_confirmation(): void
+    public function test_chat_omits_the_price_when_mpesa_is_disabled(): void
     {
         $this->createContext(price: 1500);
         $chat = app(BookingChatService::class);
