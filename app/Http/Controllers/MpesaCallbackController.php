@@ -32,8 +32,9 @@ class MpesaCallbackController extends Controller
                         return response()->json(['status' => 'already_processed']);
                     }
 
-                    $this->mpesa->handleCallback($payload);
-                    Cache::put($idempotencyKey, true, now()->addHours(24));
+                    if ($this->mpesa->handleCallback($payload) !== null) {
+                        Cache::put($idempotencyKey, true, now()->addHours(24));
+                    }
 
                     return response()->json([
                         'ResultCode' => 0,

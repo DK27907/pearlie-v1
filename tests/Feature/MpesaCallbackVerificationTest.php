@@ -8,6 +8,7 @@ use App\Models\Hospital;
 use App\Models\MpesaPayment;
 use App\Services\MpesaService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
@@ -169,6 +170,7 @@ class MpesaCallbackVerificationTest extends TestCase
 
     public function test_callback_for_unknown_checkout_id_is_logged(): void
     {
+        Http::preventStrayRequests();
         Log::shouldReceive('debug')->zeroOrMoreTimes();
         Log::shouldReceive('info')
             ->once()
@@ -177,12 +179,6 @@ class MpesaCallbackVerificationTest extends TestCase
                     && $context['result_code'] === 0
                     && ! array_key_exists('payload', $context),
             ));
-        Log::shouldReceive('info')
-            ->once()
-            ->with('M-Pesa handleCallback: verification', [
-                'is_local_sandbox' => false,
-                'checkout_request_id' => 'checkout-not-found',
-            ]);
         Log::shouldReceive('warning')
             ->once()
             ->with('M-Pesa callback for unknown checkout_request_id', [
@@ -309,6 +305,84 @@ class MpesaCallbackVerificationTest extends TestCase
         $this->assertDatabaseCount('mpesa_payments', 1);
         $this->assertDatabaseCount('payment_events', 1);
         Queue::assertPushed(SendPaymentNotification::class, 1);
+    }
+
+    public function test_callback_endpoint_processes_a_payment_for_another_hospital(): void
+    {
+        $this->configureLocalSandbox(autoConfirm: true);
+        Http::preventStrayRequests();
+        Queue::fake([SendPaymentNotification::class]);
+        $defaultHospital = hospital();
+        $paymentHospital = Hospital::factory()->create([
+            'settings' => ['auto_confirm_paid_appointments' => true],
+        ]);
+        app()->instance('currentHospital', $paymentHospital);
+        $appointment = AppointmentRequest::factory()->create([
+            'phone' => '0712345678',
+            'mpesa_phone' => '0712345678',
+            'payment_amount' => 500,
+        ]);
+        $payment = MpesaPayment::factory()
+            ->for($appointment, 'appointment')
+            ->create(['checkout_request_id' => 'checkout-cross-tenant']);
+        app()->instance('currentHospital', $defaultHospital);
+
+        $this->postJson('/api/mpesa/callback', $this->makeCallback('checkout-cross-tenant'))
+            ->assertOk()
+            ->assertExactJson(['ResultCode' => 0, 'ResultDesc' => 'Accepted']);
+
+        $this->assertDatabaseHas('mpesa_payments', [
+            'id' => $payment->id,
+            'hospital_id' => $paymentHospital->id,
+            'status' => MpesaPayment::STATUS_COMPLETED,
+            'mpesa_receipt' => 'TEST123ABC',
+        ]);
+        $this->assertDatabaseHas('appointment_requests', [
+            'id' => $appointment->id,
+            'hospital_id' => $paymentHospital->id,
+            'payment_status' => 'paid',
+            'status' => AppointmentRequest::STATUS_CONFIRMED,
+        ]);
+        $this->assertDatabaseHas('payment_events', [
+            'payment_id' => $payment->id,
+            'hospital_id' => $paymentHospital->id,
+            'event' => 'payment_completed',
+        ]);
+        $this->assertSame(
+            1,
+            DB::table('payment_events')->where('payment_id', $payment->id)->count(),
+        );
+        $this->assertSame($defaultHospital->id, hospital()->id);
+        Queue::assertPushed(
+            SendPaymentNotification::class,
+            fn (SendPaymentNotification $job): bool => $job->paymentId === $payment->id
+                && $job->hospitalId === $paymentHospital->id,
+        );
+
+        $this->postJson('/api/mpesa/callback', $this->makeCallback('checkout-cross-tenant'))
+            ->assertOk()
+            ->assertExactJson(['status' => 'already_processed']);
+
+        $this->assertSame(
+            1,
+            DB::table('payment_events')->where('payment_id', $payment->id)->count(),
+        );
+        Queue::assertPushed(SendPaymentNotification::class, 1);
+    }
+
+    public function test_unknown_callback_is_not_cached_as_processed(): void
+    {
+        $this->configureLocalSandbox();
+        Http::preventStrayRequests();
+        $callback = $this->makeCallback('checkout-unknown-retry');
+
+        $this->postJson('/api/mpesa/callback', $callback)
+            ->assertOk()
+            ->assertExactJson(['ResultCode' => 0, 'ResultDesc' => 'Accepted']);
+
+        $this->postJson('/api/mpesa/callback', $callback)
+            ->assertOk()
+            ->assertExactJson(['ResultCode' => 0, 'ResultDesc' => 'Accepted']);
     }
 
     public function test_successful_callback_without_receipt_still_completes_payment(): void
