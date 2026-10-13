@@ -7,3 +7,5 @@ Run Laravel's scheduler every minute on the production application host:
 ```
 
 Scheduled tasks share the application's cache for overlap prevention, single-server execution, and health heartbeats. In multi-server deployments, all scheduler nodes must use the same cache backend that supports atomic locks.
+
+For the full release checklist, see [production deployment](production-deployment.md). For local and facility-demo setup, see [local demo deployment](demo-deployment.md).

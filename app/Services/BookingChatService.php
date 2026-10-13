@@ -2889,6 +2889,10 @@ class BookingChatService
         return Conversation::query()
             ->where('session_id', $this->sessionId($channelId, $channel))
             ->where('channel', $channel)
+            ->where(function ($query): void {
+                $query->whereNull('chat_state->system_event')
+                    ->orWhere('chat_state->system_event', '!=', 'payment_receipt');
+            })
             ->latest('id')
             ->first();
     }

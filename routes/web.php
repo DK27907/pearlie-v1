@@ -37,6 +37,9 @@ Route::get('/h/{slug}/chat', [ChatController::class, 'index'])->name('tenant.cha
 Route::post('/h/{slug}/chat', [ChatController::class, 'chat'])
     ->middleware('throttle:tenant-chat')
     ->name('tenant.chat.post');
+Route::get('/h/{slug}/chat/messages', [ChatController::class, 'messages'])
+    ->middleware('throttle:tenant-chat-poll')
+    ->name('tenant.chat.messages');
 Route::post('/h/{slug}/chat/reset', [ChatController::class, 'reset'])
     ->middleware('throttle:tenant-chat-reset')
     ->name('tenant.chat.reset');

@@ -787,14 +787,8 @@ class MpesaService
      */
     private function httpRequest(array $config): PendingRequest
     {
-        $request = Http::timeout($config['timeout'] ?? 20);
-        $caBundle = $config['ca_bundle'] ?? null;
-
-        if (is_string($caBundle) && $caBundle !== '') {
-            $request->withOptions(['verify' => $caBundle]);
-        }
-
-        return $request;
+        return Http::timeout($config['timeout'] ?? 20)
+            ->withOptions(MpesaTlsOptions::options());
     }
 
     /**

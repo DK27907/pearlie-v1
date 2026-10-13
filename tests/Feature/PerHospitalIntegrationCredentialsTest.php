@@ -57,9 +57,15 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
 
     public function test_mpesa_service_uses_the_configured_ca_bundle_for_http_requests(): void
     {
+        $caBundle = tempnam(sys_get_temp_dir(), 'mpesa-ca-');
+        if ($caBundle === false) {
+            $this->fail('Could not create a temporary CA bundle.');
+        }
+
+        file_put_contents($caBundle, 'test CA bundle');
         $this->setCurrentHospital(Hospital::factory()->create());
         config([
-            'mpesa.ca_bundle' => 'C:\\certs\\windows-trusted-roots.pem',
+            'mpesa.ca_bundle' => $caBundle,
             'mpesa.consumer_key' => 'global-test-key',
             'mpesa.consumer_secret' => 'global-test-secret',
         ]);
@@ -71,9 +77,13 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
             return Http::response(['access_token' => 'test-oauth-token']);
         });
 
-        app(MpesaService::class)->getAccessToken();
+        try {
+            app(MpesaService::class)->getAccessToken();
 
-        $this->assertSame('C:\\certs\\windows-trusted-roots.pem', $verifyOption);
+            $this->assertSame($caBundle, $verifyOption);
+        } finally {
+            unlink($caBundle);
+        }
     }
 
     public function test_whatsapp_service_uses_hospital_credentials_when_configured(): void

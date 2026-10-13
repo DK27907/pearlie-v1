@@ -10,6 +10,7 @@ use App\Console\Commands\PruneNotificationLogs;
 use App\Console\Commands\PrunePasswordResetTokens;
 use App\Console\Commands\PrunePaymentEvents;
 use App\Console\Commands\ReconcileMpesaPayments;
+use App\Console\Commands\RefreshMpesaCaBundle;
 use Illuminate\Console\Application as ArtisanApplication;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -22,6 +23,7 @@ ArtisanApplication::starting(static function ($artisan): void {
         ReconcileMpesaPayments::class,
         CleanupSlotHolds::class,
         MpesaHealthCheck::class,
+        RefreshMpesaCaBundle::class,
         MpesaVerifySandboxCredentials::class,
         PruneNotificationLogs::class,
         PrunePasswordResetTokens::class,

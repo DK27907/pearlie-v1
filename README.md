@@ -23,6 +23,8 @@ php artisan serve
 
 The public marketing site is available at `/`; Pearl Hospital's assistant is at `/pearlie`. Tenant-specific assistant URLs use `/h/{hospital-slug}`, `/chat/{hospital-slug}`, or a hospital subdomain. Hospital administrators manage their tenant under `/admin` and `/hospital/onboarding`; doctor routes are under `/doctor`. Platform administrators manage hospitals under `/superadmin`.
 
+See [local demo deployment](docs/demo-deployment.md), [production deployment](docs/production-deployment.md), [M-Pesa operations](docs/mpesa-operations.md), and the [configuration guide](docs/configuration-guide.md) for environment-specific setup.
+
 ## Multi-tenancy and subscriptions
 
 The `hospitals` table stores each tenant's contact details, branding, assistant language preferences, scheduling policies, subscription plan, and M-Pesa settings. Daraja consumer keys, secrets, and passkeys are encrypted using Laravel's application key. Existing Pearl Hospital rows are assigned to the `pearl` tenant by migration. Tenant-aware Eloquent scopes filter the hospital-owned tables using the resolved request tenant.
@@ -94,7 +96,7 @@ Set `MAIL_FROM_ADDRESS` and `MAIL_FROM_NAME` to an address/domain authorized by 
 
 ## Production checklist
 
-Set a unique `APP_KEY`, `APP_ENV=production`, and `APP_DEBUG=false`; serve the app over HTTPS with `SESSION_SECURE_COOKIE=true`; configure database, mail, queue, Meta WhatsApp, and provider credentials; and never deploy sample account passwords. Apply migrations with `php artisan migrate --force`, keep a queue worker running, and run Laravel's scheduler every minute so the 07:00 doctor summaries and 30-minute no-show processing run. Provision a production platform administrator explicitly with `SUPER_ADMIN_EMAIL` and a strong `SUPER_ADMIN_PASSWORD`, then run `php artisan db:seed --class=SuperAdminSeeder --force`; hospital administrators should be invited from `/superadmin`. Do not run the local demo `AdminUserSeeder` or `DoctorUserSeeder` in production. Confirm the Meta callback URL and webhook subscription before launch. See [DEPLOYMENT.md](DEPLOYMENT.md) for the deployment checklist.
+Set a unique `APP_KEY`, `APP_ENV=production`, and `APP_DEBUG=false`; serve the app over HTTPS with `SESSION_SECURE_COOKIE=true`; configure database, mail, queue, Meta WhatsApp, and provider credentials; and never deploy sample account passwords. Apply migrations with `php artisan migrate --force`, keep a queue worker running, and run Laravel's scheduler every minute so the 07:00 doctor summaries and 30-minute no-show processing run. Provision a production platform administrator explicitly with `SUPER_ADMIN_EMAIL` and a strong `SUPER_ADMIN_PASSWORD`, then run `php artisan db:seed --class=SuperAdminSeeder --force`; hospital administrators should be invited from `/superadmin`. Do not run the local demo `AdminUserSeeder` or `DoctorUserSeeder` in production. Confirm the Meta callback URL and webhook subscription before launch. See [production deployment](docs/production-deployment.md) for the release checklist.
 
 ## Verification
 

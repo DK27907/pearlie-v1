@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\SendPaymentNotification;
 use App\Models\AppointmentRequest;
+use App\Models\Conversation;
 use App\Models\DoctorAvailability;
 use App\Models\Hospital;
 use App\Models\MpesaPayment;
@@ -14,6 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class MpesaBookingTest extends TestCase
@@ -190,6 +192,89 @@ class MpesaBookingTest extends TestCase
             'status' => AppointmentRequest::STATUS_CONFIRMED,
         ]);
         $this->assertNotNull($appointment->fresh()->paid_at);
+    }
+
+    #[DataProvider('paymentReceiptLanguages')]
+    public function test_completed_payment_persists_a_localized_chat_receipt(
+        string $reply,
+        string $language,
+        string $heading,
+        string $bookingStatus,
+    ): void {
+        hospital()->update(['settings' => ['auto_confirm_paid_appointments' => true]]);
+        $appointment = $this->createAppointment();
+        $appointment->forceFill([
+            'preferred_date' => now()->addDay()->toDateString(),
+            'slot_start_time' => '10:30:00',
+        ])->save();
+        Conversation::query()->create([
+            'session_id' => $appointment->session_id,
+            'user_message' => $reply,
+            'ai_response' => 'Waiting for payment confirmation.',
+            'channel' => 'web',
+            'chat_state' => ['state' => 'CONFIRMING', 'language' => $language],
+        ]);
+        $payment = MpesaPayment::factory()
+            ->for($appointment, 'appointment')
+            ->create(['checkout_request_id' => 'checkout-receipt-'.$language]);
+        Queue::fake([SendPaymentNotification::class]);
+        $this->fakeSuccessfulCallback();
+
+        $this->postJson('/api/mpesa/callback', $this->successfulCallback($payment->checkout_request_id))
+            ->assertOk();
+
+        $this->assertDatabaseHas('appointment_requests', [
+            'id' => $appointment->id,
+            'payment_status' => 'paid',
+            'status' => AppointmentRequest::STATUS_CONFIRMED,
+        ]);
+        Queue::assertPushed(SendPaymentNotification::class, 1);
+
+        $lateConversation = Conversation::query()->create([
+            'session_id' => $appointment->session_id,
+            'user_message' => $reply,
+            'ai_response' => 'The booking confirmation response was persisted after the payment receipt.',
+            'channel' => 'web',
+            'chat_state' => ['state' => 'PAYMENT_PENDING', 'language' => $language],
+        ]);
+        $response = $this->withSession([
+            'tenant_chat_session_id_'.hospital()->id => $appointment->session_id,
+        ])->getJson(route('tenant.chat.messages', [
+            'slug' => hospital()->slug,
+            'since_id' => $lateConversation->id,
+        ]));
+        $response->assertOk()
+            ->assertJsonCount(1, 'messages')
+            ->assertJsonPath('messages.0.role', 'assistant')
+            ->assertJsonPath('payment_terminal', true);
+        $receipt = $response->json('messages.0.text');
+        $this->assertIsString($receipt);
+        $this->assertStringContainsString($heading, $receipt);
+        $this->assertStringContainsString('KSh 500.00', $receipt);
+        $this->assertStringContainsString('QWE123', $receipt);
+        $this->assertStringContainsString($bookingStatus, $receipt);
+        $this->assertStringContainsString('10:30 AM', $receipt);
+        $this->assertDatabaseHas('conversations', [
+            'hospital_id' => hospital()->id,
+            'session_id' => $appointment->session_id,
+            'channel' => 'web',
+            'user_message' => '',
+            'ai_response' => $receipt,
+        ]);
+        $this->assertTrue(Conversation::withoutGlobalScopes()
+            ->where('hospital_id', hospital()->id)
+            ->where('session_id', $appointment->session_id)
+            ->where('chat_state->system_event', 'payment_receipt')
+            ->where('chat_state->appointment_id', $appointment->id)
+            ->exists());
+    }
+
+    public static function paymentReceiptLanguages(): array
+    {
+        return [
+            'English' => ['yes', 'en', 'Booking payment received', 'Booking status: Confirmed'],
+            'Swahili' => ['ndiyo', 'sw', 'Malipo ya miadi yamepokelewa', 'Hali ya miadi: Imethibitishwa'],
+        ];
     }
 
     public function test_failed_payment_marks_appointment_unpaid(): void

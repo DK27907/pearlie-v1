@@ -8,6 +8,9 @@ const languageToggle = document.getElementById('languageToggle');
 const quickReplyButtons = document.querySelectorAll('.quick-reply');
 const welcomeEl = messagesEl ? messagesEl.querySelector('[data-welcome-en]') : null;
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+let lastMessageId = Number(formEl?.dataset.lastMessageId ?? 0);
+let paymentPollTimer = null;
+let paymentPollInFlight = false;
 
 function updateLanguage() {
     if (!languageToggle || !welcomeEl || !inputEl || !sendBtn || !resetBtn || !typingEl) {
@@ -90,10 +93,63 @@ async function resetChat() {
         return;
     }
 
+    stopPaymentPolling();
     messagesEl.replaceChildren(welcomeEl);
     updateLanguage();
     inputEl.value = '';
     inputEl.focus();
+}
+
+function stopPaymentPolling() {
+    if (paymentPollTimer !== null) {
+        window.clearInterval(paymentPollTimer);
+        paymentPollTimer = null;
+    }
+}
+
+async function pollForPaymentReceipt() {
+    if (paymentPollInFlight || !formEl?.dataset.messagesUrl) {
+        return;
+    }
+
+    paymentPollInFlight = true;
+
+    try {
+        const url = new URL(formEl.dataset.messagesUrl, window.location.href);
+        url.searchParams.set('since_id', String(lastMessageId));
+        const response = await fetch(url, {
+            headers: { Accept: 'application/json' },
+            cache: 'no-store',
+        });
+        if (!response.ok) {
+            throw new Error('The chat could not check for a payment receipt.');
+        }
+
+        const data = await response.json();
+        if (Array.isArray(data.messages)) {
+            data.messages.forEach((message) => {
+                appendMessage(message.text, message.role === 'user' ? 'user' : 'ai');
+            });
+        }
+        if (Number.isSafeInteger(data.last_message_id)) {
+            lastMessageId = Math.max(lastMessageId, data.last_message_id);
+        }
+        if (data.payment_terminal === true) {
+            stopPaymentPolling();
+        }
+    } catch (error) {
+        console.error('Payment Receipt Polling Error:', error);
+    } finally {
+        paymentPollInFlight = false;
+    }
+}
+
+function startPaymentPolling() {
+    if (paymentPollTimer !== null) {
+        return;
+    }
+
+    paymentPollTimer = window.setInterval(pollForPaymentReceipt, 3000);
 }
 
 async function sendMessage(suggestedMessage = null) {
@@ -136,6 +192,14 @@ async function sendMessage(suggestedMessage = null) {
             appendMessage(data.message || data.error || 'The assistant could not process your request. Please try again.', 'ai');
         } else {
             appendMessage(data.response || 'I could not process that. Please try again.', 'ai');
+            if (Number.isSafeInteger(data.last_message_id)) {
+                lastMessageId = Math.max(lastMessageId, data.last_message_id);
+            }
+            if (data.state === 'PAYMENT_PENDING') {
+                startPaymentPolling();
+            } else {
+                stopPaymentPolling();
+            }
         }
     } catch (error) {
         hideTyping();

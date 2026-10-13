@@ -20,6 +20,20 @@ The global credentials are used as the fallback for hospitals that have not conf
 
 `MPESA_TEST_PHONE` is only used by the optional `mpesa:verify-sandbox --live` diagnostic. Configure it with a Safaricom sandbox test number; never use the live diagnostic in production.
 
+## Local Windows certificate trust
+
+On Windows, generate a local PEM bundle from the current user and local-machine trusted root certificate stores:
+
+```powershell
+C:\php\php.exe artisan app:refresh-mpesa-ca-bundle
+```
+
+The command writes `storage/app/mpesa/ca-bundle.pem`; the storage directory is ignored by Git. The M-Pesa client uses that path by default, or uses `MPESA_CA_BUNDLE` when the deployment environment explicitly selects another bundle. A configured but missing or unreadable bundle causes the request to fail before contacting Safaricom. Certificate verification is never disabled.
+
+This option applies to M-Pesa's Laravel HTTP requests. Other PHP SDKs that create their own Guzzle clients, such as the Resend SDK, rely on PHP's `curl.cainfo`/`openssl.cafile` settings. Configure the PHP runtime's trust store separately when those clients encounter TLS verification errors. A Resend sender-domain/recipient restriction is an independent provider configuration issue; a valid TLS connection does not bypass it.
+
+Production deployments should use the platform/PHP system CA store or a managed CA bundle. Do not deploy a developer machine's Windows root export as the production trust store.
+
 ## Required scheduler and queue processes
 
 The payment reconciler and expired slot-hold cleanup are scheduled every minute. Run the Laravel scheduler continuously, and keep a queue worker running for payment notifications and other queued work. Under Supervisor, configure and monitor both processes:

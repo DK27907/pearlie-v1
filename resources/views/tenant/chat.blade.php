@@ -395,7 +395,9 @@
             id="chatForm"
             class="chat-input"
             data-chat-url="{{ route('tenant.chat.post', ['slug' => $hospital->slug]) }}"
+            data-messages-url="{{ route('tenant.chat.messages', ['slug' => $hospital->slug]) }}"
             data-reset-url="{{ route('tenant.chat.reset', ['slug' => $hospital->slug]) }}"
+            data-last-message-id="{{ $lastMessageId }}"
         >
             <input
                 type="text"

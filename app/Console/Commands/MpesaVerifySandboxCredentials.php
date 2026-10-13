@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\MpesaPayment;
+use App\Services\MpesaTlsOptions;
 use App\Services\PaymentLifecycleService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -62,6 +63,7 @@ class MpesaVerifySandboxCredentials extends Command
 
         try {
             $response = Http::timeout($timeout)
+                ->withOptions(MpesaTlsOptions::options())
                 ->withBasicAuth((string) $consumerKey, (string) $consumerSecret)
                 ->get($baseUrl.'/oauth/v1/generate', [
                     'grant_type' => 'client_credentials',
@@ -111,6 +113,7 @@ class MpesaVerifySandboxCredentials extends Command
 
         try {
             $stkResponse = Http::timeout($timeout)
+                ->withOptions(MpesaTlsOptions::options())
                 ->withToken($token)
                 ->post($baseUrl.'/mpesa/stkpush/v1/processrequest', [
                     'BusinessShortCode' => (string) $shortcode,

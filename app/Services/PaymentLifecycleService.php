@@ -4,9 +4,11 @@ namespace App\Services;
 
 use App\Jobs\SendPaymentNotification;
 use App\Models\AppointmentRequest;
+use App\Models\Conversation;
 use App\Models\MpesaPayment;
 use App\Models\PaymentEvent;
 use App\Models\SlotHold;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class PaymentLifecycleService
@@ -159,12 +161,86 @@ class PaymentLifecycleService
             if (! $shouldAutoConfirm || $slotExpired) {
                 $this->dispatchNotificationAfterCommit($payment, $event, 'admin');
             }
+
+            if (! $slotExpired && $appointment->payment_status === 'paid') {
+                $this->createChatPaymentReceipt($appointment, $payment);
+            }
         } else {
             $event = 'payment_completed';
             $this->dispatchNotificationAfterCommit($payment, $event);
         }
 
         $this->recordEvent($payment, $event, $payload);
+    }
+
+    private function createChatPaymentReceipt(
+        AppointmentRequest $appointment,
+        MpesaPayment $payment,
+    ): void {
+        if (! is_string($appointment->session_id) || $appointment->session_id === '') {
+            return;
+        }
+
+        $latestConversation = Conversation::withoutGlobalScopes()
+            ->where('hospital_id', $appointment->hospital_id)
+            ->where('session_id', $appointment->session_id)
+            ->where('channel', 'web')
+            ->latest('id')
+            ->first();
+
+        if (! $latestConversation) {
+            return;
+        }
+
+        $isSwahili = data_get($latestConversation->chat_state, 'language') === 'sw'
+            || preg_match('/\b(?:ndiyo|sawa|malipo)\b/iu', $latestConversation->user_message) === 1;
+        $bookingDate = $appointment->preferred_date?->format('d/m/Y') ?? 'Not provided';
+        $bookingTime = is_string($appointment->slot_start_time) && $appointment->slot_start_time !== ''
+            ? Carbon::parse($appointment->slot_start_time)->format('g:i A')
+            : 'Not provided';
+        $receipt = $payment->mpesa_receipt ?: 'Not provided';
+        $bookingStatus = $appointment->status === AppointmentRequest::STATUS_CONFIRMED
+            ? ($isSwahili ? 'Imethibitishwa' : 'Confirmed')
+            : ($isSwahili ? 'Inasubiri uthibitisho wa hospitali' : 'Awaiting hospital confirmation');
+        $message = $isSwahili
+            ? implode("\n", [
+                'Malipo ya miadi yamepokelewa',
+                'Nambari ya miadi: #'.$appointment->id,
+                'Mgonjwa: '.$appointment->name,
+                'Huduma: '.$appointment->reason,
+                'Tarehe: '.$bookingDate,
+                'Saa: '.$bookingTime,
+                'Kiasi kilicholipwa: KSh '.number_format((float) $payment->amount, 2),
+                'Hali ya malipo: Imelipwa',
+                'Stakabadhi ya M-Pesa: '.$receipt,
+                'Hali ya miadi: '.$bookingStatus,
+            ])
+            : implode("\n", [
+                'Booking payment received',
+                'Booking: #'.$appointment->id,
+                'Patient: '.$appointment->name,
+                'Service: '.$appointment->reason,
+                'Date: '.$bookingDate,
+                'Time: '.$bookingTime,
+                'Amount paid: KSh '.number_format((float) $payment->amount, 2),
+                'Payment status: Paid',
+                'M-Pesa receipt: '.$receipt,
+                'Booking status: '.$bookingStatus,
+            ]);
+
+        Conversation::withoutGlobalScopes()->forceCreate([
+            'hospital_id' => $appointment->hospital_id,
+            'session_id' => $appointment->session_id,
+            'user_message' => '',
+            'ai_response' => $message,
+            'confidence_score' => 1.0,
+            'channel' => 'web',
+            'chat_state' => [
+                'system_event' => 'payment_receipt',
+                'appointment_id' => $appointment->id,
+            ],
+            'chat_state_updated_at' => now(),
+        ]);
     }
 
     private function failAppointmentPaymentWithinTransaction(

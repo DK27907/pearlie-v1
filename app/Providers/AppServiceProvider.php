@@ -42,6 +42,8 @@ class AppServiceProvider extends ServiceProvider
         };
         RateLimiter::for('tenant-chat', static fn (Request $request): Limit => Limit::perMinute(60)
             ->by($tenantRateLimitKey($request)));
+        RateLimiter::for('tenant-chat-poll', static fn (Request $request): Limit => Limit::perMinute(30)
+            ->by($tenantRateLimitKey($request)));
         RateLimiter::for('tenant-chat-reset', static fn (Request $request): Limit => Limit::perMinute(10)
             ->by($tenantRateLimitKey($request)));
 
