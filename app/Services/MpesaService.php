@@ -7,6 +7,7 @@ use App\Models\Hospital;
 use App\Models\MpesaPayment;
 use App\Models\SlotHold;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -29,7 +30,7 @@ class MpesaService
             $config = $this->configForCurrentHospital();
             $this->ensureCredentials($config);
 
-            $response = Http::timeout($config['timeout'] ?? 20)
+            $response = $this->httpRequest($config)
                 ->withBasicAuth($config['consumer_key'], $config['consumer_secret'])
                 ->get($this->baseUrl($config).'/oauth/v1/generate?grant_type=client_credentials');
             $httpStatus = $response->status();
@@ -101,7 +102,7 @@ class MpesaService
             $shortcode = (string) $config['shortcode'];
             $timestamp = now()->format('YmdHis');
             $password = base64_encode($shortcode.$config['passkey'].$timestamp);
-            $checkoutResponse = Http::timeout($config['timeout'] ?? 20)
+            $checkoutResponse = $this->httpRequest($config)
                 ->withToken($token)
                 ->post($this->baseUrl($config).'/mpesa/stkpush/v1/processrequest', [
                     'BusinessShortCode' => $shortcode,
@@ -666,7 +667,7 @@ class MpesaService
             $shortcode = (string) $config['shortcode'];
             $password = base64_encode($shortcode.$config['passkey'].$timestamp);
 
-            $response = Http::timeout($config['timeout'] ?? 20)
+            $response = $this->httpRequest($config)
                 ->withToken($token)
                 ->post($this->baseUrl($config).'/mpesa/stkpushquery/v1/query', [
                     'BusinessShortCode' => $shortcode,
@@ -779,6 +780,21 @@ class MpesaService
                 throw new RuntimeException('M-Pesa is not configured: missing '.$key.'.');
             }
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     */
+    private function httpRequest(array $config): PendingRequest
+    {
+        $request = Http::timeout($config['timeout'] ?? 20);
+        $caBundle = $config['ca_bundle'] ?? null;
+
+        if (is_string($caBundle) && $caBundle !== '') {
+            $request->withOptions(['verify' => $caBundle]);
+        }
+
+        return $request;
     }
 
     /**

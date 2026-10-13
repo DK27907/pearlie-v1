@@ -19,6 +19,7 @@ return [
     'appointment_deposit' => (float) env('PEARLIE_DEPOSIT_AMOUNT', env('MPESA_APPOINTMENT_DEPOSIT', 500)),
     'test_amount' => (int) env('MPESA_TEST_AMOUNT', 1),
     'timeout' => (int) env('MPESA_TIMEOUT', 20),
+    'ca_bundle' => env('MPESA_CA_BUNDLE'),
     'test_phone' => env('MPESA_TEST_PHONE'),
     'endpoints' => [
         'sandbox' => 'https://sandbox.safaricom.co.ke',

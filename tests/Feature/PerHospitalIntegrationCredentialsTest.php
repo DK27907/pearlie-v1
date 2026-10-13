@@ -9,7 +9,9 @@ use App\Services\HospitalSettings;
 use App\Services\MpesaService;
 use App\Services\NotificationService;
 use App\Services\WhatsAppService;
+use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -51,6 +53,27 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
             'Authorization',
             'Basic '.base64_encode('global-test-key:global-test-secret'),
         ));
+    }
+
+    public function test_mpesa_service_uses_the_configured_ca_bundle_for_http_requests(): void
+    {
+        $this->setCurrentHospital(Hospital::factory()->create());
+        config([
+            'mpesa.ca_bundle' => 'C:\\certs\\windows-trusted-roots.pem',
+            'mpesa.consumer_key' => 'global-test-key',
+            'mpesa.consumer_secret' => 'global-test-secret',
+        ]);
+        $verifyOption = null;
+        Http::preventStrayRequests();
+        Http::fake(function (ClientRequest $request, array $options) use (&$verifyOption): PromiseInterface {
+            $verifyOption = $options['verify'] ?? null;
+
+            return Http::response(['access_token' => 'test-oauth-token']);
+        });
+
+        app(MpesaService::class)->getAccessToken();
+
+        $this->assertSame('C:\\certs\\windows-trusted-roots.pem', $verifyOption);
     }
 
     public function test_whatsapp_service_uses_hospital_credentials_when_configured(): void
