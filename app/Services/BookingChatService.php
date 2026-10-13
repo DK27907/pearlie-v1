@@ -767,9 +767,9 @@ class BookingChatService
         }
 
         $automaticallySelectedDoctor = null;
+        $service = $this->serviceById((int) $state['service_id'], $hospital);
 
         if (! $state['doctor_id']) {
-            $service = $this->serviceById((int) $state['service_id'], $hospital);
             $doctors = $this->eligibleDoctors($hospital, $service);
             $requiredSpecialty = $this->requiredSpecialty($service);
             $hasMatchingSpecialty = $requiredSpecialty !== null
@@ -938,6 +938,7 @@ class BookingChatService
                         $channel,
                         doctorName: $automaticallySelectedDoctor->name,
                         language: $state['language'],
+                        serviceName: $service->name,
                     );
                 } elseif ($field === 'date' && filled($state['doctor_id'] ?? null)) {
                     $selectedDoctor = $hospital->users()->find((int) $state['doctor_id']);
@@ -948,6 +949,7 @@ class BookingChatService
                             $channel,
                             doctorName: $selectedDoctor->name,
                             language: $state['language'],
+                            serviceName: $service->name,
                         );
                     } else {
                         $promptMessage = $this->datePrompt(
@@ -955,6 +957,7 @@ class BookingChatService
                             $sessionId,
                             $channel,
                             language: $state['language'],
+                            serviceName: $service->name,
                         );
                     }
                 } elseif ($field === 'date') {
@@ -963,6 +966,7 @@ class BookingChatService
                         $sessionId,
                         $channel,
                         language: $state['language'],
+                        serviceName: $service->name,
                     );
                 }
 
@@ -1119,7 +1123,7 @@ class BookingChatService
     {
         return preg_match(
             '/\b(book|booking|appointment|schedule|reserve|see\s+(?:a\s+)?doctor|i want to book|need\s+(?:an?\s+)?appointment|need\s+to\s+book)\b|'
-                .'\b(?:nataka|naomba)\s+(?:kuweka|kupata|kuomba)\s+miadi\b|\bweka\s+miadi\b/iu',
+                .'\b(?:(?:ni)?nataka|naomba)\s+(?:kuweka|kupata|kuomba)\s+miadi\b|\bweka\s+miadi\b/iu',
             $message,
         ) === 1;
     }
@@ -1402,6 +1406,7 @@ class BookingChatService
         ?string $error = null,
         ?string $doctorName = null,
         ?string $language = null,
+        ?string $serviceName = null,
     ): string {
         $isSwahili = $language === self::LANGUAGE_SWAHILI
             || ($language === null && $this->isSwahiliDateMessage($message));
@@ -1420,6 +1425,14 @@ class BookingChatService
                 default => "Ungependa miadi tarehe gani? Tafadhali ingiza DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema 'kesho'.",
             };
 
+            if ($error === null && $serviceName !== null) {
+                $serviceConfirmation = $doctorName !== null
+                    ? $doctorName.' anapatikana kwa huduma ya '.$serviceName.'.'
+                    : 'Naweza kukusaidia kuweka miadi ya '.$serviceName.'.';
+
+                return $serviceConfirmation.' '.$prompt;
+            }
+
             return $doctorName !== null && $error === null
                 ? $doctorName.' ana huduma kwa miadi hiyo. '.$prompt
                 : $prompt;
@@ -1436,6 +1449,14 @@ class BookingChatService
             'unrecognized' => "Sorry, I didn't catch that. What date would you prefer? Please use DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say 'tomorrow'.",
             default => 'What date would you prefer? Use DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say "tomorrow".',
         };
+
+        if ($error === null && $serviceName !== null) {
+            $serviceConfirmation = $doctorName !== null
+                ? $doctorName.' is available for '.$serviceName.'.'
+                : 'I can help you book '.$serviceName.'.';
+
+            return $serviceConfirmation.' '.$prompt;
+        }
 
         return $doctorName !== null && $error === null
             ? $doctorName.' is available for this service. '.$prompt
@@ -2422,7 +2443,15 @@ class BookingChatService
         }
 
         if ($field === 'date') {
-            return $this->datePrompt($message, $sessionId, $channel, language: $state['language']);
+            $serviceName = $this->serviceById((int) $state['service_id'], $hospital)->name;
+
+            return $this->datePrompt(
+                $message,
+                $sessionId,
+                $channel,
+                language: $state['language'],
+                serviceName: $serviceName,
+            );
         }
 
         if ($field === 'doctor_id') {

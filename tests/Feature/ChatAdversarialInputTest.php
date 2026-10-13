@@ -96,6 +96,29 @@ class ChatAdversarialInputTest extends TestCase
         $this->assertSame(3, Conversation::query()->count());
     }
 
+    public function test_swahili_booking_request_enters_collection_without_creating_an_appointment(): void
+    {
+        $hospital = $this->createHospital();
+        $hospital->services()->create([
+            'name' => 'Dental Cleaning',
+            'price' => 100,
+            'duration_minutes' => 30,
+            'category' => 'Dental',
+            'is_active' => true,
+        ]);
+        Http::preventStrayRequests();
+
+        $response = $this->postJson(route('tenant.chat.post', $hospital->slug), [
+            'message' => 'Ninataka kuweka miadi',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('state', 'COLLECTING')
+            ->assertJsonPath('collected_fields.language', 'sw');
+        $this->assertStringContainsString('Unahitaji huduma gani?', $response->json('response'));
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
     public function test_swahili_location_question_returns_the_current_hospital_address(): void
     {
         $hospital = $this->createHospital();

@@ -395,7 +395,7 @@ class BookingChatServiceTest extends TestCase
 
         $response = app(BookingChatService::class)->handle(
             'swahili-booking-intent',
-            'nataka kuweka miadi',
+            'Ninataka kuweka miadi',
             'web',
         );
 
@@ -618,7 +618,25 @@ class BookingChatServiceTest extends TestCase
         $response = app(BookingChatService::class)->handle('ct-abbrev', 'CT', 'web');
 
         $this->assertSame($services[0]->id, $this->state('ct-abbrev')['service_id']);
+        $this->assertStringContainsString($services[0]->name, $response->message);
         $this->assertStringContainsString('What date would you prefer', $response->message);
+    }
+
+    public function test_tenant_chat_response_names_selected_service_before_requesting_date(): void
+    {
+        [$hospital, $services] = $this->createContext([
+            'CT Scan (Head/Chest/Abdomen)',
+            'Ultrasound Scan (Obstetric)',
+        ]);
+
+        $response = $this->postJson(route('tenant.chat.post', $hospital->slug), [
+            'message' => 'CT',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('state', 'COLLECTING');
+        $this->assertStringContainsString($services[0]->name, $response->json('response'));
+        $this->assertStringContainsString('What date would you prefer', $response->json('response'));
     }
 
     public function test_scan_alias_matches_ultrasound_instead_of_ct(): void
@@ -643,6 +661,7 @@ class BookingChatServiceTest extends TestCase
         $response = app(BookingChatService::class)->handle('service-partial-name', 'I need dental cleaning', 'web');
 
         $this->assertSame($services[0]->id, $this->state('service-partial-name')['service_id']);
+        $this->assertStringContainsString($services[0]->name, $response->message);
         $this->assertStringContainsString('What date would you prefer?', $response->message);
     }
 
