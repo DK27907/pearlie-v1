@@ -40,6 +40,10 @@ class KnowledgeBaseServiceTest extends TestCase
 
     public function test_keyword_matching_ignores_case_and_diacritics(): void
     {
+        app()->instance(
+            'currentHospital',
+            Hospital::query()->where('slug', 'pearl')->firstOrFail(),
+        );
         KnowledgeBase::query()->create([
             'category' => 'test',
             'subcategory' => 'diacritics',

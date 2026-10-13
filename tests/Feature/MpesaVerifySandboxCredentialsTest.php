@@ -64,7 +64,7 @@ class MpesaVerifySandboxCredentialsTest extends TestCase
             && $request['PhoneNumber'] === '254712345678'
             && $request['CallBackURL'] === 'https://example.test/api/mpesa/callback'
             && isset($request['Password'], $request['Timestamp']));
-        $payment = MpesaPayment::query()
+        $payment = MpesaPayment::withoutGlobalScope('hospital')
             ->where('checkout_request_id', 'ws_CO_sandbox')
             ->firstOrFail();
         $this->assertSame(MpesaPayment::STATUS_PENDING, $payment->status);
@@ -74,7 +74,10 @@ class MpesaVerifySandboxCredentialsTest extends TestCase
         ]);
         $this->assertSame(
             1,
-            PaymentEvent::query()->where('payment_id', $payment->id)->count(),
+            PaymentEvent::withoutGlobalScope('hospital')
+                ->where('hospital_id', $payment->hospital_id)
+                ->where('payment_id', $payment->id)
+                ->count(),
         );
     }
 

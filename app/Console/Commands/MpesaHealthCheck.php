@@ -26,6 +26,7 @@ class MpesaHealthCheck extends Command
         'doctor:daily-summary' => 2880,
         'appointments:mark-no-shows' => 60,
         'app:reconcile-mpesa-payments' => 2,
+        'app:process-mpesa-callback-inbox --limit=100' => 2,
         'app:cleanup-slot-holds' => 2,
         'app:prune-notification-logs --days=30 --status=failed' => 2880,
         'app:prune-notification-logs --days=90 --status=all' => 2880,
@@ -41,6 +42,7 @@ class MpesaHealthCheck extends Command
         'doctor:daily-summary' => '0 7 * * *',
         'appointments:mark-no-shows' => '*/30 * * * *',
         'app:reconcile-mpesa-payments' => '* * * * *',
+        'app:process-mpesa-callback-inbox --limit=100' => '* * * * *',
         'app:cleanup-slot-holds' => '* * * * *',
         'app:prune-notification-logs --days=30 --status=failed' => '10 2 * * *',
         'app:prune-notification-logs --days=90 --status=all' => '20 2 * * *',
@@ -77,7 +79,7 @@ class MpesaHealthCheck extends Command
         $failed = false;
         $warned = false;
 
-        foreach (['slot_holds', 'payment_events'] as $table) {
+        foreach (['slot_holds', 'payment_events', 'mpesa_callback_inbox'] as $table) {
             $exists = Schema::hasTable($table);
             $checks[] = [$table.' migration', $exists ? 'PASS' : 'FAIL', $exists ? 'table exists' : 'table is missing'];
             $failed = $failed || ! $exists;

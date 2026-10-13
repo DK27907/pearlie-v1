@@ -181,25 +181,53 @@ class DoctorAvailabilityService
         ?Service $service = null,
     ): ?AppointmentRequest {
         $currentHospital = hospital();
+        if ($currentHospital === null) {
+            return null;
+        }
+
         if ($service !== null
             && ($service->is_active !== true
-                || $currentHospital === null
                 || (int) $service->hospital_id !== (int) $currentHospital->id)
         ) {
             throw new InvalidArgumentException('The selected service is not available to this hospital.');
         }
 
         try {
+            $requestedDate = CarbonImmutable::parse($date);
+            $normalizedStart = CarbonImmutable::parse($startTime)->format('H:i');
+            $candidateDoctorIds = User::query()
+                ->where('hospital_id', $currentHospital->id)
+                ->where('is_doctor', true)
+                ->where('is_active', true)
+                ->when(
+                    $preferredDoctorId !== null,
+                    fn ($query) => $query->whereKey($preferredDoctorId),
+                )
+                ->orderBy('id')
+                ->pluck('id');
+
+            if ($candidateDoctorIds->isEmpty()) {
+                return null;
+            }
+
             return DB::transaction(function () use (
-                $date,
-                $startTime,
                 $patient,
                 $preferredDoctorId,
                 $service,
                 $currentHospital,
+                $requestedDate,
+                $normalizedStart,
+                $candidateDoctorIds,
             ): ?AppointmentRequest {
-                $requestedDate = CarbonImmutable::parse($date);
-                $normalizedStart = CarbonImmutable::parse($startTime)->format('H:i');
+                $availabilitiesByDoctor = DoctorAvailability::query()
+                    ->where('hospital_id', $currentHospital->id)
+                    ->whereIn('doctor_id', $candidateDoctorIds)
+                    ->where('day_of_week', $requestedDate->dayOfWeek)
+                    ->orderBy('doctor_id')
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get()
+                    ->groupBy('doctor_id');
 
                 if ($requestedDate->lessThan(CarbonImmutable::today())) {
                     return null;
@@ -241,13 +269,10 @@ class DoctorAvailabilityService
                         continue;
                     }
 
-                    $availabilities = DoctorAvailability::query()
-                        ->where('doctor_id', $doctor->id)
-                        ->where('day_of_week', $requestedDate->dayOfWeek)
+                    $availabilities = $availabilitiesByDoctor
+                        ->get($doctor->id, collect())
                         ->where('is_active', true)
-                        ->orderBy('start_time')
-                        ->lockForUpdate()
-                        ->get();
+                        ->sortBy('start_time');
 
                     foreach ($availabilities as $availability) {
                         foreach ($availability->generateSlots() as $slot) {

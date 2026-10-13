@@ -376,6 +376,26 @@ class MultiTenancyTest extends TestCase
         );
     }
 
+    public function test_tenant_scopes_fail_closed_without_a_hospital_context(): void
+    {
+        $pearl = $this->createHospital('fail-closed-pearl');
+        $karibu = $this->createHospital('fail-closed-karibu');
+
+        AppointmentRequest::factory()->create(['hospital_id' => $pearl->id]);
+        AppointmentRequest::factory()->create(['hospital_id' => $karibu->id]);
+
+        app()->forgetInstance('currentHospital');
+
+        $this->assertSame(0, AppointmentRequest::query()->count());
+        $this->assertCount(2, AppointmentRequest::withoutGlobalScope('hospital')->get());
+
+        app()->instance('currentHospital', $pearl);
+        $this->assertSame(
+            1,
+            AppointmentRequest::query()->where('hospital_id', $pearl->id)->count(),
+        );
+    }
+
     public function test_doctor_dashboard_does_not_show_appointments_from_another_hospital(): void
     {
         $pearl = $this->createHospital('doctor-pearl');
@@ -503,7 +523,10 @@ class MultiTenancyTest extends TestCase
         $this->assertNotNull($sentInvite);
 
         $setupResponse = $this->get($sentInvite->inviteUrl)->assertOk();
-        $invite = Invite::query()->where('email', 'first-admin@invitation-test.co.ke')->firstOrFail();
+        $invite = Invite::withoutGlobalScope('hospital')
+            ->where('hospital_id', $hospital->id)
+            ->where('email', 'first-admin@invitation-test.co.ke')
+            ->firstOrFail();
         $setupUrl = URL::temporarySignedRoute(
             'hospital.invitation.store',
             $invite->expires_at,

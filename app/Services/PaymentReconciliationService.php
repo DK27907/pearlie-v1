@@ -36,16 +36,19 @@ class PaymentReconciliationService
                                 foreach ($payments as $payment) {
                                     try {
                                         $result = $this->mpesa->verifyPayment($payment->checkout_request_id);
-                                        if ($this->applyProviderResult($payment, $result)) {
+                                        if ($payment->created_at->lte(now()->subMinutes(30))
+                                            && $this->providerConfirmedTimeout($payment, $result)
+                                            && $this->markTimedOut($payment)
+                                        ) {
                                             $processed++;
 
                                             continue;
                                         }
 
-                                        if ($payment->created_at->lte(now()->subMinutes(5))
-                                            && $this->markTimedOut($payment)
-                                        ) {
+                                        if ($this->applyProviderResult($payment, $result)) {
                                             $processed++;
+
+                                            continue;
                                         }
                                     } catch (Throwable $exception) {
                                         Log::error('Unable to reconcile a pending M-Pesa payment.', [
@@ -53,12 +56,6 @@ class PaymentReconciliationService
                                             'hospital_id' => $hospital->id,
                                             'exception' => $exception,
                                         ]);
-
-                                        if ($payment->created_at->lte(now()->subMinutes(5))
-                                            && $this->markTimedOut($payment)
-                                        ) {
-                                            $processed++;
-                                        }
                                     }
                                 }
                             });
@@ -118,6 +115,16 @@ class PaymentReconciliationService
 
             return true;
         });
+    }
+
+    /**
+     * @param  array<string, mixed>  $result
+     */
+    private function providerConfirmedTimeout(MpesaPayment $payment, array $result): bool
+    {
+        return (string) ($result['ResponseCode'] ?? '') === '0'
+            && (string) ($result['CheckoutRequestID'] ?? '') === $payment->checkout_request_id
+            && filter_var($result['ResultCode'] ?? null, FILTER_VALIDATE_INT) === 1037;
     }
 
     private function markTimedOut(MpesaPayment $payment): bool

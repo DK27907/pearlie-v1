@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\SendPaymentNotification;
 use App\Models\AppointmentRequest;
+use App\Models\Hospital;
 use App\Models\MpesaPayment;
 use App\Services\WhatsAppBookingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -17,6 +18,10 @@ class MpesaWhatsAppBookingTest extends TestCase
 
     public function test_whatsapp_booking_collects_details_and_starts_an_stk_push(): void
     {
+        app()->instance(
+            'currentHospital',
+            Hospital::query()->where('slug', 'pearl')->firstOrFail(),
+        );
         config([
             'pearlie.booking_fee' => 500,
             'mpesa.consumer_key' => 'consumer',

@@ -94,7 +94,7 @@ class PaymentLifecycleService
                 $lockedPayment,
                 $lockedPayment->appointment,
                 'payment_timeout',
-                ['timeout_after_seconds' => 300],
+                ['timeout_after_seconds' => 1800],
             );
 
             return true;
@@ -111,10 +111,7 @@ class PaymentLifecycleService
 
     public function confirmSlot(AppointmentRequest $appointment): void
     {
-        if (in_array($appointment->status, [
-            AppointmentRequest::STATUS_PENDING,
-            AppointmentRequest::STATUS_EXPIRED,
-        ], true)) {
+        if ($appointment->status === AppointmentRequest::STATUS_PENDING) {
             $appointment->forceFill([
                 'status' => AppointmentRequest::STATUS_CONFIRMED,
                 'status_updated_at' => now(),
@@ -132,15 +129,16 @@ class PaymentLifecycleService
                 ->lockForUpdate()
                 ->find($appointment->id) ?? $appointment;
             $previousStatus = $appointment->status;
+            $slotExpired = $previousStatus === AppointmentRequest::STATUS_EXPIRED;
             $shouldAutoConfirm = $appointment->hospital?->shouldAutoConfirmPaidAppointments() ?? false;
             $attributes = [
-                'payment_status' => 'paid',
+                'payment_status' => $slotExpired ? 'refund_pending' : 'paid',
                 'payment_amount' => $payment->amount,
                 'paid_at' => now(),
             ];
 
             $appointment->forceFill($attributes)->save();
-            if ($shouldAutoConfirm) {
+            if ($shouldAutoConfirm && ! $slotExpired) {
                 $this->confirmSlot($appointment);
             }
 
@@ -151,12 +149,14 @@ class PaymentLifecycleService
                 'appointment_status_after' => $appointment->status,
             ]);
 
-            $event = $shouldAutoConfirm
-                ? 'payment_completed'
-                : 'payment_completed_awaiting_confirmation';
+            $event = match (true) {
+                $slotExpired => 'payment_received_slot_expired',
+                $shouldAutoConfirm => 'payment_completed',
+                default => 'payment_completed_awaiting_confirmation',
+            };
             $this->dispatchNotificationAfterCommit($payment, $event);
 
-            if (! $shouldAutoConfirm) {
+            if (! $shouldAutoConfirm || $slotExpired) {
                 $this->dispatchNotificationAfterCommit($payment, $event, 'admin');
             }
         } else {

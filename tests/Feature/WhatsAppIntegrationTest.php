@@ -109,6 +109,10 @@ class WhatsAppIntegrationTest extends TestCase
 
     public function test_booking_flow_collects_email_and_creates_an_appointment_with_payment(): void
     {
+        app()->instance(
+            'currentHospital',
+            Hospital::query()->where('slug', 'pearl')->firstOrFail(),
+        );
         config([
             'pearlie.booking_fee' => 500,
             'mpesa.consumer_key' => 'consumer',

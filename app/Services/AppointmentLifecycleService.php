@@ -172,6 +172,22 @@ class AppointmentLifecycleService
             $staffOverride,
             $reason,
         ): RescheduleResult {
+            $date = CarbonImmutable::createFromFormat('!Y-m-d', $newDate);
+            if (! $date
+                || preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $newStartTime) !== 1
+            ) {
+                throw new AppointmentLifecycleException('Choose a valid appointment date and time.');
+            }
+
+            $availabilityRecords = DoctorAvailability::query()
+                ->where('hospital_id', $hospitalId)
+                ->where('doctor_id', $newDoctorId)
+                ->where('day_of_week', $date->dayOfWeek)
+                ->orderBy('start_time')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
             $appointment = AppointmentRequest::query()
                 ->where('hospital_id', $hospitalId)
                 ->lockForUpdate()
@@ -187,7 +203,6 @@ class AppointmentLifecycleService
                 throw new AppointmentLifecycleException('This appointment is inside the hospital rescheduling cutoff or is not eligible for rescheduling.');
             }
 
-            $date = CarbonImmutable::createFromFormat('!Y-m-d', $newDate);
             if (! $date
                 || $date->toDateString() < CarbonImmutable::today()->toDateString()
                 || $date->greaterThan(CarbonImmutable::today()->addYear())
@@ -233,16 +248,8 @@ class AppointmentLifecycleService
                 }
             }
 
-            $availabilityRecords = DoctorAvailability::query()
-                ->where('hospital_id', $hospitalId)
-                ->where('doctor_id', $doctor->id)
-                ->where('day_of_week', $date->dayOfWeek)
-                ->where('is_active', true)
-                ->orderBy('start_time')
-                ->lockForUpdate()
-                ->get();
-
             $matchingSlot = $availabilityRecords
+                ->where('is_active', true)
                 ->flatMap(fn ($availability) => $availability->generateSlots())
                 ->first(fn (array $slot): bool => $slot['start'] === $newStartTime);
             $isUnchangedSlot = (int) $appointment->doctor_id === (int) $doctor->id

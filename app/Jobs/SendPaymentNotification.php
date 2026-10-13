@@ -49,11 +49,14 @@ class SendPaymentNotification implements ShouldQueue
             }
 
             if ($this->recipientRole === 'admin') {
-                if ($this->outcome !== 'payment_completed_awaiting_confirmation') {
+                if (! in_array($this->outcome, [
+                    'payment_completed_awaiting_confirmation',
+                    'payment_received_slot_expired',
+                ], true)) {
                     throw new RuntimeException('Unsupported hospital-admin payment notification outcome.');
                 }
 
-                $this->notifyHospitalAdmins($appointment, $notifications);
+                $this->notifyHospitalAdmins($appointment, $notifications, $this->outcome);
 
                 return;
             }
@@ -82,6 +85,7 @@ class SendPaymentNotification implements ShouldQueue
 
                 $message = match ($this->outcome) {
                     'payment_completed_awaiting_confirmation' => 'Payment received. Your appointment is being reviewed and you will receive a confirmation shortly.',
+                    'payment_received_slot_expired' => 'Your payment was received, but the slot is no longer available. Our team will contact you to rebook or refund.',
                     'completed_without_confirmation' => 'Your M-Pesa payment was received, but the appointment is not confirmed. Please contact the hospital for assistance.',
                     'payment_failed', 'payment_timeout' => 'Your appointment request was cancelled because the M-Pesa payment was not completed. Please contact the hospital to book again.',
                     default => throw new RuntimeException('Unsupported patient payment notification outcome.'),
@@ -118,6 +122,7 @@ class SendPaymentNotification implements ShouldQueue
     private function notifyHospitalAdmins(
         AppointmentRequest $appointment,
         NotificationService $notifications,
+        string $outcome,
     ): void {
         $admins = User::query()
             ->where('hospital_id', $this->hospitalId)
@@ -139,10 +144,15 @@ class SendPaymentNotification implements ShouldQueue
             return;
         }
 
-        $message = sprintf(
-            'Paid appointment #%d is awaiting confirmation. Please review it in the admin dashboard.',
-            $appointment->id,
-        );
+        $message = $outcome === 'payment_received_slot_expired'
+            ? sprintf(
+                'Payment for expired appointment #%d was received. Please contact the patient to arrange rebooking or a refund.',
+                $appointment->id,
+            )
+            : sprintf(
+                'Paid appointment #%d is awaiting confirmation. Please review it in the admin dashboard.',
+                $appointment->id,
+            );
 
         foreach ($admins as $admin) {
             if (! $notifications->sendSms((string) $admin->phone, $message)) {

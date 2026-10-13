@@ -123,10 +123,12 @@ class DoctorManagementTest extends TestCase
             'id' => $doctor->id,
             'is_doctor' => false,
         ]);
-        $this->assertDatabaseHas('doctor_invites', [
-            'doctor_id' => $doctor->id,
-            'used_at' => now(),
-        ]);
+        $this->assertNotNull(
+            DoctorInvite::withoutGlobalScope('hospital')
+                ->where('hospital_id', $doctor->hospital_id)
+                ->where('doctor_id', $doctor->id)
+                ->value('used_at'),
+        );
         $this->assertModelExists($otherDoctor);
     }
 

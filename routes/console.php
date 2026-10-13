@@ -4,6 +4,7 @@ use App\Console\Commands\CleanupSlotHolds;
 use App\Console\Commands\MpesaHealthCheck;
 use App\Console\Commands\MpesaSimulateCallback;
 use App\Console\Commands\MpesaVerifySandboxCredentials;
+use App\Console\Commands\ProcessMpesaCallbackInbox;
 use App\Console\Commands\PruneConversations;
 use App\Console\Commands\PruneNotificationLogs;
 use App\Console\Commands\PrunePasswordResetTokens;
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\Schedule;
 ArtisanApplication::starting(static function ($artisan): void {
     $artisan->resolveCommands([
         MpesaSimulateCallback::class,
+        ProcessMpesaCallbackInbox::class,
         ReconcileMpesaPayments::class,
         CleanupSlotHolds::class,
         MpesaHealthCheck::class,
@@ -50,6 +52,12 @@ Schedule::command('app:reconcile-mpesa-payments')
     ->onOneServer()
     ->runInBackground()
     ->onSuccess(static fn (): bool => MpesaHealthCheck::recordSchedulerHeartbeat('app:reconcile-mpesa-payments'));
+Schedule::command('app:process-mpesa-callback-inbox --limit=100')
+    ->everyMinute()
+    ->withoutOverlapping(5)
+    ->onOneServer()
+    ->runInBackground()
+    ->onSuccess(static fn (): bool => MpesaHealthCheck::recordSchedulerHeartbeat('app:process-mpesa-callback-inbox --limit=100'));
 Schedule::command('app:cleanup-slot-holds')
     ->everyMinute()
     ->withoutOverlapping(5)

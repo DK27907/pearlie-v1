@@ -13,6 +13,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 
 require_once __DIR__.'/../app/Helpers/hospital.php';
 
@@ -24,8 +25,14 @@ $application = Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->web(append: [ResolveHospital::class, SecurityHeaders::class]);
-        $middleware->api(append: [ResolveHospital::class]);
+        $middleware->web(
+            append: [ResolveHospital::class, SubstituteBindings::class, SecurityHeaders::class],
+            remove: [SubstituteBindings::class],
+        );
+        $middleware->api(
+            append: [ResolveHospital::class, SubstituteBindings::class],
+            remove: [SubstituteBindings::class],
+        );
         $middleware->alias([
             'doctor' => EnsureUserIsDoctor::class,
             'hospital.admin' => EnsureUserIsHospitalAdmin::class,

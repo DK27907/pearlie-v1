@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Jobs\SendPaymentNotification;
 use App\Models\AppointmentRequest;
 use App\Models\Hospital;
+use App\Models\MpesaCallbackInbox;
 use App\Models\MpesaPayment;
 use App\Services\MpesaService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -460,20 +461,99 @@ class MpesaCallbackVerificationTest extends TestCase
         $mpesa = Mockery::mock(MpesaService::class);
         $mpesa->shouldReceive('handleCallback')
             ->once()
-            ->andThrow(new RuntimeException('Synthetic callback failure.'));
+            ->andReturnUsing(function (array $payload): ?MpesaPayment {
+                $inbox = MpesaCallbackInbox::query()
+                    ->where('checkout_request_id', 'checkout-controller-error')
+                    ->firstOrFail();
+
+                $this->assertSame(MpesaCallbackInbox::STATUS_PROCESSING, $inbox->status);
+                $this->assertSame($payload, $inbox->payload);
+
+                throw new RuntimeException('Synthetic callback failure.');
+            });
         $this->app->instance(MpesaService::class, $mpesa);
         Log::shouldReceive('debug')->zeroOrMoreTimes();
         Log::shouldReceive('error')
             ->once()
-            ->with('M-Pesa callback controller exception', Mockery::on(
+            ->with('M-Pesa callback inbox processing threw an exception.', Mockery::on(
                 fn (array $context): bool => $context['checkout_request_id'] === 'checkout-controller-error'
-                    && $context['message'] === 'Synthetic callback failure.'
-                    && is_string($context['trace']),
+                    && $context['exception'] instanceof RuntimeException
+                    && $context['exception']->getMessage() === 'Synthetic callback failure.',
             ));
 
         $this->postJson('/api/mpesa/callback', $this->makeCallback('checkout-controller-error'))
             ->assertOk()
             ->assertExactJson(['ResultCode' => 0, 'ResultDesc' => 'Accepted']);
+
+        $inbox = MpesaCallbackInbox::query()
+            ->where('checkout_request_id', 'checkout-controller-error')
+            ->firstOrFail();
+        $this->assertSame(MpesaCallbackInbox::STATUS_RETRY, $inbox->status);
+        $this->assertSame(1, $inbox->attempts);
+    }
+
+    public function test_tenant_callback_route_cannot_match_another_hospitals_payment(): void
+    {
+        $otherHospital = Hospital::factory()->create(['slug' => 'callback-other-tenant']);
+        app()->instance('currentHospital', $otherHospital);
+        $payment = MpesaPayment::factory()->create([
+            'hospital_id' => $otherHospital->id,
+            'checkout_request_id' => 'checkout-other-tenant',
+        ]);
+        app()->instance(
+            'currentHospital',
+            Hospital::query()->where('slug', 'pearl')->firstOrFail(),
+        );
+        $this->configureLocalSandbox();
+        Http::preventStrayRequests();
+
+        $this->postJson(
+            '/api/mpesa/callback/pearl',
+            $this->makeCallback('checkout-other-tenant'),
+        )->assertOk();
+
+        $this->assertDatabaseHas('mpesa_payments', [
+            'id' => $payment->id,
+            'hospital_id' => $otherHospital->id,
+            'status' => MpesaPayment::STATUS_PENDING,
+        ]);
+        $this->assertDatabaseHas('mpesa_callback_inbox', [
+            'checkout_request_id' => 'checkout-other-tenant',
+            'hospital_slug' => 'pearl',
+            'status' => MpesaCallbackInbox::STATUS_RETRY,
+        ]);
+    }
+
+    public function test_callback_inbox_command_retries_due_entry_with_a_bounded_batch(): void
+    {
+        $payload = $this->makeCallback('checkout-due-retry');
+        $payment = MpesaPayment::factory()->create([
+            'checkout_request_id' => 'checkout-due-retry',
+        ]);
+        $inbox = MpesaCallbackInbox::query()->create([
+            'checkout_request_id' => 'checkout-due-retry',
+            'payload_hash' => hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR)),
+            'payload' => $payload,
+            'status' => MpesaCallbackInbox::STATUS_RETRY,
+            'attempts' => 1,
+            'available_at' => now()->subMinute(),
+        ]);
+
+        $mpesa = Mockery::mock(MpesaService::class);
+        $mpesa->shouldReceive('handleCallback')
+            ->once()
+            ->with($payload, null)
+            ->andReturn($payment);
+        $this->app->instance(MpesaService::class, $mpesa);
+
+        $this->artisan('app:process-mpesa-callback-inbox', ['--limit' => 1])
+            ->assertExitCode(0);
+
+        $this->assertDatabaseHas('mpesa_callback_inbox', [
+            'id' => $inbox->id,
+            'status' => MpesaCallbackInbox::STATUS_PROCESSED,
+            'attempts' => 2,
+        ]);
     }
 
     public function test_local_simulator_applies_callback_to_existing_payment(): void

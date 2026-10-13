@@ -209,7 +209,7 @@ class MpesaService
         }
     }
 
-    public function handleCallback(array $callbackData): ?MpesaPayment
+    public function handleCallback(array $callbackData, ?string $hospitalSlug = null): ?MpesaPayment
     {
         $checkoutRequestId = null;
 
@@ -247,14 +247,45 @@ class MpesaService
                 return null;
             }
 
-            $existingPayment = MpesaPayment::withoutGlobalScope('hospital')
-                ->where('checkout_request_id', $checkoutRequestId)
-                ->first();
+            $expectedHospital = $hospitalSlug === null
+                ? null
+                : Hospital::withoutGlobalScopes()->where('slug', $hospitalSlug)->first();
+            if ($hospitalSlug !== null && ! $expectedHospital) {
+                Log::warning('M-Pesa callback references an unknown hospital slug.', [
+                    'checkout_request_id' => $checkoutRequestId,
+                    'hospital_slug' => $hospitalSlug,
+                ]);
+
+                return null;
+            }
+
+            $currentHospital = hospital();
+            if ($expectedHospital
+                && $currentHospital
+                && (int) $currentHospital->id !== (int) $expectedHospital->id
+            ) {
+                Log::warning('M-Pesa callback hospital context does not match its route.', [
+                    'checkout_request_id' => $checkoutRequestId,
+                    'hospital_slug' => $hospitalSlug,
+                    'current_hospital_id' => $currentHospital->id,
+                ]);
+
+                return null;
+            }
+
+            $paymentQuery = MpesaPayment::withoutGlobalScope('hospital')
+                ->where('checkout_request_id', $checkoutRequestId);
+            $appointmentQuery = AppointmentRequest::withoutGlobalScope('hospital')
+                ->where('mpesa_checkout_request_id', $checkoutRequestId);
+            if ($expectedHospital) {
+                $paymentQuery->where('hospital_id', $expectedHospital->id);
+                $appointmentQuery->where('hospital_id', $expectedHospital->id);
+            }
+
+            $existingPayment = $paymentQuery->first();
             $appointment = $existingPayment
                 ? null
-                : AppointmentRequest::withoutGlobalScope('hospital')
-                    ->where('mpesa_checkout_request_id', $checkoutRequestId)
-                    ->first();
+                : $appointmentQuery->first();
 
             if (! $existingPayment && ! $appointment) {
                 Log::warning('M-Pesa callback for unknown checkout_request_id', [
@@ -300,6 +331,11 @@ class MpesaService
                     ->first();
 
                 if ($existingPayment && ! $existingPayment->isPending()) {
+                    Log::warning('Ignoring an M-Pesa callback for a non-pending payment.', [
+                        'checkout_request_id' => $checkoutRequestId,
+                        'payment_status' => $existingPayment->status,
+                    ]);
+
                     return $existingPayment->load('appointment');
                 }
 
@@ -397,10 +433,12 @@ class MpesaService
                         }
                     }
 
-                    if ($payment->isCompleted()
-                        || $payment->isFailed()
-                        || $payment->status === MpesaPayment::STATUS_TIMEOUT
-                    ) {
+                    if (! $payment->isPending()) {
+                        Log::warning('Ignoring an M-Pesa callback for a non-pending payment.', [
+                            'checkout_request_id' => $checkoutRequestId,
+                            'payment_status' => $payment->status,
+                        ]);
+
                         return $payment->load('appointment');
                     }
 

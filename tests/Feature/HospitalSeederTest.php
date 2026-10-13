@@ -61,6 +61,7 @@ class HospitalSeederTest extends TestCase
         $this->assertSame('Pearl Hospital', $pearl->site_header_text);
         $this->assertSame('© 2026 Pearl Hospital. All rights reserved.', $pearl->site_footer_text);
 
+        app()->instance('currentHospital', $pearl);
         $pearlServices = $pearl->services()
             ->active()
             ->orderBy('name')
@@ -85,6 +86,7 @@ class HospitalSeederTest extends TestCase
 
         $this->assertSame('Nairobi Medical Centre', $demo->name);
         $this->assertSame('Nairobie', $demo->chatbot_name);
+        app()->instance('currentHospital', $demo);
         $this->assertSame(
             [
                 'Dental Checkup',

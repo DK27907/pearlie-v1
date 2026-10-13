@@ -27,6 +27,8 @@ trait BelongsToHospital
                     $query->getModel()->qualifyColumn('hospital_id'),
                     $hospital->id,
                 );
+            } else {
+                $query->whereRaw('1 = 0');
             }
         });
     }

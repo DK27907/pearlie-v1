@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\User;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -42,12 +43,16 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        $currentHospital = hospital();
-        app()->instance('currentHospital', null);
-        try {
-            $authenticated = Auth::attempt($this->only('email', 'password'), $this->boolean('remember'));
-        } finally {
-            app()->instance('currentHospital', $currentHospital);
+        $credentials = $this->only('email', 'password');
+        $user = User::withoutGlobalScope('hospital')
+            ->where('email', $credentials['email'])
+            ->first();
+        $provider = Auth::guard()->getProvider();
+        $authenticated = $user !== null && $provider->validateCredentials($user, $credentials);
+
+        if ($authenticated) {
+            $provider->rehashPasswordIfRequired($user, $credentials);
+            Auth::login($user, $this->boolean('remember'));
         }
 
         if (! $authenticated) {

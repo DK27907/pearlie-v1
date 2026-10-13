@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Hospital;
 use App\Models\Invite;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
@@ -38,7 +39,7 @@ class HospitalInvitationController extends Controller
         ]);
 
         $user = DB::transaction(function () use ($invite, $data): User {
-            $invite = Invite::query()
+            $invite = Invite::withoutGlobalScope('hospital')
                 ->whereKey($invite->id)
                 ->where('hospital_id', $invite->hospital_id)
                 ->valid()
@@ -85,9 +86,13 @@ class HospitalInvitationController extends Controller
 
     private function findInvite(string $slug, string $token): Invite
     {
-        return Invite::query()
+        $hospital = Hospital::withoutGlobalScopes()
+            ->where('slug', $slug)
+            ->firstOrFail();
+
+        return Invite::withoutGlobalScope('hospital')
+            ->where('hospital_id', $hospital->id)
             ->where('token', $token)
-            ->whereHas('hospital', fn ($query) => $query->where('slug', $slug))
             ->valid()
             ->firstOrFail();
     }

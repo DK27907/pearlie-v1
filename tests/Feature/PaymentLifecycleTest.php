@@ -6,6 +6,7 @@ use App\Jobs\SendPaymentNotification;
 use App\Models\AppointmentRequest;
 use App\Models\DoctorAvailability;
 use App\Models\Hospital;
+use App\Models\MpesaCallbackInbox;
 use App\Models\MpesaPayment;
 use App\Models\PaymentEvent;
 use App\Models\SlotHold;
@@ -17,6 +18,7 @@ use App\Services\PaymentReconciliationService;
 use App\Services\WhatsAppService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use RuntimeException;
 use Tests\TestCase;
@@ -41,6 +43,12 @@ class PaymentLifecycleTest extends TestCase
         $this->postJson('/api/mpesa/callback/'.$hospital->slug, $payload)
             ->assertOk()
             ->assertExactJson(['status' => 'already_processed']);
+
+        $this->assertDatabaseCount('mpesa_callback_inbox', 1);
+        $this->assertDatabaseHas('mpesa_callback_inbox', [
+            'checkout_request_id' => $payment->checkout_request_id,
+            'status' => MpesaCallbackInbox::STATUS_PROCESSED,
+        ]);
 
         $this->assertDatabaseHas('appointment_requests', [
             'id' => $appointment->id,
@@ -232,7 +240,7 @@ class PaymentLifecycleTest extends TestCase
         $this->assertSame('payment_failed', $event->event);
     }
 
-    public function test_successful_callback_confirms_an_expired_booking_after_late_payment(): void
+    public function test_successful_callback_does_not_confirm_an_expired_booking_after_late_payment(): void
     {
         [$hospital, $appointment, $payment] = $this->createPaymentScenario();
         $hospital->update(['settings' => ['auto_confirm_paid_appointments' => true]]);
@@ -253,11 +261,11 @@ class PaymentLifecycleTest extends TestCase
         ]);
         $this->assertDatabaseHas('appointment_requests', [
             'id' => $appointment->id,
-            'status' => AppointmentRequest::STATUS_CONFIRMED,
-            'payment_status' => 'paid',
+            'status' => AppointmentRequest::STATUS_EXPIRED,
+            'payment_status' => 'refund_pending',
         ]);
-        $this->assertNotNull($appointment->fresh()->status_updated_at);
-        Queue::assertPushed(SendPaymentNotification::class, 1);
+        $this->assertNotNull($appointment->fresh()->paid_at);
+        Queue::assertPushed(SendPaymentNotification::class, 2);
     }
 
     public function test_failed_callback_cancels_appointment_without_marking_it_paid(): void
@@ -283,6 +291,43 @@ class PaymentLifecycleTest extends TestCase
         ]);
         $this->assertNotNull($appointment->fresh()->status_updated_at);
         Queue::assertPushed(SendPaymentNotification::class, fn (SendPaymentNotification $job): bool => $job->outcome === 'payment_failed');
+    }
+
+    public function test_callback_on_cancelled_payment_is_ignored(): void
+    {
+        [$hospital, $appointment, $payment] = $this->createPaymentScenario(
+            MpesaPayment::STATUS_CANCELLED,
+        );
+        $this->configureLocalSandbox();
+        Http::preventStrayRequests();
+        Log::spy();
+        Queue::fake([SendPaymentNotification::class]);
+
+        $this->postJson(
+            '/api/mpesa/callback/'.$hospital->slug,
+            $this->callbackPayload($payment, 0),
+        )->assertOk();
+
+        $this->assertDatabaseHas('mpesa_payments', [
+            'id' => $payment->id,
+            'status' => MpesaPayment::STATUS_CANCELLED,
+            'callback_payload' => null,
+        ]);
+        $this->assertDatabaseHas('appointment_requests', [
+            'id' => $appointment->id,
+            'payment_status' => 'pending',
+            'mpesa_result_code' => null,
+            'mpesa_receipt' => null,
+        ]);
+        $this->assertDatabaseMissing('payment_events', [
+            'payment_id' => $payment->id,
+        ]);
+        Queue::assertNothingPushed();
+        Log::shouldHaveReceived('warning')
+            ->once()
+            ->withArgs(fn (string $message, array $context): bool => $message === 'Ignoring an M-Pesa callback for a non-pending payment.'
+                && $context['checkout_request_id'] === $payment->checkout_request_id
+                && $context['payment_status'] === MpesaPayment::STATUS_CANCELLED);
     }
 
     public function test_user_cancellation_marks_payment_failed_and_cancels_appointment(): void
@@ -492,10 +537,42 @@ class PaymentLifecycleTest extends TestCase
         Queue::assertPushed(SendPaymentNotification::class, 2);
     }
 
-    public function test_reconciliation_times_out_a_pending_payment_after_five_minutes(): void
+    public function test_reconciliation_leaves_a_pending_payment_unresolved_after_a_transient_provider_error(): void
     {
         [$hospital, $appointment, $payment] = $this->createPaymentScenario();
         $payment->forceFill(['created_at' => now()->subMinutes(6)])->save();
+        $this->configureLocalSandbox();
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://sandbox.safaricom.co.ke/oauth/v1/generate*' => Http::response([
+                'access_token' => 'test-access-token',
+            ]),
+            'https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query' => Http::failedConnection(),
+        ]);
+        Queue::fake([SendPaymentNotification::class]);
+
+        $this->assertSame(0, app(PaymentReconciliationService::class)->reconcile());
+
+        $this->assertDatabaseHas('mpesa_payments', [
+            'id' => $payment->id,
+            'status' => MpesaPayment::STATUS_PENDING,
+        ]);
+        $this->assertDatabaseHas('appointment_requests', [
+            'id' => $appointment->id,
+            'status' => AppointmentRequest::STATUS_PENDING,
+            'payment_status' => 'pending',
+        ]);
+        $this->assertDatabaseMissing('payment_events', [
+            'payment_id' => $payment->id,
+            'event' => 'payment_timeout',
+        ]);
+        Queue::assertNothingPushed();
+    }
+
+    public function test_reconciliation_leaves_an_inconclusive_payment_pending_after_thirty_minutes(): void
+    {
+        [$hospital, $appointment, $payment] = $this->createPaymentScenario();
+        $payment->forceFill(['created_at' => now()->subMinutes(31)])->save();
         $this->configureLocalSandbox();
         Http::preventStrayRequests();
         Http::fake([
@@ -510,6 +587,39 @@ class PaymentLifecycleTest extends TestCase
         ]);
         Queue::fake([SendPaymentNotification::class]);
 
+        $this->assertSame(0, app(PaymentReconciliationService::class)->reconcile());
+
+        $this->assertDatabaseHas('mpesa_payments', [
+            'id' => $payment->id,
+            'status' => MpesaPayment::STATUS_PENDING,
+        ]);
+        $this->assertDatabaseHas('appointment_requests', [
+            'id' => $appointment->id,
+            'status' => AppointmentRequest::STATUS_PENDING,
+            'payment_status' => 'pending',
+        ]);
+        Queue::assertNothingPushed();
+    }
+
+    public function test_reconciliation_times_out_only_after_provider_confirms_timeout(): void
+    {
+        [$hospital, $appointment, $payment] = $this->createPaymentScenario();
+        $payment->forceFill(['created_at' => now()->subMinutes(31)])->save();
+        $this->configureLocalSandbox();
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://sandbox.safaricom.co.ke/oauth/v1/generate*' => Http::response([
+                'access_token' => 'test-access-token',
+            ]),
+            'https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query' => Http::response([
+                'ResponseCode' => '0',
+                'CheckoutRequestID' => $payment->checkout_request_id,
+                'ResultCode' => 1037,
+                'ResultDesc' => 'The request timed out.',
+            ]),
+        ]);
+        Queue::fake([SendPaymentNotification::class]);
+
         $this->assertSame(1, app(PaymentReconciliationService::class)->reconcile());
 
         $this->assertDatabaseHas('mpesa_payments', [
@@ -520,10 +630,6 @@ class PaymentLifecycleTest extends TestCase
             'id' => $appointment->id,
             'status' => AppointmentRequest::STATUS_CANCELLED,
             'payment_status' => 'unpaid',
-        ]);
-        $this->assertDatabaseHas('payment_events', [
-            'payment_id' => $payment->id,
-            'event' => 'payment_timeout',
         ]);
         Queue::assertPushed(SendPaymentNotification::class, 1);
     }

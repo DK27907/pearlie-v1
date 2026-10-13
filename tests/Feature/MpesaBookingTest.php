@@ -323,6 +323,24 @@ class MpesaBookingTest extends TestCase
             ->assertNotFound();
     }
 
+    public function test_payment_status_endpoint_enforces_the_requested_hospital_scope(): void
+    {
+        $otherHospital = Hospital::factory()->create(['slug' => 'status-other-tenant']);
+        app()->instance('currentHospital', $otherHospital);
+        MpesaPayment::factory()->create([
+            'hospital_id' => $otherHospital->id,
+            'checkout_request_id' => 'checkout-other-tenant-status',
+        ]);
+        app()->instance(
+            'currentHospital',
+            Hospital::query()->where('slug', 'pearl')->firstOrFail(),
+        );
+        Http::preventStrayRequests();
+
+        $this->getJson('/api/mpesa/status/checkout-other-tenant-status?hospital=pearl')
+            ->assertNotFound();
+    }
+
     public function test_callback_does_not_complete_a_payment_when_provider_status_differs(): void
     {
         $payment = MpesaPayment::factory()->create([

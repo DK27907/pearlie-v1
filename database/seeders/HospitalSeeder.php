@@ -186,16 +186,28 @@ class HospitalSeeder extends Seeder
      */
     private function seedServices(Hospital $hospital, array $services): void
     {
-        $serviceNames = array_column($services, 'name');
-        $hospital->services()
-            ->whereNotIn('name', $serviceNames)
-            ->update(['is_active' => false]);
+        $hadCurrentHospital = app()->bound('currentHospital');
+        $previousHospital = $hadCurrentHospital ? hospital() : null;
 
-        foreach ($services as $service) {
-            $hospital->services()->updateOrCreate(
-                ['name' => $service['name']],
-                [...$service, 'is_active' => true],
-            );
+        try {
+            app()->instance('currentHospital', $hospital);
+            $serviceNames = array_column($services, 'name');
+            $hospital->services()
+                ->whereNotIn('name', $serviceNames)
+                ->update(['is_active' => false]);
+
+            foreach ($services as $service) {
+                $hospital->services()->updateOrCreate(
+                    ['name' => $service['name']],
+                    [...$service, 'is_active' => true],
+                );
+            }
+        } finally {
+            if ($hadCurrentHospital) {
+                app()->instance('currentHospital', $previousHospital);
+            } else {
+                app()->forgetInstance('currentHospital');
+            }
         }
     }
 }
