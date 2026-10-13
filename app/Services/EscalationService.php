@@ -9,6 +9,7 @@ use App\Models\Escalation;
 use App\Models\EscalationReply;
 use App\Models\User;
 use App\Notifications\EscalationPatientMessage;
+use App\Support\CacheLockRunner;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
@@ -45,7 +46,7 @@ class EscalationService
             $phoneVariants = $patientPhone ? $this->phoneVariants($identity) : [];
             $lock = Cache::lock('escalation-rate-limit:'.hash('sha256', $identity), 10);
 
-            $escalation = $lock->block(5, function () use ($sessionId, $userMessage, $aiResponse, $identity, $phoneVariants, $patientPhone): Escalation {
+            $escalation = CacheLockRunner::run($lock, 5, function () use ($sessionId, $userMessage, $aiResponse, $identity, $phoneVariants, $patientPhone): Escalation {
                 $recent = Escalation::query()
                     ->where('created_at', '>=', now()->subMinutes(5))
                     ->where(function ($query) use ($sessionId, $identity, $phoneVariants): void {

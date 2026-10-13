@@ -6,6 +6,8 @@ use Carbon\CarbonImmutable;
 
 class DateParser
 {
+    public const ENGLISH_MONTH_PATTERN = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+
     private const SWAHILI_WEEKDAYS = [
         'jumatatu' => 'monday',
         'jumanne' => 'tuesday',
@@ -47,24 +49,6 @@ class DateParser
             return CarbonImmutable::today()->addWeek();
         }
 
-        $weekdays = self::SWAHILI_WEEKDAYS + array_fill_keys([
-            'monday',
-            'tuesday',
-            'wednesday',
-            'thursday',
-            'friday',
-            'saturday',
-            'sunday',
-        ], '');
-
-        foreach ($weekdays as $day => $englishDay) {
-            $weekday = $englishDay !== '' ? $englishDay : $day;
-
-            if (preg_match('/\b(?:next\s+)?'.preg_quote($day, '/').'\b/u', $input)) {
-                return CarbonImmutable::today()->next($weekday);
-            }
-        }
-
         $cleaned = preg_replace('/(\d+)(st|nd|rd|th)\b/i', '$1', $input) ?? $input;
         $cleaned = preg_replace('/\b(ya|wa|mwaka)\b/u', ' ', $cleaned) ?? $cleaned;
         $cleaned = preg_replace_callback(
@@ -86,19 +70,57 @@ class DateParser
             return self::createDate('!d-m-Y', $matches[0]);
         }
 
-        if (preg_match('/\b(\d{1,2})[\s-]+([a-z]+)[,\s-]+(\d{4})\b/i', $cleaned, $matches)) {
+        if (preg_match('/\b(\d{1,2})[\s-]+('.self::ENGLISH_MONTH_PATTERN.')[,\s-]+(\d{4})\b/i', $cleaned, $matches)) {
             $month = $matches[2];
             $format = strlen($month) <= 3 ? '!j M Y' : '!j F Y';
 
-            return self::createDate($format, $matches[0]);
+            return self::createDate($format, $matches[1].' '.$month.' '.$matches[3]);
         }
 
-        if (preg_match('/\b([a-z]+)\s+(\d{1,2}),?\s+(\d{4})\b/i', $cleaned, $matches)) {
+        if (preg_match('/\b('.self::ENGLISH_MONTH_PATTERN.')\s+(\d{1,2}),?\s+(\d{4})\b/i', $cleaned, $matches)) {
             $month = $matches[1];
             $format = strlen($month) <= 3 ? '!M j Y' : '!F j Y';
             $dateValue = str_replace(',', '', $matches[0]);
 
             return self::createDate($format, $dateValue);
+        }
+
+        if (preg_match('/\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s*,?\s*('.self::ENGLISH_MONTH_PATTERN.')\s+(\d{1,2})\b/iu', $cleaned, $matches)
+            || preg_match('/\b('.self::ENGLISH_MONTH_PATTERN.')\s+(\d{1,2})\b/iu', $cleaned, $matches)
+        ) {
+            $month = $matches[1];
+            $format = strlen($month) <= 3 ? '!M j Y' : '!F j Y';
+            $date = self::createDate($format, $month.' '.$matches[2].' '.CarbonImmutable::today()->year);
+
+            if ($date === null) {
+                return null;
+            }
+
+            if (preg_match('/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/iu', $cleaned, $weekday)
+                && strtolower($weekday[1]) !== strtolower($date->englishDayOfWeek)
+            ) {
+                return null;
+            }
+
+            return $date;
+        }
+
+        $weekdays = self::SWAHILI_WEEKDAYS + array_fill_keys([
+            'monday',
+            'tuesday',
+            'wednesday',
+            'thursday',
+            'friday',
+            'saturday',
+            'sunday',
+        ], '');
+
+        foreach ($weekdays as $day => $englishDay) {
+            $weekday = $englishDay !== '' ? $englishDay : $day;
+
+            if (preg_match('/\b(?:next\s+)?'.preg_quote($day, '/').'\b/u', $input)) {
+                return CarbonImmutable::today()->next($weekday);
+            }
         }
 
         return null;

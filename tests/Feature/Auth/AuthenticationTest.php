@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use App\Models\Hospital;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class AuthenticationTest extends TestCase
@@ -16,6 +17,57 @@ class AuthenticationTest extends TestCase
         $response = $this->get('/login');
 
         $response->assertStatus(200);
+    }
+
+    public function test_patient_can_access_the_patient_dashboard(): void
+    {
+        $patient = User::factory()->create([
+            'role' => 'patient',
+            'is_admin' => false,
+            'is_super_admin' => false,
+            'is_doctor' => false,
+        ]);
+
+        $this->actingAs($patient)
+            ->get(route('dashboard'))
+            ->assertOk();
+    }
+
+    #[DataProvider('nonPatientRoles')]
+    public function test_non_patient_roles_are_forbidden_from_the_patient_dashboard(array $attributes): void
+    {
+        $user = User::factory()->create($attributes);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertForbidden();
+    }
+
+    /**
+     * @return array<string, array{array{role: string, is_admin: bool, is_super_admin: bool, is_doctor: bool}}>
+     */
+    public static function nonPatientRoles(): array
+    {
+        return [
+            'doctor' => [[
+                'role' => 'doctor',
+                'is_admin' => false,
+                'is_super_admin' => false,
+                'is_doctor' => true,
+            ]],
+            'hospital administrator' => [[
+                'role' => 'hospital_admin',
+                'is_admin' => true,
+                'is_super_admin' => false,
+                'is_doctor' => false,
+            ]],
+            'super administrator' => [[
+                'role' => 'super_admin',
+                'is_admin' => false,
+                'is_super_admin' => true,
+                'is_doctor' => false,
+            ]],
+        ];
     }
 
     public function test_users_can_authenticate_using_the_login_screen(): void

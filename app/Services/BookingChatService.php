@@ -9,6 +9,7 @@ use App\Models\Hospital;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\Chat\ChatResponse;
+use App\Support\CacheLockRunner;
 use App\Support\DateParser;
 use Carbon\CarbonImmutable;
 use DateTimeImmutable;
@@ -51,12 +52,25 @@ class BookingChatService
      */
     private const FIELD_PROMPTS = [
         'service_id' => 'What service do you need?',
-        'doctor_id' => 'Which doctor would you prefer?',
         'date' => 'What date would you prefer? Use DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say "tomorrow".',
-        'time' => 'What time would you prefer?',
         'patient_name' => 'What is your full name?',
         'patient_phone' => 'What Kenyan mobile number should we use?',
+        'doctor_id' => 'Which doctor would you prefer?',
+        'time' => 'What time would you prefer?',
     ];
+
+    private const SWAHILI_FIELD_PROMPTS = [
+        'service_id' => 'Unahitaji huduma gani?',
+        'date' => "Ungependa miadi tarehe gani? Tumia DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema 'kesho'.",
+        'patient_name' => 'Jina lako kamili ni nani?',
+        'patient_phone' => 'Tutumie nambari gani ya simu ya Kenya?',
+        'doctor_id' => 'Ungependa kumwona daktari gani?',
+        'time' => 'Ungependa miadi iwe saa ngapi?',
+    ];
+
+    private const LANGUAGE_ENGLISH = 'en';
+
+    private const LANGUAGE_SWAHILI = 'sw';
 
     public function __construct(
         private readonly DoctorAvailabilityService $availability,
@@ -76,16 +90,20 @@ class BookingChatService
 
         $sessionId = $this->sessionId($channelId, $channel);
 
-        return Cache::lock(
-            'booking-chat-state:'.hash('sha256', implode(':', [$hospital->id, $channel, $sessionId])),
-            120,
-        )->block(10, fn (): ChatResponse => $this->handleWithinSessionLock(
-            $channelId,
-            $sessionId,
-            $message,
-            $channel,
-            $hospital,
-        ));
+        return CacheLockRunner::run(
+            Cache::lock(
+                'booking-chat-state:'.hash('sha256', implode(':', [$hospital->id, $channel, $sessionId])),
+                120,
+            ),
+            10,
+            fn (): ChatResponse => $this->handleWithinSessionLock(
+                $channelId,
+                $sessionId,
+                $message,
+                $channel,
+                $hospital,
+            ),
+        );
     }
 
     private function handleWithinSessionLock(
@@ -97,6 +115,7 @@ class BookingChatService
     ): ChatResponse {
         $previousState = $this->persistedState($channelId, $channel);
         $state = $this->reconcilePaymentState($previousState);
+        $state['language'] = $this->bookingLanguage($message, $state['language'] ?? self::LANGUAGE_ENGLISH);
 
         if (($previousState['state'] ?? self::STATE_IDLE) === self::STATE_PAYMENT_PENDING
             && in_array($state['state'], [self::STATE_COMPLETED, self::STATE_CANCELLED], true)
@@ -116,7 +135,7 @@ class BookingChatService
         }
 
         if (in_array($state['state'], [self::STATE_COMPLETED, self::STATE_CANCELLED], true)) {
-            $state = $this->emptyState();
+            $state = $this->emptyState(language: $state['language']);
         }
 
         if (trim($message) === '') {
@@ -194,7 +213,7 @@ class BookingChatService
         }
 
         if ($intent === 'reset') {
-            $state = $this->emptyState();
+            $state = $this->emptyState(language: $state['language']);
 
             return $this->respond(
                 $sessionId,
@@ -207,17 +226,54 @@ class BookingChatService
         }
 
         if ($intent === 'cancel') {
-            $state = $this->emptyState(self::STATE_CANCELLED);
+            $state = $this->emptyState(self::STATE_CANCELLED, $state['language']);
 
             return $this->respond($sessionId, $channel, $message, 'Your booking has been cancelled.', $state);
+        }
+
+        if (in_array($state['state'], [self::STATE_COLLECTING, self::STATE_CONFIRMING], true)
+            && (
+                ($intent === 'book'
+                    && (
+                        $state['state'] === self::STATE_CONFIRMING
+                        || filled($state['service_id'])
+                        || filled($state['date'])
+                    ))
+                || preg_match('/^\s*miadi\s*[?!.]*\s*$/iu', $message) === 1
+            )
+        ) {
+            $this->assistant->clearPendingEscalation($sessionId);
+            $state = $this->emptyState(language: $state['language']);
+            $isSwahili = $state['language'] === self::LANGUAGE_SWAHILI;
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $isSwahili
+                    ? 'Tuanze upya. Unahitaji huduma gani?'
+                    : "Let's start over. What service do you need?",
+                $state,
+                source: 'booking_reset',
+            );
         }
 
         if ($intent === 'book') {
             $state['escalation_pending'] = false;
             $state['pending_escalation_message'] = null;
+            $state['unrecognized_message_count'] = 0;
+        }
+
+        if (in_array($state['state'], [
+            self::STATE_IDENTIFYING,
+            self::STATE_COLLECTING,
+            self::STATE_CONFIRMING,
+        ], true)) {
+            $this->assistant->clearPendingEscalation($sessionId);
         }
 
         if (($state['escalation_pending'] ?? false) && $this->extractPhone($message) !== null) {
+            $escalationPhone = $this->extractPhone($message);
             $pendingMessage = (string) ($state['pending_escalation_message'] ?? $message);
             app(EscalationService::class)->createEscalation(
                 $sessionId,
@@ -226,10 +282,12 @@ class BookingChatService
                     "Thank you. Your request has been passed to the %s team. I'm connecting you to a health worker now; someone will reach out shortly.",
                     $hospital->name,
                 ),
-                $this->extractPhone($message),
+                $escalationPhone,
             );
+            $state['patient_phone'] ??= $escalationPhone;
             $state['escalation_pending'] = false;
             $state['pending_escalation_message'] = null;
+            $state['unrecognized_message_count'] = 0;
 
             return $this->respond(
                 $sessionId,
@@ -251,8 +309,21 @@ class BookingChatService
 
         if ($intent === 'continue_booking' && ! empty($state['state']) && $state['state'] !== self::STATE_IDLE) {
             $state['escalation_pending'] = false;
+            $state['pending_escalation_message'] = null;
+            $state['unrecognized_message_count'] = 0;
 
-            return $this->advanceState($sessionId, $channel, $message, $hospital, $state);
+            $dateWasRequested = $state['state'] === self::STATE_COLLECTING
+                && $this->nextMissingField($state) === 'date';
+
+            return $this->advanceState(
+                $sessionId,
+                $channel,
+                $message,
+                $hospital,
+                $state,
+                $dateWasRequested,
+                $intent,
+            );
         }
 
         // Handle yes/no clarification before delegating to assistant
@@ -261,12 +332,50 @@ class BookingChatService
         if (in_array($intent, ['yes', 'no'], true) && $state['state'] !== self::STATE_CONFIRMING) {
             $response = $state['state'] === self::STATE_COLLECTING
                 ? $this->promptForNextField($state, $hospital, $message, $sessionId, $channel)
-                : 'There is no booking waiting for confirmation. Tell me what service or hospital information you need.';
+                : 'There is no booking waiting for confirmation. Would you like to book an appointment?';
 
             return $this->respond($sessionId, $channel, $message, $response, $state, source: 'clarification');
         }
 
+        if ($state['state'] === self::STATE_IDLE
+            && $intent === 'other'
+            && $this->isLowSignalInput($message)
+        ) {
+            $state['unrecognized_message_count'] = min(
+                3,
+                (int) ($state['unrecognized_message_count'] ?? 0) + 1,
+            );
+
+            if ($state['unrecognized_message_count'] >= 3) {
+                $language = $state['language'];
+                $state = $this->emptyState(language: $language);
+
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $this->recoveryMenuPrompt($state),
+                    $state,
+                    source: 'booking_recovery',
+                );
+            }
+
+            $response = $state['language'] === self::LANGUAGE_SWAHILI
+                ? 'Samahani, sikuweza kuelewa. Tafadhali eleza unachohitaji.'
+                : "Sorry, I didn't catch that. Could you tell me a little more about what you need?";
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $response,
+                $state,
+                source: 'clarification',
+            );
+        }
+
         if ($intent === 'other'
+            && $state['state'] === self::STATE_IDLE
             && $this->assistant->shouldEscalateMessage($message, $sessionId)
             && ! $this->containsBookingKeyword($message)
             && ! $this->containsEscalationPhrase($message)
@@ -497,12 +606,18 @@ class BookingChatService
             if ($intent === 'no') {
                 $state = $this->emptyState();
 
-                return $this->respond($sessionId, $channel, $message, 'No problem. Your booking was not submitted.', $state);
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    "OK, I've cancelled this booking request.",
+                    $state,
+                );
             }
 
             $state = $this->mergeFields($state, $message, $hospital);
 
-            return $this->advanceState($sessionId, $channel, $message, $hospital, $state);
+            return $this->advanceState($sessionId, $channel, $message, $hospital, $state, intent: $intent);
         }
 
         if ($state['state'] === self::STATE_IDLE
@@ -513,13 +628,84 @@ class BookingChatService
             return $this->delegateToAssistant($sessionId, $channel, $message, $state);
         }
 
+        $this->assistant->clearPendingEscalation($sessionId);
+        $previousState = $state;
+        $wasCollecting = $state['state'] === self::STATE_COLLECTING;
+        $dateWasRequested = $wasCollecting && $this->nextMissingField($previousState) === 'date';
         $state['state'] = self::STATE_IDENTIFYING;
         if ($channel === 'whatsapp' && ! filled($state['patient_phone'])) {
             $state['patient_phone'] = substr($sessionId, strlen('whatsapp:'));
         }
         $state = $this->mergeFields($state, $message, $hospital);
 
-        return $this->advanceState($sessionId, $channel, $message, $hospital, $state);
+        if ($wasCollecting && $intent === 'other') {
+            $bookingFields = [
+                'service_id',
+                'doctor_id',
+                'date',
+                'time',
+                'patient_name',
+                'patient_phone',
+                'patient_email',
+            ];
+            $fieldWasCollected = false;
+
+            foreach ($bookingFields as $field) {
+                if (($previousState[$field] ?? null) !== ($state[$field] ?? null)) {
+                    $fieldWasCollected = true;
+                    break;
+                }
+            }
+
+            $state['unrecognized_message_count'] = $fieldWasCollected
+                ? 0
+                : min(3, (int) ($previousState['unrecognized_message_count'] ?? 0) + 1);
+
+            if (! $fieldWasCollected && $state['unrecognized_message_count'] >= 3) {
+                $language = $state['language'];
+                $state = $this->emptyState(language: $language);
+
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $this->recoveryMenuPrompt($state),
+                    $state,
+                    source: 'booking_recovery',
+                );
+            }
+
+            if (! $fieldWasCollected && $state['unrecognized_message_count'] >= 2) {
+                $state['state'] = self::STATE_COLLECTING;
+
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $this->bookingRecoveryPrompt(
+                        $state,
+                        $hospital,
+                        $message,
+                        $sessionId,
+                        $channel,
+                    ),
+                    $state,
+                    source: 'booking_recovery',
+                );
+            }
+        } else {
+            $state['unrecognized_message_count'] = 0;
+        }
+
+        return $this->advanceState(
+            $sessionId,
+            $channel,
+            $message,
+            $hospital,
+            $state,
+            $dateWasRequested,
+            $intent,
+        );
     }
 
     /**
@@ -555,6 +741,8 @@ class BookingChatService
         string $message,
         Hospital $hospital,
         array $state,
+        bool $dateWasRequested = false,
+        string $intent = 'other',
     ): ChatResponse {
         $state['state'] = self::STATE_COLLECTING;
 
@@ -566,8 +754,8 @@ class BookingChatService
                 && ! $this->hasExplicitHumanPhrase($message)
                 && ! $isContinueBookingRequest
                 && $hasAdditionalBookingContent
-                ? $this->serviceUnavailablePrompt($hospital)
-                : $this->servicePrompt($hospital);
+                ? $this->serviceUnavailablePrompt($hospital, $state['language'])
+                : $this->servicePrompt($hospital, $state['language']);
 
             return $this->respond(
                 $sessionId,
@@ -607,16 +795,40 @@ class BookingChatService
                 );
             }
 
-            if ($requiredSpecialty !== null && ! $hasMatchingSpecialty && $doctors->isNotEmpty()) {
+            if ($requiredSpecialty !== null
+                && $hasMatchingSpecialty
+                && $doctors->count() > 1
+                && $mentionedDoctor === null
+            ) {
                 return $this->respond(
                     $sessionId,
                     $channel,
                     $message,
-                    sprintf(
-                        'No doctors with the %s specialty are currently available, but these doctors can help: %s. Which doctor would you prefer?',
-                        $requiredSpecialty,
-                        $doctors->pluck('name')->implode(', '),
-                    ),
+                    $this->doctorPrompt($state, $hospital),
+                    $state,
+                );
+            }
+
+            if ($requiredSpecialty !== null
+                && ! $hasMatchingSpecialty
+                && $doctors->count() > 1
+                && $doctors->isNotEmpty()
+            ) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? sprintf(
+                            'Hakuna daktari bingwa wa %s anayepatikana kwa sasa, lakini madaktari hawa wanaweza kusaidia: %s. Ungependa kumwona nani?',
+                            $requiredSpecialty,
+                            $doctors->pluck('name')->implode(', '),
+                        )
+                        : sprintf(
+                            'No doctors with the %s specialty are currently available, but these doctors can help: %s. Which doctor would you prefer?',
+                            $requiredSpecialty,
+                            $doctors->pluck('name')->implode(', '),
+                        ),
                     $state,
                 );
             }
@@ -638,14 +850,6 @@ class BookingChatService
                     'There are no available doctors for this service. Please contact the hospital for assistance.',
                     $state,
                 );
-            } else {
-                return $this->respond(
-                    $sessionId,
-                    $channel,
-                    $message,
-                    'Which doctor would you prefer? Available doctors: '.$doctors->pluck('name')->implode(', ').'.',
-                    $state,
-                );
             }
         }
 
@@ -653,11 +857,13 @@ class BookingChatService
 
         if ($this->nextMissingField($state) === 'date') {
             $requestedDate = DateParser::parse($message);
-            $previousState = $this->persistedState($sessionId, $channel);
-            $dateWasRequested = $previousState['state'] === self::STATE_COLLECTING
-                && $this->nextMissingField($previousState) === 'date';
+            $invalidDateError = null;
+            if ($requestedDate === null && $dateWasRequested && ! $this->containsBookingKeyword($message)) {
+                $invalidDateError = $this->invalidDateInputError($message)
+                    ?? ($intent === 'other' ? 'unrecognized' : null);
+            }
             $dateError = match (true) {
-                $requestedDate === null && $dateWasRequested => 'invalid',
+                $invalidDateError !== null => $invalidDateError,
                 $requestedDate !== null && $requestedDate->lessThan(CarbonImmutable::today()) => 'past',
                 $requestedDate !== null && $requestedDate->greaterThan(CarbonImmutable::today()->addYear()) => 'too_far',
                 default => null,
@@ -668,13 +874,17 @@ class BookingChatService
                     $sessionId,
                     $channel,
                     $message,
-                    $this->datePrompt($message, $sessionId, $channel, $dateError),
+                    $this->datePrompt($message, $sessionId, $channel, $dateError, language: $state['language']),
                     $state,
                 );
             }
         }
 
-        if (filled($state['time'] ?? null) && $this->isTimeOutsideHospitalHours((string) $state['time'])) {
+        if (filled($state['doctor_id'] ?? null)
+            && filled($state['date'] ?? null)
+            && filled($state['time'] ?? null)
+            && $this->isTimeOutsideHospitalHours((string) $state['time'])
+        ) {
             $requestedTime = (string) $state['time'];
             $doctor = $hospital->users()->find((int) $state['doctor_id']);
             $doctorName = $doctor?->name ?? 'the doctor';
@@ -716,15 +926,18 @@ class BookingChatService
 
             if (! filled($state[$field] ?? null)) {
                 $promptMessage = $field === 'service_id'
-                    ? $this->servicePrompt($hospital)
-                    : $prompt;
+                ? $this->servicePrompt($hospital, $state['language'])
+                : $this->fieldPrompt($field, $state);
 
-                if ($field === 'date' && $automaticallySelectedDoctor !== null) {
+                if ($field === 'doctor_id') {
+                    $promptMessage = $this->doctorPrompt($state, $hospital);
+                } elseif ($field === 'date' && $automaticallySelectedDoctor !== null) {
                     $promptMessage = $this->datePrompt(
                         $message,
                         $sessionId,
                         $channel,
                         doctorName: $automaticallySelectedDoctor->name,
+                        language: $state['language'],
                     );
                 } elseif ($field === 'date' && filled($state['doctor_id'] ?? null)) {
                     $selectedDoctor = $hospital->users()->find((int) $state['doctor_id']);
@@ -734,16 +947,29 @@ class BookingChatService
                             $sessionId,
                             $channel,
                             doctorName: $selectedDoctor->name,
+                            language: $state['language'],
                         );
                     } else {
-                        $promptMessage = $this->datePrompt($message, $sessionId, $channel);
+                        $promptMessage = $this->datePrompt(
+                            $message,
+                            $sessionId,
+                            $channel,
+                            language: $state['language'],
+                        );
                     }
                 } elseif ($field === 'date') {
-                    $promptMessage = $this->datePrompt($message, $sessionId, $channel);
+                    $promptMessage = $this->datePrompt(
+                        $message,
+                        $sessionId,
+                        $channel,
+                        language: $state['language'],
+                    );
                 }
 
                 if ($field === 'time' && $this->looksLikeTimeAttempt($message)) {
-                    $promptMessage = "I couldn't understand the time you entered. Please use a format like:\n- 9am or 9:30am\n- 14:00 or 14:30\n- 2pm or 2:30pm\n\nWhat time works for you?";
+                    $promptMessage = $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Samahani, sikuweza kuelewa muda huo. Tafadhali tumia muundo kama 9am, 9:30am, 14:00, au 2pm. Ungependa miadi iwe saa ngapi?'
+                        : "I couldn't understand the time you entered. Please use a format like:\n- 9am or 9:30am\n- 14:00 or 14:30\n- 2pm or 2:30pm\n\nWhat time works for you?";
                 }
 
                 return $this->respond($sessionId, $channel, $message, $promptMessage, $state);
@@ -760,12 +986,15 @@ class BookingChatService
 
         $state['state'] = self::STATE_CONFIRMING;
         $state['summary'] = $this->bookingSummary($state, $hospital);
+        $confirmationPrompt = $state['language'] === self::LANGUAGE_SWAHILI
+            ? ' Jibu NDIYO kuthibitisha au HAPANA kughairi.'
+            : ' Reply YES to confirm or NO to cancel.';
 
         return $this->respond(
             $sessionId,
             $channel,
             $message,
-            $state['summary'].' Reply YES to confirm or NO to cancel.',
+            $state['summary'].$confirmationPrompt,
             $state,
         );
     }
@@ -862,6 +1091,7 @@ class BookingChatService
      */
     private function mergeFields(array $state, string $message, Hospital $hospital): array
     {
+        $wasWaitingForName = $this->nextMissingField($state) === 'patient_name';
         $state['service_id'] ??= $this->extractService($message, $hospital)?->id;
         $service = $state['service_id']
             ? $this->serviceById((int) $state['service_id'], $hospital)
@@ -873,7 +1103,7 @@ class BookingChatService
         $state['patient_email'] ??= $this->extractEmail($message);
         $state['patient_name'] ??= $this->extractName($message);
 
-        if (! $state['patient_name'] && $this->nextMissingField($state) === 'patient_name') {
+        if (! $state['patient_name'] && $wasWaitingForName) {
             $plainName = trim($message);
             if (preg_match('/^[\pL][\pL\' -]{1,79}$/u', $plainName)
                 && ! preg_match('/\b(book|appointment|doctor|tomorrow|today|yes|no)\b/iu', $plainName)
@@ -1171,18 +1401,22 @@ class BookingChatService
         string $channel,
         ?string $error = null,
         ?string $doctorName = null,
+        ?string $language = null,
     ): string {
-        $isSwahili = $this->isSwahiliDateMessage($message);
-        if (! $isSwahili) {
+        $isSwahili = $language === self::LANGUAGE_SWAHILI
+            || ($language === null && $this->isSwahiliDateMessage($message));
+        if (! $isSwahili && $language === null) {
             $previousMessage = $this->latestConversation($sessionId, $channel)?->user_message;
             $isSwahili = is_string($previousMessage) && $this->isSwahiliDateMessage($previousMessage);
         }
 
         if ($isSwahili) {
             $prompt = match ($error) {
-                'past' => 'Tarehe hiyo imepita. Tafadhali chagua tarehe ijayo kwa muundo wa DD/MM/YYYY (mfano 15/10/2026).',
-                'too_far' => 'Tarehe hiyo iko mbali sana. Tafadhali chagua tarehe ndani ya miezi 12 ijayo kwa muundo wa DD/MM/YYYY.',
+                'past' => 'Tarehe hiyo imepita. Tafadhali chagua tarehe ijayo kwa muundo wa DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema "kesho".',
+                'too_far' => 'Tarehe hiyo iko mbali sana. Tafadhali chagua tarehe ndani ya miezi 12 kwa muundo wa DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema "kesho".',
                 'invalid' => "Samahani, sikuweza kuelewa tarehe. Tafadhali ingiza tarehe kama DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema 'kesho'.",
+                'ambiguous' => "Samahani, sijapata tarehe uliyomaanisha. Tafadhali tumia DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema 'kesho'.",
+                'unrecognized' => "Samahani, sikuweza kuelewa. Ungependa miadi tarehe gani? Tumia DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema 'kesho'.",
                 default => "Ungependa miadi tarehe gani? Tafadhali ingiza DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema 'kesho'.",
             };
 
@@ -1192,9 +1426,14 @@ class BookingChatService
         }
 
         $prompt = match ($error) {
-            'past' => 'That date is in the past. Please choose a future date in DD/MM/YYYY format (e.g. 15/10/2026).',
-            'too_far' => 'That date is too far ahead. Please choose a date within the next 12 months in DD/MM/YYYY format (e.g. 15/10/2026).',
-            'invalid' => "Sorry, I didn't catch that. What date would you prefer? Please enter it as DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say 'tomorrow'.",
+            'past' => 'That date is in the past. Please choose a future date as DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say "tomorrow".',
+            'too_far' => 'That date is too far ahead. Please choose a date within the next 12 months as DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say "tomorrow".',
+            'invalid' => sprintf(
+                "I couldn't understand '%s'. Please enter a date as DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say 'tomorrow'.",
+                $message,
+            ),
+            'ambiguous' => "Sorry, I didn't catch that date. Please use DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say 'tomorrow'.",
+            'unrecognized' => "Sorry, I didn't catch that. What date would you prefer? Please use DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say 'tomorrow'.",
             default => 'What date would you prefer? Use DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say "tomorrow".',
         };
 
@@ -1211,9 +1450,41 @@ class BookingChatService
         ) === 1;
     }
 
+    private function bookingLanguage(string $message, string $currentLanguage): string
+    {
+        if ($this->isSwahiliDateMessage($message)) {
+            return self::LANGUAGE_SWAHILI;
+        }
+
+        if (preg_match(
+            '/\b(i|we|my|book|appointment|tomorrow|today|please|yes|no|service|want|need|name|phone|help|cancel)\b/iu',
+            $message,
+        ) === 1) {
+            return self::LANGUAGE_ENGLISH;
+        }
+
+        return in_array($currentLanguage, [self::LANGUAGE_ENGLISH, self::LANGUAGE_SWAHILI], true)
+            ? $currentLanguage
+            : self::LANGUAGE_ENGLISH;
+    }
+
     private function extractTime(string $message): ?string
     {
         $normalized = trim($message);
+        if (preg_match('/^\d{1,2}[\/-]\d{1,2}\s*[?.!]*$/u', $normalized) === 1) {
+            return null;
+        }
+
+        $normalized = preg_replace(
+            '/\b(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})\b/u',
+            ' ',
+            $normalized,
+        ) ?? $normalized;
+        $normalized = preg_replace(
+            '/\b(?:\d{1,2}(?:st|nd|rd|th)?\s+'.DateParser::ENGLISH_MONTH_PATTERN.'\s+\d{4}|(?:(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s*,?\s*)?'.DateParser::ENGLISH_MONTH_PATTERN.'\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?)\b/iu',
+            ' ',
+            $normalized,
+        ) ?? $normalized;
 
         if (preg_match('/\bnoon\b/i', $normalized)) {
             return '12:00';
@@ -1265,6 +1536,28 @@ class BookingChatService
     private function looksLikeTimeAttempt(string $message): bool
     {
         return preg_match('/\b(?:noon|midnight|quarter\s+(?:past|to)|half\s+past|[0-9]{1,2}\s*(?:[.:][0-9]{2})?\s*(?:am|pm)|[0-9]{1,2}\s*o\s*[\'’]?clock)\b/i', $message) === 1;
+    }
+
+    private function invalidDateInputError(string $message): ?string
+    {
+        if (preg_match('/^\s*\d{1,2}[\/-]\d{1,2}\s*[?.!]*\s*$/u', $message) === 1) {
+            return 'ambiguous';
+        }
+
+        $monthPattern = DateParser::ENGLISH_MONTH_PATTERN;
+        $hasDateStructure = preg_match(
+            '/\b(?:\d{1,2}[\/-]\d{1,2}[\/-]\d{4}|\d{4}-\d{1,2}-\d{1,2}|'
+                .$monthPattern.'\s+\d{1,2}(?:,?\s+\d{4})?|'
+                .'\d{1,2}\s+'.$monthPattern.'(?:\s+\d{4})?)\b/iu',
+            $message,
+        ) === 1;
+
+        return $hasDateStructure ? 'invalid' : null;
+    }
+
+    private function isLowSignalInput(string $message): bool
+    {
+        return preg_match('/^(?:blah|asdf|qwerty|zxcv|xyz)+[.!?]*$/iu', trim($message)) === 1;
     }
 
     private function isTimeOutsideHospitalHours(string $time): bool
@@ -1322,6 +1615,14 @@ class BookingChatService
             return trim($matches[1]);
         }
 
+        if (preg_match(
+            '/\b(?:jina langu ni|ninaitwa)\s+([\pL][\pL\'-]*(?:\s+[\pL][\pL\'-]*){0,3}?)(?=\s+(?:na|simu|namba|kesho|leo)\b|[,.;]|$)/iu',
+            $message,
+            $matches,
+        )) {
+            return trim($matches[1]);
+        }
+
         return null;
     }
 
@@ -1359,6 +1660,9 @@ class BookingChatService
             return 'continue_booking';
         }
         if ($this->containsBookingKeyword($normalized)) {
+            return 'book';
+        }
+        if ($state !== self::STATE_IDLE && preg_match('/^\s*miadi\s*[?!.]*\s*$/iu', $normalized) === 1) {
             return 'book';
         }
         if ($this->containsEscalationPhrase($message)) {
@@ -1888,7 +2192,7 @@ class BookingChatService
         } else {
             $state['state'] = self::STATE_LIFECYCLE_RESCHEDULE_DATE;
             $response = $this->isSwahiliDateMessage($message)
-                ? 'Ni tarehe gani mpya ungependa? Tumia muundo wa DD/MM/YYYY.'
+                ? 'Ni tarehe gani mpya ungependa? Tumia DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema "kesho".'
                 : 'What new date would you prefer? Use DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say "tomorrow".';
         }
 
@@ -1921,10 +2225,13 @@ class BookingChatService
     /**
      * @return array<string, mixed>
      */
-    private function emptyState(string $status = self::STATE_IDLE): array
-    {
+    private function emptyState(
+        string $status = self::STATE_IDLE,
+        string $language = self::LANGUAGE_ENGLISH,
+    ): array {
         return [
             'state' => $status,
+            'language' => $language,
             'service_id' => null,
             'doctor_id' => null,
             'date' => null,
@@ -1940,7 +2247,57 @@ class BookingChatService
             'lifecycle_time' => null,
             'escalation_pending' => false,
             'pending_escalation_message' => null,
+            'unrecognized_message_count' => 0,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private function bookingRecoveryPrompt(
+        array $state,
+        Hospital $hospital,
+        string $message,
+        string $sessionId,
+        string $channel,
+    ): string {
+        $field = $this->nextMissingField($state);
+
+        if ($field === 'service_id') {
+            return ($state['language'] === self::LANGUAGE_SWAHILI
+                ? 'Bado nahitaji kujua huduma unayotaka. '
+                : 'I still need to know which service you want. ').$this->servicePrompt($hospital, $state['language']);
+        }
+
+        if ($field === 'date') {
+            return ($state['language'] === self::LANGUAGE_SWAHILI
+                ? 'Bado nahitaji tarehe ili kuendelea. '
+                : 'I still need a date to continue. ').$this->datePrompt(
+                    $message,
+                    $sessionId,
+                    $channel,
+                    $this->invalidDateInputError($message) ?? 'unrecognized',
+                    language: $state['language'],
+                );
+        }
+
+        if ($field !== null) {
+            return ($state['language'] === self::LANGUAGE_SWAHILI
+                ? 'Bado nahitaji taarifa moja ya miadi. '
+                : 'I still need one booking detail. ').$this->fieldPrompt($field, $state);
+        }
+
+        return 'I still need one booking detail to continue.';
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private function recoveryMenuPrompt(array $state): string
+    {
+        return $state['language'] === self::LANGUAGE_SWAHILI
+            ? 'Tuanze upya. Ungependa kufanya nini? Jibu "miadi" kuweka miadi, uliza kuhusu hospitali, au sema "binadamu" kuzungumza na mhudumu.'
+            : 'Let me start over. What would you like to do? Reply book to make an appointment, ask about services or hospital information, or say human to speak with someone.';
     }
 
     /**
@@ -1957,6 +2314,10 @@ class BookingChatService
         ?string $source = null,
         bool $escalated = false,
     ): ChatResponse {
+        $state['language'] = $this->bookingLanguage(
+            $userMessage,
+            $state['language'] ?? self::LANGUAGE_ENGLISH,
+        );
         $this->persistState($sessionId, $channel, $userMessage, $response, $state, $appointmentId, $escalated);
 
         return new ChatResponse(
@@ -2057,16 +2418,45 @@ class BookingChatService
     ): string {
         $field = $this->nextMissingField($state);
         if ($field === 'service_id') {
-            return $this->servicePrompt($hospital);
+            return $this->servicePrompt($hospital, $state['language']);
         }
 
         if ($field === 'date') {
-            return $this->datePrompt($message, $sessionId, $channel);
+            return $this->datePrompt($message, $sessionId, $channel, language: $state['language']);
+        }
+
+        if ($field === 'doctor_id') {
+            return $this->doctorPrompt($state, $hospital);
         }
 
         return $field !== null
-            ? self::FIELD_PROMPTS[$field]
+            ? $this->fieldPrompt($field, $state)
             : 'Please provide the missing booking detail so I can continue.';
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private function fieldPrompt(string $field, array $state): string
+    {
+        $prompts = ($state['language'] ?? self::LANGUAGE_ENGLISH) === self::LANGUAGE_SWAHILI
+            ? self::SWAHILI_FIELD_PROMPTS
+            : self::FIELD_PROMPTS;
+
+        return $prompts[$field] ?? 'Please provide the missing booking detail so I can continue.';
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private function doctorPrompt(array $state, Hospital $hospital): string
+    {
+        $service = $this->serviceById((int) $state['service_id'], $hospital);
+        $doctors = $this->eligibleDoctors($hospital, $service);
+
+        return $state['language'] === self::LANGUAGE_SWAHILI
+            ? 'Ungependa kumwona daktari gani? Madaktari wanaopatikana: '.$doctors->pluck('name')->implode(', ').'.'
+            : 'Which doctor would you prefer? Available doctors: '.$doctors->pluck('name')->implode(', ').'.';
     }
 
     private function handleExplicitHumanRequest(
@@ -2088,8 +2478,10 @@ class BookingChatService
                     "I've passed your request to the {$hospital->name} team. Someone will reach out shortly.",
                     $phone,
                 );
+                $state['patient_phone'] ??= $phone;
                 $state['escalation_pending'] = false;
                 $state['pending_escalation_message'] = null;
+                $state['unrecognized_message_count'] = 0;
 
                 return $this->respond(
                     $sessionId,
@@ -2127,6 +2519,8 @@ class BookingChatService
                 sprintf("I've noted your request. Please share your phone number — what's the best phone number for a member of the %s team to reach you on?", $hospital->name),
                 $phone,
             );
+            $state['patient_phone'] ??= $phone;
+            $state['unrecognized_message_count'] = 0;
 
             return $this->respond(
                 $sessionId,
@@ -2145,6 +2539,7 @@ class BookingChatService
         $state['state'] = self::STATE_COLLECTING;
         $state['escalation_pending'] = true;
         $state['pending_escalation_message'] = $message;
+        $state['unrecognized_message_count'] = 0;
 
         return $this->respond(
             $sessionId,
@@ -2159,48 +2554,72 @@ class BookingChatService
         );
     }
 
-    private function servicePrompt(Hospital $hospital): string
+    private function servicePrompt(Hospital $hospital, string $language = self::LANGUAGE_ENGLISH): string
     {
         $names = $hospital->services()->active()->orderBy('name')->pluck('name');
         if ($names->isEmpty()) {
-            return 'There are no services available to book right now. Please contact the hospital.';
+            return $language === self::LANGUAGE_SWAHILI
+                ? 'Hakuna huduma zinazopatikana kwa sasa. Tafadhali wasiliana na hospitali.'
+                : 'There are no services available to book right now. Please contact the hospital.';
         }
 
-        return sprintf(
-            "Sure, I can help you book an appointment at %s.\n\nWhat service do you need?",
-            $hospital->name,
-        );
+        return $language === self::LANGUAGE_SWAHILI
+            ? sprintf("Sawa, naweza kukusaidia kupanga miadi katika %s.\n\nUnahitaji huduma gani?", $hospital->name)
+            : sprintf(
+                "Sure, I can help you book an appointment at %s.\n\nWhat service do you need?",
+                $hospital->name,
+            );
     }
 
-    private function serviceUnavailablePrompt(Hospital $hospital): string
+    private function serviceUnavailablePrompt(Hospital $hospital, string $language = self::LANGUAGE_ENGLISH): string
     {
         $names = $hospital->services()->active()->orderBy('name')->pluck('name');
         if ($names->isEmpty()) {
-            return 'There are no services available to book right now. Please contact the hospital.';
+            return $language === self::LANGUAGE_SWAHILI
+                ? 'Hakuna huduma zinazopatikana kwa sasa. Tafadhali wasiliana na hospitali.'
+                : 'There are no services available to book right now. Please contact the hospital.';
         }
 
-        return sprintf(
-            'I could not match that service. Available services at %s: %s. What service do you need?',
-            $hospital->name,
-            $names->implode(', '),
-        );
+        return $language === self::LANGUAGE_SWAHILI
+            ? sprintf(
+                'Sikuweza kutambua huduma hiyo. Huduma zinazopatikana katika %s: %s. Unahitaji huduma gani?',
+                $hospital->name,
+                $names->implode(', '),
+            )
+            : sprintf(
+                'I could not match that service. Available services at %s: %s. What service do you need?',
+                $hospital->name,
+                $names->implode(', '),
+            );
     }
 
     private function bookingSummary(array $state, Hospital $hospital): string
     {
         $service = $this->serviceById((int) $state['service_id'], $hospital);
         $doctor = $this->eligibleDoctors($hospital, $service)->firstWhere('id', (int) $state['doctor_id']);
-        $date = CarbonImmutable::parse((string) $state['date'])->toFormattedDateString();
+        $date = $state['language'] === self::LANGUAGE_SWAHILI
+            ? CarbonImmutable::parse((string) $state['date'])->format('d/m/Y')
+            : CarbonImmutable::parse((string) $state['date'])->toFormattedDateString();
 
-        return sprintf(
-            'Please confirm: %s with %s on %s at %s for %s, phone %s.',
-            $service->name,
-            $doctor?->name ?? 'your selected doctor',
-            $date,
-            $state['time'],
-            $state['patient_name'],
-            $state['patient_phone'],
-        );
+        return $state['language'] === self::LANGUAGE_SWAHILI
+            ? sprintf(
+                'Tafadhali thibitisha: %s kwa miadi na %s tarehe %s saa %s kwa %s, simu %s.',
+                $service->name,
+                $doctor?->name ?? 'daktari uliyemchagua',
+                $date,
+                $state['time'],
+                $state['patient_name'],
+                $state['patient_phone'],
+            )
+            : sprintf(
+                'Please confirm: %s with %s on %s at %s for %s, phone %s.',
+                $service->name,
+                $doctor?->name ?? 'your selected doctor',
+                $date,
+                $state['time'],
+                $state['patient_name'],
+                $state['patient_phone'],
+            );
     }
 
     private function serviceById(int $serviceId, Hospital $hospital): Service
@@ -2458,6 +2877,7 @@ class BookingChatService
     {
         $allowedKeys = [
             'state',
+            'language',
             'service_id',
             'doctor_id',
             'date',
@@ -2473,6 +2893,7 @@ class BookingChatService
             'lifecycle_time',
             'escalation_pending',
             'pending_escalation_message',
+            'unrecognized_message_count',
             'summary',
         ];
         $validStates = [
@@ -2507,6 +2928,10 @@ class BookingChatService
 
         $isValid = array_diff(array_keys($state), $allowedKeys) === []
             && in_array($state['state'] ?? null, $validStates, true)
+            && in_array($state['language'] ?? self::LANGUAGE_ENGLISH, [
+                self::LANGUAGE_ENGLISH,
+                self::LANGUAGE_SWAHILI,
+            ], true)
             && $idsAreValid
             && (! array_key_exists('lifecycle_action', $state)
                 || $state['lifecycle_action'] === null
@@ -2527,6 +2952,10 @@ class BookingChatService
             && (! array_key_exists('time', $state) || $state['time'] === null
                 || (is_string($state['time']) && preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $state['time']) === 1))
             && (! array_key_exists('escalation_pending', $state) || is_bool($state['escalation_pending']))
+            && (! array_key_exists('unrecognized_message_count', $state)
+                || (is_int($state['unrecognized_message_count'])
+                    && $state['unrecognized_message_count'] >= 0
+                    && $state['unrecognized_message_count'] <= 3))
             && $this->nullableStringFieldIsValid($state, 'patient_name', 255)
             && $this->nullableStringFieldIsValid($state, 'patient_phone', 32)
             && $this->nullableStringFieldIsValid($state, 'patient_email', 254)
@@ -2534,6 +2963,8 @@ class BookingChatService
             && $this->nullableStringFieldIsValid($state, 'summary', 2000);
 
         if ($isValid) {
+            $state['language'] ??= self::LANGUAGE_ENGLISH;
+
             return $state;
         }
 

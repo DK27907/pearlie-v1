@@ -7,6 +7,7 @@ use App\Models\EscalationReply;
 use App\Models\Hospital;
 use App\Services\NotificationService;
 use App\Services\WhatsAppService;
+use App\Support\CacheLockRunner;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -40,7 +41,7 @@ class SendEscalationReply implements ShouldQueue
         app()->instance('currentHospital', $hospital);
 
         try {
-            Cache::lock('escalation-reply:'.$this->replyId, 180)->block(5, function () use ($notifications, $whatsApp): void {
+            CacheLockRunner::run(Cache::lock('escalation-reply:'.$this->replyId, 180), 5, function () use ($notifications, $whatsApp): void {
                 $reply = EscalationReply::withoutGlobalScopes()->with('escalation')->findOrFail($this->replyId);
                 if ($reply->status === EscalationReply::STATUS_SENT) {
                     return;

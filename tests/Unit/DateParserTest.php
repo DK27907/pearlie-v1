@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Support\DateParser;
+use Carbon\CarbonImmutable;
 use PHPUnit\Framework\TestCase;
 
 class DateParserTest extends TestCase
@@ -31,6 +32,18 @@ class DateParserTest extends TestCase
     {
         foreach (['today', 'leo', 'tomorrow', 'kesho', 'next week', 'wiki ijayo', 'Monday', 'Jumatatu'] as $input) {
             $this->assertNotNull(DateParser::parse($input), $input);
+        }
+    }
+
+    public function test_parses_a_weekday_and_month_day_without_a_year(): void
+    {
+        CarbonImmutable::setTestNow('2025-10-01');
+
+        try {
+            $this->assertSame('2025-11-07', DateParser::parse('Friday, November 7')?->toDateString());
+            $this->assertNull(DateParser::parse('Monday, November 7'));
+        } finally {
+            CarbonImmutable::setTestNow();
         }
     }
 }

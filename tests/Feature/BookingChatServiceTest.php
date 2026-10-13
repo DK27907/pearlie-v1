@@ -12,6 +12,7 @@ use App\Models\Service;
 use App\Models\User;
 use App\Services\BookingChatService;
 use App\Services\MpesaService;
+use App\Services\PearlieServiceV2;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -19,6 +20,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class BookingChatServiceTest extends TestCase
@@ -86,6 +88,272 @@ class BookingChatServiceTest extends TestCase
         $this->assertStringNotContainsString('phone number', mb_strtolower($response->message));
     }
 
+    public function test_booking_state_machine_survives_repeated_intent_during_active_flow(): void
+    {
+        [, $services] = $this->createContext();
+        $sessionId = 'repeated-booking-intent';
+        $chat = app(BookingChatService::class);
+        Http::preventStrayRequests();
+
+        app(PearlieServiceV2::class)->handleEscalationIntent('help me', $sessionId, 'web');
+
+        $servicePrompt = $chat->handle($sessionId, 'I want to book an appointment', 'web');
+        $datePrompt = $chat->handle($sessionId, 'Dental Cleaning', 'web');
+        $namePrompt = $chat->handle($sessionId, '15/10/2026', 'web');
+        $phonePrompt = $chat->handle($sessionId, 'Test Patient', 'web');
+        $timePrompt = $chat->handle($sessionId, '0748249882', 'web');
+        $restartPrompt = $chat->handle($sessionId, 'I want to book an appointment', 'web');
+        $restartedDatePrompt = $chat->handle($sessionId, 'Dental Cleaning', 'web');
+        $restartedNamePrompt = $chat->handle($sessionId, 'tomorrow', 'web');
+
+        $this->assertStringContainsString('What service do you need', $servicePrompt->message);
+        $this->assertStringContainsString('DD/MM/YYYY', $datePrompt->message);
+        $this->assertStringContainsString('full name', mb_strtolower($namePrompt->message));
+        $this->assertStringContainsString('mobile number', mb_strtolower($phonePrompt->message));
+        $this->assertStringContainsString('What time', $timePrompt->message);
+        $this->assertSame('IDLE', $restartPrompt->state);
+        $this->assertStringContainsString('start over', mb_strtolower($restartPrompt->message));
+        $this->assertNull($restartPrompt->collectedFields['service_id']);
+        $this->assertSame($services[0]->id, $restartedDatePrompt->collectedFields['service_id']);
+        $this->assertStringContainsString('DD/MM/YYYY', $restartedDatePrompt->message);
+        $this->assertSame('COLLECTING', $restartedNamePrompt->state);
+        $this->assertSame(now()->addDay()->toDateString(), $restartedNamePrompt->collectedFields['date']);
+        $this->assertStringContainsString('full name', mb_strtolower($restartedNamePrompt->message));
+        $this->assertDatabaseCount('escalations', 0);
+    }
+
+    public function test_booking_intent_restarts_after_service_was_selected(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $sessionId = 'booking-restart-after-service';
+
+        $chat->handle($sessionId, 'I want to book an appointment', 'web');
+        $serviceResponse = $chat->handle($sessionId, 'Dental Cleaning', 'web');
+        $restart = $chat->handle($sessionId, 'I want to book an appointment', 'web');
+
+        $this->assertStringContainsString('What date would you prefer', $serviceResponse->message);
+        $this->assertSame('IDLE', $restart->state);
+        $this->assertSame('booking_reset', $restart->source);
+        $this->assertNull($restart->collectedFields['service_id']);
+        $this->assertNull($restart->collectedFields['doctor_id']);
+        $this->assertNull($restart->collectedFields['date']);
+        $this->assertStringContainsString("Let's start over. What service do you need?", $restart->message);
+    }
+
+    public function test_booking_collects_name_and_phone_before_showing_all_summary_fields(): void
+    {
+        [, $services, $doctors] = $this->createContext();
+        $chat = app(BookingChatService::class);
+        $sessionId = 'booking-summary-fields';
+
+        $chat->handle($sessionId, 'Book Dental Cleaning', 'web');
+        $namePrompt = $chat->handle($sessionId, '15/10/2026', 'web');
+        $phonePrompt = $chat->handle($sessionId, 'Test Patient', 'web');
+        $timePrompt = $chat->handle($sessionId, '254748249882', 'web');
+        $summary = $chat->handle($sessionId, '9am', 'web');
+
+        $this->assertStringContainsString('full name', mb_strtolower($namePrompt->message));
+        $this->assertStringContainsString('mobile number', mb_strtolower($phonePrompt->message));
+        $this->assertStringContainsString('What time', $timePrompt->message);
+        $this->assertSame('CONFIRMING', $summary->state);
+        $this->assertSame($services[0]->id, $summary->collectedFields['service_id']);
+        $this->assertSame($doctors[0]->id, $summary->collectedFields['doctor_id']);
+        $this->assertSame('2026-10-15', $summary->collectedFields['date']);
+        $this->assertSame('09:00', $summary->collectedFields['time']);
+        $this->assertSame('Test Patient', $summary->collectedFields['patient_name']);
+        $this->assertSame('254748249882', $summary->collectedFields['patient_phone']);
+        foreach (['Dental Cleaning', 'Dr. Amina Njeri', 'Oct 15, 2026', '09:00', 'Test Patient', '254748249882'] as $field) {
+            $this->assertStringContainsString($field, $summary->message);
+        }
+    }
+
+    public function test_booking_intent_restarts_a_confirming_flow(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $sessionId = 'confirming-booking-restart';
+
+        $chat->handle(
+            $sessionId,
+            'Book Dental Cleaning tomorrow at 9am. My name is Test Patient. My phone is 254748249882.',
+            'web',
+        );
+        $confirmation = $chat->getState($sessionId);
+        $restart = $chat->handle($sessionId, 'I want to book an appointment', 'web');
+
+        $this->assertSame('CONFIRMING', $confirmation['state']);
+        $this->assertSame('IDLE', $restart->state);
+        $this->assertSame('booking_reset', $restart->source);
+        $this->assertNull($restart->collectedFields['service_id']);
+        $this->assertNull($restart->collectedFields['date']);
+        $this->assertNull($restart->collectedFields['patient_name']);
+        $this->assertNull($restart->collectedFields['patient_phone']);
+        $this->assertStringContainsString("Let's start over", $restart->message);
+    }
+
+    public static function bookingDateInputs(): array
+    {
+        return [
+            'tomorrow' => ['tomorrow', '2026-10-03'],
+            'today' => ['today', '2026-10-02'],
+            'kesho' => ['kesho', '2026-10-03'],
+            'leo' => ['leo', '2026-10-02'],
+            'day month year' => ['15/10/2026', '2026-10-15'],
+            'year month day' => ['2026-10-15', '2026-10-15'],
+            'hyphenated day month year' => ['15-10-2026', '2026-10-15'],
+        ];
+    }
+
+    #[DataProvider('bookingDateInputs')]
+    public function test_date_field_accepts_supported_formats_without_escalating(
+        string $dateInput,
+        string $expectedDate,
+    ): void {
+        $this->createContext();
+        Http::preventStrayRequests();
+        $chat = app(BookingChatService::class);
+        $sessionId = 'booking-date-'.str_replace(' ', '-', $dateInput);
+        $chat->handle($sessionId, 'Book Dental Cleaning', 'web');
+
+        $response = $chat->handle($sessionId, $dateInput, 'web');
+
+        $this->assertSame($expectedDate, $response->collectedFields['date']);
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertDatabaseCount('escalations', 0);
+    }
+
+    public function test_unrecognized_date_stays_in_booking_and_explains_supported_formats(): void
+    {
+        $this->createContext();
+        Http::preventStrayRequests();
+        $chat = app(BookingChatService::class);
+        $sessionId = 'invalid-booking-date';
+        $chat->handle($sessionId, 'Book Dental Cleaning', 'web');
+
+        $response = $chat->handle($sessionId, '32/13/2026', 'web');
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertNull($response->collectedFields['date']);
+        $this->assertStringContainsString("I couldn't understand '32/13/2026'", $response->message);
+        $this->assertStringContainsString('DD/MM/YYYY', $response->message);
+        $this->assertStringContainsString('tomorrow', $response->message);
+        $this->assertDatabaseCount('escalations', 0);
+    }
+
+    public function test_ambiguous_short_date_does_not_become_booking_time(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $sessionId = 'ambiguous-short-date';
+        $chat->handle($sessionId, 'Book Dental Cleaning', 'web');
+
+        $ambiguousDate = $chat->handle($sessionId, '03/04', 'web');
+        $validDate = $chat->handle($sessionId, 'tomorrow', 'web');
+
+        $this->assertNull($ambiguousDate->collectedFields['date']);
+        $this->assertNull($ambiguousDate->collectedFields['time']);
+        $this->assertSame(CarbonImmutable::tomorrow()->toDateString(), $validDate->collectedFields['date']);
+        $this->assertNull($validDate->collectedFields['time']);
+        $this->assertStringContainsString('full name', mb_strtolower($validDate->message));
+    }
+
+    public function test_third_unrecognized_booking_message_resets_to_recovery_menu(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $sessionId = 'third-unrecognized-booking';
+        $chat->handle($sessionId, 'Book Dental Cleaning', 'web');
+
+        $chat->handle($sessionId, 'purple giraffe', 'web');
+        $chat->handle($sessionId, 'purple giraffe', 'web');
+        $recoveryMenu = $chat->handle($sessionId, 'purple giraffe', 'web');
+
+        $this->assertSame('IDLE', $recoveryMenu->state);
+        $this->assertSame(0, $recoveryMenu->collectedFields['unrecognized_message_count']);
+        $this->assertNull($recoveryMenu->collectedFields['service_id']);
+        $this->assertStringContainsString('Let me start over', $recoveryMenu->message);
+        $this->assertStringContainsString('Reply book', $recoveryMenu->message);
+        $this->assertDatabaseCount('escalations', 0);
+    }
+
+    public function test_three_idle_nonsense_messages_show_recovery_without_handoff(): void
+    {
+        $this->createContext();
+        Http::preventStrayRequests();
+        $chat = app(BookingChatService::class);
+        $sessionId = 'three-idle-nonsense-messages';
+
+        $firstResponse = $chat->handle($sessionId, 'blah', 'web');
+        $secondResponse = $chat->handle($sessionId, 'blah', 'web');
+        $recoveryMenu = $chat->handle($sessionId, 'blah', 'web');
+
+        $this->assertStringContainsString("Sorry, I didn't catch that", $firstResponse->message);
+        $this->assertStringContainsString("Sorry, I didn't catch that", $secondResponse->message);
+        $this->assertSame(1, $firstResponse->collectedFields['unrecognized_message_count']);
+        $this->assertSame(2, $secondResponse->collectedFields['unrecognized_message_count']);
+        $this->assertSame('IDLE', $recoveryMenu->state);
+        $this->assertSame(0, $recoveryMenu->collectedFields['unrecognized_message_count']);
+        $this->assertStringContainsString('Let me start over', $recoveryMenu->message);
+        $this->assertDatabaseCount('escalations', 0);
+    }
+
+    public function test_swahili_name_is_collected_before_phone_and_date_hint_is_complete(): void
+    {
+        [, $services] = $this->createContext();
+        $chat = app(BookingChatService::class);
+        $sessionId = 'swahili-booking-fields';
+
+        $chat->handle($sessionId, 'Nataka kuweka miadi', 'web');
+        $datePrompt = $chat->handle($sessionId, 'Dental Cleaning', 'web');
+        $namePrompt = $chat->handle($sessionId, 'kesho', 'web');
+        $phonePrompt = $chat->handle($sessionId, 'Jina langu ni Juma', 'web');
+        $timePrompt = $chat->handle($sessionId, '0712345678', 'web');
+        $confirmation = $chat->handle($sessionId, '9am', 'web');
+
+        $this->assertStringContainsString('DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD', $datePrompt->message);
+        $this->assertStringContainsString('kesho', $datePrompt->message);
+        $this->assertStringContainsString('jina lako', mb_strtolower($namePrompt->message));
+        $this->assertSame('Juma', $phonePrompt->collectedFields['patient_name']);
+        $this->assertStringContainsString('nambari gani ya simu', mb_strtolower($phonePrompt->message));
+        $this->assertStringContainsString('saa ngapi', mb_strtolower($timePrompt->message));
+        $this->assertSame($services[0]->id, $confirmation->collectedFields['service_id']);
+        $this->assertSame('Juma', $confirmation->collectedFields['patient_name']);
+        $this->assertSame('254712345678', $confirmation->collectedFields['patient_phone']);
+        $this->assertSame('CONFIRMING', $confirmation->state);
+        $this->assertStringContainsString('Tafadhali thibitisha', $confirmation->message);
+    }
+
+    public function test_cancelling_mid_booking_clears_fields_without_creating_an_escalation(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $sessionId = 'cancel-mid-booking';
+        $chat->handle($sessionId, 'Book Dental Cleaning', 'web');
+        $chat->handle($sessionId, '15/10/2026', 'web');
+
+        $cancelled = $chat->handle($sessionId, 'cancel', 'web');
+
+        $this->assertSame('CANCELLED', $cancelled->state);
+        $this->assertNull($cancelled->collectedFields['service_id']);
+        $this->assertNull($cancelled->collectedFields['date']);
+        $this->assertDatabaseCount('slot_holds', 0);
+        $this->assertDatabaseCount('escalations', 0);
+    }
+
+    public function test_yes_without_pending_confirmation_explains_no_confirmation_exists(): void
+    {
+        $this->createContext();
+
+        $response = app(BookingChatService::class)->handle('yes-without-confirmation', 'yes', 'web');
+
+        $this->assertStringContainsString(
+            'no booking waiting for confirmation',
+            $response->message,
+        );
+        $this->assertSame('IDLE', $response->state);
+    }
+
     public function test_typoed_booking_request_starts_the_booking_flow(): void
     {
         $this->createContext();
@@ -132,7 +400,8 @@ class BookingChatServiceTest extends TestCase
         );
 
         $this->assertSame('COLLECTING', $response->state);
-        $this->assertStringContainsString('What service do you need?', $response->message);
+        $this->assertSame('sw', $response->collectedFields['language']);
+        $this->assertStringContainsString('Unahitaji huduma gani?', $response->message);
         $this->assertDatabaseCount('appointment_requests', 0);
     }
 
@@ -245,6 +514,90 @@ class BookingChatServiceTest extends TestCase
         $this->assertStringNotContainsString('Available services:', $response->message);
     }
 
+    public function test_booking_recovers_from_a_stale_handoff_and_preserves_collected_fields(): void
+    {
+        $this->travelTo('2026-10-02 08:00:00');
+        [, $services, $doctors] = $this->createContext(doctorNames: ['Dr. Amina Njeri']);
+        $sessionId = 'booking-state-machine-reproducer';
+        $chat = app(BookingChatService::class);
+        Http::preventStrayRequests();
+
+        app(PearlieServiceV2::class)->handleEscalationIntent('help me', $sessionId, 'web');
+
+        $servicePrompt = $chat->handle($sessionId, 'I want to book an appointment', 'web');
+        $datePrompt = $chat->handle($sessionId, 'Dental Cleaning', 'web');
+        $namePrompt = $chat->handle($sessionId, '15/10/2026', 'web');
+        $phonePrompt = $chat->handle($sessionId, 'My name is Test Patient', 'web');
+        $timePrompt = $chat->handle($sessionId, '254748249882', 'web');
+        $confirmation = $chat->handle($sessionId, '9am', 'web');
+        $state = $chat->getState($sessionId);
+
+        $this->assertStringContainsString('What service do you need', $servicePrompt->message);
+        $this->assertSame($services[0]->id, $state['service_id']);
+        $this->assertSame($doctors[0]->id, $state['doctor_id']);
+        $this->assertStringContainsString('What date would you prefer', $datePrompt->message);
+        $this->assertStringContainsString('full name', mb_strtolower($namePrompt->message));
+        $this->assertStringContainsString('mobile number', mb_strtolower($phonePrompt->message));
+        $this->assertStringContainsString('What time would you prefer', $timePrompt->message);
+        $this->assertSame('2026-10-15', $state['date']);
+        $this->assertSame('09:00', $state['time']);
+        $this->assertSame('Test Patient', $state['patient_name']);
+        $this->assertSame('254748249882', $state['patient_phone']);
+        $this->assertSame('CONFIRMING', $confirmation->state);
+        $this->assertStringContainsString('Oct 15, 2026', $confirmation->message);
+        $this->assertStringContainsString('Dr. Amina Njeri', $confirmation->message);
+        $this->assertStringContainsString('Test Patient', $confirmation->message);
+        $this->assertStringContainsString('254748249882', $confirmation->message);
+        $this->assertDatabaseCount('escalations', 0);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_unrecognized_messages_during_booking_recover_without_losing_state_or_escalating(): void
+    {
+        [, $services] = $this->createContext();
+        $chat = app(BookingChatService::class);
+        $chat->handle('unrecognized-booking-input', 'Book Dental Cleaning', 'web');
+
+        $firstClarification = $chat->handle('unrecognized-booking-input', 'purple giraffe', 'web');
+        $recovery = $chat->handle('unrecognized-booking-input', 'purple giraffe', 'web');
+        $state = $chat->getState('unrecognized-booking-input');
+
+        $this->assertStringContainsString('What date would you prefer', $firstClarification->message);
+        $this->assertStringContainsString("Sorry, I didn't catch that", $firstClarification->message);
+        $this->assertStringContainsString('I still need a date', $recovery->message);
+        $this->assertStringContainsString("Sorry, I didn't catch that", $recovery->message);
+        $this->assertStringNotContainsString('Available services at', $recovery->message);
+        $this->assertSame('COLLECTING', $state['state']);
+        $this->assertSame($services[0]->id, $state['service_id']);
+        $this->assertNull($state['date']);
+        $this->assertDatabaseCount('escalations', 0);
+
+        $dateResponse = $chat->handle('unrecognized-booking-input', 'tomorrow', 'web');
+
+        $this->assertSame(CarbonImmutable::tomorrow()->toDateString(), $dateResponse->collectedFields['date']);
+    }
+
+    public function test_explicit_handoff_during_booking_preserves_fields_when_phone_is_captured(): void
+    {
+        [, $services] = $this->createContext();
+        $chat = app(BookingChatService::class);
+        $chat->handle('booking-explicit-handoff', 'Book Dental Cleaning', 'web');
+
+        $handoffPrompt = $chat->handle('booking-explicit-handoff', 'I need a human', 'web');
+        $handoffCreated = $chat->handle('booking-explicit-handoff', 'My phone is 254748249882', 'web');
+        $continued = $chat->handle('booking-explicit-handoff', 'continue booking', 'web');
+
+        $this->assertStringContainsString('best phone number', mb_strtolower($handoffPrompt->message));
+        $this->assertFalse($handoffCreated->collectedFields['escalation_pending']);
+        $this->assertSame($services[0]->id, $handoffCreated->collectedFields['service_id']);
+        $this->assertSame('254748249882', $handoffCreated->collectedFields['patient_phone']);
+        $this->assertDatabaseHas('escalations', ['session_id' => 'booking-explicit-handoff']);
+        $this->assertDatabaseCount('escalations', 1);
+        $this->assertSame('COLLECTING', $continued->state);
+        $this->assertSame($services[0]->id, $continued->collectedFields['service_id']);
+        $this->assertStringContainsString('What date would you prefer', $continued->message);
+    }
+
     public function test_explicit_human_request_triggers_escalation(): void
     {
         $this->createContext();
@@ -265,7 +618,7 @@ class BookingChatServiceTest extends TestCase
         $response = app(BookingChatService::class)->handle('ct-abbrev', 'CT', 'web');
 
         $this->assertSame($services[0]->id, $this->state('ct-abbrev')['service_id']);
-        $this->assertStringContainsString('Which doctor', $response->message);
+        $this->assertStringContainsString('What date would you prefer', $response->message);
     }
 
     public function test_scan_alias_matches_ultrasound_instead_of_ct(): void
@@ -906,9 +1259,16 @@ class BookingChatServiceTest extends TestCase
             'web',
         );
 
-        $this->assertStringContainsString('Dr. Amina Njeri', $response->message);
-        $this->assertStringContainsString('Dr. Brian Otieno', $response->message);
-        $this->assertStringContainsString('Which doctor', $response->message);
+        $this->assertStringContainsString('What date would you prefer', $response->message);
+
+        $chat = app(BookingChatService::class);
+        $chat->handle('specialty-not-required', 'tomorrow', 'web');
+        $chat->handle('specialty-not-required', 'My name is Test Patient', 'web');
+        $doctorPrompt = $chat->handle('specialty-not-required', '254748249882', 'web');
+
+        $this->assertStringContainsString('Dr. Amina Njeri', $doctorPrompt->message);
+        $this->assertStringContainsString('Dr. Brian Otieno', $doctorPrompt->message);
+        $this->assertStringContainsString('Which doctor', $doctorPrompt->message);
     }
 
     public function test_confirmation_no_returns_to_idle_without_creating_appointment(): void
@@ -1065,10 +1425,10 @@ class BookingChatServiceTest extends TestCase
 
         $service = $chat->handle('fields-one-at-a-time', 'I want to book an appointment', 'web');
         $date = $chat->handle('fields-one-at-a-time', 'Dental Cleaning', 'web');
-        $time = $chat->handle('fields-one-at-a-time', 'tomorrow', 'web');
-        $name = $chat->handle('fields-one-at-a-time', '9am', 'web');
+        $name = $chat->handle('fields-one-at-a-time', 'tomorrow', 'web');
         $phone = $chat->handle('fields-one-at-a-time', 'Test Patient', 'web');
-        $confirmation = $chat->handle('fields-one-at-a-time', '254748249882', 'web');
+        $time = $chat->handle('fields-one-at-a-time', '254748249882', 'web');
+        $confirmation = $chat->handle('fields-one-at-a-time', '9am', 'web');
 
         $this->assertStringContainsString('What service do you need', $service->message);
         $this->assertStringContainsString('What date', $date->message);
@@ -1389,18 +1749,18 @@ class BookingChatServiceTest extends TestCase
     {
         $this->createContext(doctorNames: ['Dr. Amina Njeri', 'Dr. Test Live']);
         $chat = app(BookingChatService::class);
-        $doctorPrompt = $chat->handle('natural-multi', 'Book Dental Cleaning', 'web');
-        $dateTimePrompt = $chat->handle('natural-multi', 'tomorrow at 9am', 'web');
-        $contactPrompt = $chat->handle(
+        $datePrompt = $chat->handle('natural-multi', 'Book Dental Cleaning', 'web');
+        $namePrompt = $chat->handle('natural-multi', 'tomorrow at 9am', 'web');
+        $doctorPrompt = $chat->handle(
             'natural-multi',
             'My name is Test Patient, phone 254748249882, email patient@test.com',
             'web',
         );
         $confirmation = $chat->handle('natural-multi', 'Dr. Amina Njeri', 'web');
 
+        $this->assertStringContainsString('What date would you prefer', $datePrompt->message);
+        $this->assertStringContainsString('full name', mb_strtolower($namePrompt->message));
         $this->assertStringContainsString('Which doctor', $doctorPrompt->message);
-        $this->assertStringContainsString('Which doctor', $dateTimePrompt->message);
-        $this->assertStringContainsString('Which doctor', $contactPrompt->message);
         $this->assertSame('CONFIRMING', $confirmation->state);
     }
 
@@ -1555,6 +1915,7 @@ class BookingChatServiceTest extends TestCase
         ]));
         $lock = Cache::lock($lockKey, 120);
         $this->assertTrue($lock->get());
+        $this->assertFalse(Cache::lock($lockKey, 120)->get());
 
         try {
             $exception = null;

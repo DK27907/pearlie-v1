@@ -561,13 +561,19 @@ class PearlieServiceV2
         return 'pending_escalation_phone_'.hash('sha256', $sessionId);
     }
 
+    public function clearPendingEscalation(string $sessionId): void
+    {
+        Cache::forget($this->pendingEscalationPhoneKey($sessionId));
+    }
+
     public function shouldEscalateMessage(
         string $message,
         string $sessionId,
         bool $bookingInProgress = false,
     ): bool {
-        if (Cache::has($this->pendingEscalationPhoneKey($sessionId))
-            || (! $bookingInProgress && $this->escalationService->hasOpenPatientHandoff($sessionId))
+        if (! $bookingInProgress
+            && (Cache::has($this->pendingEscalationPhoneKey($sessionId))
+                || $this->escalationService->hasOpenPatientHandoff($sessionId))
         ) {
             return true;
         }

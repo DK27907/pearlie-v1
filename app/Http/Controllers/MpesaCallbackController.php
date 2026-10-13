@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AppointmentRequest;
 use App\Models\MpesaPayment;
 use App\Services\MpesaService;
+use App\Support\CacheLockRunner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -26,7 +27,7 @@ class MpesaCallbackController extends Controller
             $checkoutRequestId = is_string($checkoutRequestId) ? $checkoutRequestId : null;
 
             if ($idempotencyKey !== null) {
-                return Cache::lock($idempotencyKey.':lock', 120)->block(10, function () use ($idempotencyKey, $payload): JsonResponse {
+                return CacheLockRunner::run(Cache::lock($idempotencyKey.':lock', 120), 10, function () use ($idempotencyKey, $payload): JsonResponse {
                     if (Cache::has($idempotencyKey)) {
                         return response()->json(['status' => 'already_processed']);
                     }
