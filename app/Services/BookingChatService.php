@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\AppointmentLifecycleException;
+use App\Exceptions\MissingProviderCredentialsException;
 use App\Models\AppointmentRequest;
 use App\Models\Conversation;
 use App\Models\Hospital;
@@ -1065,12 +1066,15 @@ class BookingChatService
                 'exception' => $exception,
             ]);
             $state['state'] = self::STATE_CANCELLED;
+            $response = $exception instanceof MissingProviderCredentialsException
+                ? $exception->getMessage()
+                : 'Your appointment request was saved, but the M-Pesa prompt could not be sent. Please contact the hospital for help.';
 
             return $this->respond(
                 $sessionId,
                 $channel,
                 $message,
-                'Your appointment request was saved, but the M-Pesa prompt could not be sent. Please contact the hospital for help.',
+                $response,
                 $state,
                 $appointment->id,
             );

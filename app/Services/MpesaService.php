@@ -20,6 +20,7 @@ class MpesaService
 {
     public function __construct(
         private readonly PaymentLifecycleService $lifecycle,
+        private readonly ProviderCredentialResolver $credentialResolver,
     ) {}
 
     public function getAccessToken(?string $checkoutRequestId = null): ?string
@@ -797,24 +798,23 @@ class MpesaService
     private function configForCurrentHospital(): array
     {
         $config = (array) config('mpesa');
-        foreach ([
-            'consumer_key',
-            'consumer_secret',
-            'shortcode',
-            'passkey',
-            'environment',
-            'callback_url',
-            'account_reference',
-            'transaction_description',
-            'timeout',
-        ] as $key) {
-            $config[$key] = $this->config($key, $config[$key] ?? null);
-        }
-
         $hospital = hospital();
         if (! $hospital) {
             return $config;
         }
+
+        $config = $this->credentialResolver->resolve(
+            $hospital,
+            'M-Pesa',
+            $config,
+            [
+                'consumer_key' => 'mpesa_consumer_key',
+                'consumer_secret' => 'mpesa_consumer_secret',
+                'shortcode' => 'mpesa_shortcode',
+                'passkey' => 'mpesa_passkey',
+            ],
+            ['consumer_key', 'consumer_secret', 'shortcode', 'passkey'],
+        );
 
         $config['appointment_deposit'] = (float) $hospital->deposit_amount;
         $configuredCredentials = HospitalSettings::currentOrNull()?->credential('mpesa') ?? [];

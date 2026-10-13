@@ -2,6 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Console\Commands\MpesaHealthCheck;
+use App\Console\Commands\ReconcileMpesaPayments;
+use App\Exceptions\MissingProviderCredentialsException;
+use App\Http\Controllers\WhatsAppWebhookController;
 use App\Mail\MarketingDemoRequest;
 use App\Models\Hospital;
 use App\Services\HospitalMailService;
@@ -12,6 +16,9 @@ use App\Services\WhatsAppService;
 use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as ClientRequest;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -27,6 +34,8 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
         app(HospitalSettings::class)->for($hospital)->setCredential('mpesa', [
             'consumer_key' => 'hospital-a-key',
             'consumer_secret' => 'hospital-a-secret',
+            'shortcode' => '123456',
+            'passkey' => 'hospital-a-passkey',
         ]);
         $this->fakeMpesaOAuth();
 
@@ -41,6 +50,7 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
     public function test_mpesa_service_falls_back_to_env_when_hospital_has_no_credentials(): void
     {
         config([
+            'integrations.allow_global_fallback' => true,
             'mpesa.consumer_key' => 'global-test-key',
             'mpesa.consumer_secret' => 'global-test-secret',
         ]);
@@ -65,6 +75,7 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
         file_put_contents($caBundle, 'test CA bundle');
         $this->setCurrentHospital(Hospital::factory()->create());
         config([
+            'integrations.allow_global_fallback' => true,
             'mpesa.ca_bundle' => $caBundle,
             'mpesa.consumer_key' => 'global-test-key',
             'mpesa.consumer_secret' => 'global-test-secret',
@@ -111,6 +122,7 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
     public function test_whatsapp_service_falls_back_to_env_when_hospital_has_no_credentials(): void
     {
         config([
+            'integrations.allow_global_fallback' => true,
             'whatsapp.phone_number_id' => 'global-phone-id',
             'whatsapp.access_token' => 'global-access-token',
             'whatsapp.api_version' => 'v20.0',
@@ -154,6 +166,7 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
     public function test_sms_falls_back_to_env_when_hospital_has_no_credentials(): void
     {
         config([
+            'integrations.allow_global_fallback' => true,
             'services.sms_provider' => 'africastalking',
             'services.africastalking.username' => 'global-sms',
             'services.africastalking.api_key' => 'global-sms-key',
@@ -223,10 +236,14 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
         app(HospitalSettings::class)->for($hospitalA)->setCredential('mpesa', [
             'consumer_key' => 'hospital-a-key',
             'consumer_secret' => 'hospital-a-secret',
+            'shortcode' => '123456',
+            'passkey' => 'hospital-a-passkey',
         ]);
         app(HospitalSettings::class)->for($hospitalB)->setCredential('mpesa', [
             'consumer_key' => 'hospital-b-key',
             'consumer_secret' => 'hospital-b-secret',
+            'shortcode' => '654321',
+            'passkey' => 'hospital-b-passkey',
         ]);
         $this->fakeMpesaOAuth();
 
@@ -244,6 +261,161 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
             'Authorization',
             'Basic '.base64_encode('hospital-b-key:hospital-b-secret'),
         ));
+    }
+
+    public function test_tenant_without_mpesa_credentials_fails_closed(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $this->setCurrentHospital($hospital);
+        config([
+            'integrations.allow_global_fallback' => false,
+            'mpesa.consumer_key' => 'global-test-key',
+            'mpesa.consumer_secret' => 'global-test-secret',
+            'mpesa.shortcode' => '174379',
+            'mpesa.passkey' => 'global-test-passkey',
+        ]);
+        Http::preventStrayRequests();
+
+        try {
+            app(MpesaService::class)->getAccessToken();
+            $this->fail('Missing tenant M-Pesa credentials should fail closed.');
+        } catch (MissingProviderCredentialsException $exception) {
+            $this->assertSame('M-Pesa', $exception->provider);
+            $this->assertSame($hospital->slug, $exception->hospitalSlug);
+            $this->assertStringContainsString('An admin must enter credentials', $exception->getMessage());
+        }
+
+        Http::assertNothingSent();
+    }
+
+    public function test_tenant_without_whatsapp_credentials_fails_closed(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $this->setCurrentHospital($hospital);
+        config([
+            'integrations.allow_global_fallback' => false,
+            'whatsapp.phone_number_id' => 'global-phone-id',
+            'whatsapp.access_token' => 'global-access-token',
+        ]);
+        Http::preventStrayRequests();
+
+        try {
+            app(WhatsAppService::class)->sendTemplate('254712345678', 'appointment_update', []);
+            $this->fail('Missing tenant WhatsApp credentials should fail closed.');
+        } catch (MissingProviderCredentialsException $exception) {
+            $this->assertSame('WhatsApp', $exception->provider);
+            $this->assertSame($hospital->slug, $exception->hospitalSlug);
+        }
+
+        Http::assertNothingSent();
+    }
+
+    public function test_tenant_without_whatsapp_webhook_credentials_returns_service_unavailable(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $this->setCurrentHospital($hospital);
+        config([
+            'integrations.allow_global_fallback' => false,
+            'whatsapp.verify_token' => 'global-verify-token',
+        ]);
+
+        $response = app(WhatsAppWebhookController::class)->verify(
+            Request::create('/webhooks/whatsapp?hub.verify_token=global-verify-token&hub.mode=subscribe'),
+        );
+
+        $this->assertSame(503, $response->getStatusCode());
+        $this->assertStringContainsString($hospital->slug, $response->getContent());
+        $this->assertStringContainsString('WhatsApp is not configured', $response->getContent());
+    }
+
+    public function test_tenant_without_sms_credentials_fails_closed(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $this->setCurrentHospital($hospital);
+        config([
+            'integrations.allow_global_fallback' => false,
+            'services.sms_provider' => 'africastalking',
+            'services.africastalking.username' => 'global-sms',
+            'services.africastalking.api_key' => 'global-sms-key',
+        ]);
+        Http::preventStrayRequests();
+
+        try {
+            app(NotificationService::class)->sendSms('+254712345678', 'Test message');
+            $this->fail('Missing tenant SMS credentials should fail closed.');
+        } catch (MissingProviderCredentialsException $exception) {
+            $this->assertSame('SMS', $exception->provider);
+            $this->assertSame($hospital->slug, $exception->hospitalSlug);
+        }
+
+        Http::assertNothingSent();
+    }
+
+    public function test_global_fallback_only_when_explicitly_enabled(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $this->setCurrentHospital($hospital);
+        config([
+            'integrations.allow_global_fallback' => false,
+            'mpesa.consumer_key' => 'global-test-key',
+            'mpesa.consumer_secret' => 'global-test-secret',
+            'mpesa.shortcode' => '174379',
+            'mpesa.passkey' => 'global-test-passkey',
+        ]);
+        Http::preventStrayRequests();
+
+        $missingCredentialsException = null;
+        try {
+            app(MpesaService::class)->getAccessToken();
+        } catch (MissingProviderCredentialsException $exception) {
+            $missingCredentialsException = $exception;
+        }
+
+        $this->assertInstanceOf(MissingProviderCredentialsException::class, $missingCredentialsException);
+        $this->assertSame($hospital->slug, $missingCredentialsException->hospitalSlug);
+        Http::assertNothingSent();
+        config(['integrations.allow_global_fallback' => true]);
+        $this->fakeMpesaOAuth();
+
+        app(MpesaService::class)->getAccessToken();
+
+        Http::assertSent(fn ($request): bool => $request->hasHeader(
+            'Authorization',
+            'Basic '.base64_encode('global-test-key:global-test-secret'),
+        ));
+    }
+
+    public function test_health_check_reports_per_hospital_credential_status(): void
+    {
+        $configuredHospital = Hospital::factory()->create(['is_active' => true]);
+        $missingHospital = Hospital::factory()->create(['is_active' => true]);
+        app(HospitalSettings::class)->for($configuredHospital)->setCredential('mpesa', [
+            'consumer_key' => 'tenant-key',
+            'consumer_secret' => 'tenant-secret',
+            'shortcode' => '123456',
+            'passkey' => 'tenant-passkey',
+        ]);
+        config([
+            'app.env' => 'production',
+            'integrations.allow_global_fallback' => false,
+            'mpesa.consumer_key' => 'global-test-key',
+            'mpesa.consumer_secret' => 'global-test-secret',
+            'mpesa.passkey' => 'global-test-passkey',
+            'mpesa.shortcode' => '174379',
+            'mpesa.callback_url' => 'https://example.test/api/mpesa/callback',
+        ]);
+        $this->app->detectEnvironment(static fn (): string => 'production');
+        $this->recordHealthCheckHeartbeats();
+
+        $exitCode = Artisan::call('mpesa:health-check');
+        $output = Artisan::output();
+
+        $this->assertSame(1, $exitCode);
+        $this->assertStringContainsString('M-Pesa credentials '.$configuredHospital->slug, $output);
+        $this->assertStringContainsString('M-Pesa credentials '.$missingHospital->slug, $output);
+        $this->assertStringContainsString('missing tenant credentials', $output);
+        $this->assertStringContainsString('MISSING', $output);
+        $this->assertStringNotContainsString('tenant-secret', $output);
     }
 
     public function test_service_uses_env_when_no_hospital_bound(): void
@@ -276,5 +448,19 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
     private function setCurrentHospital(Hospital $hospital): void
     {
         app()->instance('currentHospital', $hospital);
+    }
+
+    private function recordHealthCheckHeartbeats(): void
+    {
+        Cache::put(ReconcileMpesaPayments::HEARTBEAT_CACHE_KEY, now()->timestamp, now()->addMinutes(15));
+        Cache::put(MpesaHealthCheck::SCHEDULER_HEARTBEAT_CACHE_KEY, now()->timestamp, 600);
+
+        foreach (MpesaHealthCheck::SCHEDULED_TASK_HEARTBEATS as $command => $ttlMinutes) {
+            Cache::put(
+                MpesaHealthCheck::schedulerHeartbeatCacheKey($command),
+                now()->timestamp,
+                $ttlMinutes * 60,
+            );
+        }
     }
 }

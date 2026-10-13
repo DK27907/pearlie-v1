@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\MissingProviderCredentialsException;
 use App\Models\AppointmentRequest;
 use App\Models\Conversation;
 use App\Models\Service;
@@ -104,9 +105,11 @@ class WhatsAppBookingService
                 'appointment_id' => $appointment->id,
                 'error' => $e->getMessage(),
             ]);
-            $response = $language === 'sw'
-                ? 'Maelezo ya miadi yako yamehifadhiwa yakisubiri, lakini hatukuweza kutuma ombi la M-Pesa kwa sasa. Tafadhali jaribu tena baada ya muda mfupi.'
-                : 'Your appointment details are saved as pending, but we could not start the M-Pesa prompt right now. Please try again shortly.';
+            $response = $e instanceof MissingProviderCredentialsException
+                ? $e->getMessage()
+                : ($language === 'sw'
+                    ? 'Maelezo ya miadi yako yamehifadhiwa yakisubiri, lakini hatukuweza kutuma ombi la M-Pesa kwa sasa. Tafadhali jaribu tena baada ya muda mfupi.'
+                    : 'Your appointment details are saved as pending, but we could not start the M-Pesa prompt right now. Please try again shortly.');
         }
 
         return $this->recordResponse($sessionId, $message, $response, $appointment->id);

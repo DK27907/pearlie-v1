@@ -22,6 +22,16 @@ Set secrets through the hosting platform's secret manager, not in source control
 
 Do not place production keys in build logs, screenshots, command-line arguments, or source files. Never reuse development passwords, test phone numbers, or sandbox payment credentials.
 
+## Per-tenant integration credentials
+
+Set `INTEGRATIONS_ALLOW_GLOBAL_FALLBACK=false` in production. The application defaults this flag to `false` outside the test environment. A global provider configuration must not silently supply a tenant's missing credentials. Only enable global fallback deliberately for a single-tenant installation or a controlled test environment; never enable it as a workaround for an unconfigured production hospital.
+
+Every active hospital that uses M-Pesa must have its own `consumer_key`, `consumer_secret`, `shortcode`, and `passkey` saved in its integration settings or legacy encrypted hospital fields. The callback URL may be a shared application configuration or an explicit per-hospital integration setting. WhatsApp-enabled hospitals must have tenant `phone_number_id` and `access_token`; webhook handling also requires a tenant `verify_token` and `app_secret`. SMS-enabled hospitals must configure the selected provider's credentials: Africa's Talking requires `username` and `api_key`; Twilio requires `from_number`, `account_sid`, and either `auth_token` or the `twilio_api_key`/`api_secret` pair.
+
+Tenant M-Pesa credentials are resolved by `MpesaService`; outbound WhatsApp credentials are resolved by `WhatsAppService` and `NotificationService`; SMS credentials are resolved by `NotificationService`; WhatsApp webhook verification credentials are resolved by `WhatsAppWebhookController`. Each tenant-bound path throws a `MissingProviderCredentialsException` containing the hospital slug, provider, and missing key names when its tenant credentials are incomplete and global fallback is disabled. Web chat returns a visible setup message, and webhook verification responds with HTTP 503. Unbound platform-wide commands may continue using global configuration. `HospitalSettings` still uses global defaults for ordinary non-provider hospital settings; these are not provider credential fallbacks.
+
+`php artisan mpesa:health-check` prints M-Pesa credential readiness for every active hospital without displaying credential values. In production it exits unsuccessfully if any active hospital is missing required tenant credentials, even if global fallback is enabled. It also checks shared callback configuration, reconciliation, scheduler, and queue health. Provision tenant credentials before deploying or enabling M-Pesa for a hospital.
+
 ## Build and release
 
 Use the platform's build and deploy commands. A typical Laravel Cloud build command is:

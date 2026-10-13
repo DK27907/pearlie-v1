@@ -2,8 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\MissingProviderCredentialsException;
 use App\Services\BookingChatService;
-use App\Services\HospitalSettings;
+use App\Services\ProviderCredentialResolver;
 use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -11,9 +12,22 @@ use Illuminate\Support\Facades\Log;
 
 class WhatsAppWebhookController extends Controller
 {
+    public function __construct(
+        private readonly ProviderCredentialResolver $credentialResolver,
+    ) {}
+
     public function verify(Request $request): Response
     {
-        $token = (string) $this->whatsappCredential('whatsapp_verify_token', 'verify_token');
+        try {
+            $token = (string) $this->whatsappCredential('whatsapp_verify_token', 'verify_token');
+        } catch (MissingProviderCredentialsException $exception) {
+            Log::error('WhatsApp webhook verification credentials are missing.', [
+                'exception' => $exception,
+            ]);
+
+            return response($exception->getMessage(), 503);
+        }
+
         $providedToken = (string) ($request->query('hub.verify_token') ?: $request->query('hub_verify_token'));
         $mode = (string) ($request->query('hub.mode') ?: $request->query('hub_mode'));
         if ($token === '' || ! hash_equals($token, $providedToken)) {
@@ -32,7 +46,16 @@ class WhatsAppWebhookController extends Controller
         BookingChatService $booking,
         WhatsAppService $whatsApp,
     ): Response {
-        $secret = (string) $this->whatsappCredential('whatsapp_app_secret', 'app_secret');
+        try {
+            $secret = (string) $this->whatsappCredential('whatsapp_app_secret', 'app_secret');
+        } catch (MissingProviderCredentialsException $exception) {
+            Log::error('WhatsApp webhook signature credentials are missing.', [
+                'exception' => $exception,
+            ]);
+
+            return response($exception->getMessage(), 503);
+        }
+
         if ($secret === '') {
             Log::error('WhatsApp webhook rejected because signature verification is not configured.');
 
@@ -43,6 +66,17 @@ class WhatsAppWebhookController extends Controller
         $expected = 'sha256='.hash_hmac('sha256', $request->getContent(), $secret);
         if ($signature === '' || ! hash_equals($expected, $signature)) {
             return response('Invalid signature', 401);
+        }
+
+        try {
+            $this->whatsappCredential('whatsapp_phone_number_id', 'phone_number_id');
+            $this->whatsappCredential('whatsapp_access_token', 'access_token');
+        } catch (MissingProviderCredentialsException $exception) {
+            Log::error('WhatsApp outbound credentials are missing for the inbound webhook.', [
+                'exception' => $exception,
+            ]);
+
+            return response($exception->getMessage(), 503);
         }
 
         $payload = $request->json()->all();
@@ -67,6 +101,13 @@ class WhatsAppWebhookController extends Controller
                             (string) $message['from'],
                             $result->message,
                         );
+                    } catch (MissingProviderCredentialsException $exception) {
+                        Log::error('WhatsApp inbound message could not be handled because provider credentials are missing.', [
+                            'from' => $message['from'],
+                            'exception' => $exception,
+                        ]);
+
+                        return response($exception->getMessage(), 503);
                     } catch (\Throwable $e) {
                         Log::error('WhatsApp inbound message failed.', [
                             'from' => $message['from'],
@@ -88,28 +129,30 @@ class WhatsAppWebhookController extends Controller
         return $this->receive($request, $booking, $whatsApp);
     }
 
-    private function whatsappCredential(string $tenantAttribute, string $globalKey): ?string
+    private function whatsappCredential(string $tenantAttribute, string $credentialKey): ?string
     {
         $tenant = hospital();
-        $credentialKey = match ($globalKey) {
-            'verify_token' => 'verify_token',
-            'app_secret' => 'app_secret',
-            default => null,
-        };
-        $credentials = HospitalSettings::currentOrNull()?->credential('whatsapp') ?? [];
-        if ($credentialKey && isset($credentials[$credentialKey])) {
-            return (string) $credentials[$credentialKey];
+        if (! $tenant) {
+            $configuredValue = config('whatsapp.'.$credentialKey);
+
+            return $configuredValue === null ? null : (string) $configuredValue;
         }
 
-        if ($tenant) {
-            $credential = $tenant->getAttribute($tenantAttribute);
-            if (filled($credential)) {
-                return (string) $credential;
-            }
-        }
+        $config = $this->credentialResolver->resolve(
+            $tenant,
+            'WhatsApp',
+            (array) config('whatsapp'),
+            [
+                'phone_number_id' => 'whatsapp_phone_number_id',
+                'access_token' => 'whatsapp_access_token',
+                'verify_token' => 'whatsapp_verify_token',
+                'app_secret' => 'whatsapp_app_secret',
+                'api_version' => 'whatsapp_api_version',
+            ],
+            [$credentialKey],
+        );
+        $value = $config[$credentialKey] ?? null;
 
-        $configuredValue = config('whatsapp.'.$globalKey);
-
-        return $configuredValue === null ? null : (string) $configuredValue;
+        return $value === null ? null : (string) $value;
     }
 }

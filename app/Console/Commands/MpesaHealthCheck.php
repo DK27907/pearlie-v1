@@ -2,6 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Hospital;
+use App\Services\HospitalSettings;
 use Carbon\CarbonImmutable;
 use Cron\CronExpression;
 use Illuminate\Console\Attributes\Description;
@@ -85,6 +87,46 @@ class MpesaHealthCheck extends Command
             $failed = $failed || ! $exists;
         }
 
+        $activeHospitals = Hospital::withoutGlobalScopes()
+            ->where('is_active', true)
+            ->orderBy('id')
+            ->get();
+        $requiredCredentials = [
+            'consumer_key' => 'mpesa_consumer_key',
+            'consumer_secret' => 'mpesa_consumer_secret',
+            'shortcode' => 'mpesa_shortcode',
+            'passkey' => 'mpesa_passkey',
+        ];
+        $hospitalCredentialChecks = [];
+
+        foreach ($activeHospitals as $hospital) {
+            $credentials = (new HospitalSettings)->for($hospital)->credential('mpesa') ?? [];
+            $missingCredentials = [];
+
+            foreach ($requiredCredentials as $key => $legacyAttribute) {
+                $value = filled($credentials[$key] ?? null)
+                    ? $credentials[$key]
+                    : $hospital->getAttribute($legacyAttribute);
+                if (blank($value)) {
+                    $missingCredentials[] = $key;
+                }
+            }
+
+            $callbackUrl = filled($credentials['callback_url'] ?? null)
+                ? $credentials['callback_url']
+                : config('mpesa.callback_url');
+            if (blank($callbackUrl)) {
+                $missingCredentials[] = 'callback_url';
+            }
+
+            $hospitalCredentialChecks[$hospital->id] = [
+                'hospital' => $hospital,
+                'credentials' => $credentials,
+                'missing' => $missingCredentials,
+            ];
+        }
+
+        $allowGlobalFallback = (bool) config('integrations.allow_global_fallback', false);
         foreach ([
             'consumer_key',
             'consumer_secret',
@@ -94,9 +136,44 @@ class MpesaHealthCheck extends Command
         ] as $key) {
             $value = config('mpesa.'.$key);
             $configured = is_scalar($value) && trim((string) $value) !== '';
-            $description = $configured ? 'configured' : 'missing';
-            $checks[] = ['Config '.$key, $configured ? 'PASS' : 'FAIL', $description];
-            $failed = $failed || ! $configured;
+            $tenantConfigured = $activeHospitals->isNotEmpty()
+                && collect($hospitalCredentialChecks)->every(
+                    fn (array $check): bool => ! in_array($key, $check['missing'], true),
+                );
+            $status = $configured || $tenantConfigured || (
+                $activeHospitals->isNotEmpty() && ! $allowGlobalFallback && $key !== 'callback_url'
+            ) ? 'PASS' : 'FAIL';
+            $description = $configured
+                ? 'configured'
+                : ($tenantConfigured
+                    ? 'configured for every active hospital'
+                    : ($status === 'PASS' ? 'global credential fallback is disabled' : 'missing'));
+            $checks[] = ['Config '.$key, $status, $description];
+            $failed = $failed || $status === 'FAIL';
+        }
+
+        foreach ($hospitalCredentialChecks as $check) {
+            $hospital = $check['hospital'];
+            $missingCredentials = $check['missing'];
+            $tenantConfigured = $missingCredentials === [];
+            $globalFallbackConfigured = $allowGlobalFallback
+                && collect($missingCredentials)->every(function (string $key): bool {
+                    $value = config('mpesa.'.$key);
+
+                    return is_scalar($value) && trim((string) $value) !== '';
+                });
+            $status = $tenantConfigured
+                ? 'PASS'
+                : ($globalFallbackConfigured ? 'GLOBAL FALLBACK' : 'MISSING');
+            $details = $tenantConfigured
+                ? 'tenant credentials configured'
+                : 'missing tenant credentials: '.implode(', ', $missingCredentials);
+            if ($globalFallbackConfigured) {
+                $details .= '; global fallback is enabled';
+            }
+
+            $checks[] = ['M-Pesa credentials '.$hospital->slug, $status, $details];
+            $failed = $failed || (! $tenantConfigured && app()->isProduction());
         }
 
         $lastReconciliationTimestamp = Cache::get(ReconcileMpesaPayments::HEARTBEAT_CACHE_KEY);

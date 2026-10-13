@@ -11,7 +11,15 @@ use Throwable;
 
 class WhatsAppService
 {
-    public function __construct(private readonly NotificationService $notifications) {}
+    private readonly ProviderCredentialResolver $credentialResolver;
+
+    public function __construct(
+        private readonly NotificationService $notifications,
+        ?ProviderCredentialResolver $credentialResolver = null,
+    ) {
+        $this->credentialResolver = $credentialResolver
+            ?? new ProviderCredentialResolver(new HospitalSettings);
+    }
 
     /**
      * @return array{success: bool, message: string}
@@ -173,28 +181,22 @@ class WhatsAppService
     {
         $config = (array) config('whatsapp');
         $tenant = hospital();
-        $credentials = HospitalSettings::currentOrNull()?->credential('whatsapp') ?? [];
+        if (! $tenant) {
+            return $config;
+        }
 
-        foreach (['phone_number_id', 'access_token', 'verify_token', 'app_secret', 'api_version'] as $key) {
-            if (isset($credentials[$key])) {
-                $config[$key] = $credentials[$key];
-
-                continue;
-            }
-
-            $legacyAttribute = match ($key) {
+        return $this->credentialResolver->resolve(
+            $tenant,
+            'WhatsApp',
+            $config,
+            [
                 'phone_number_id' => 'whatsapp_phone_number_id',
                 'access_token' => 'whatsapp_access_token',
                 'verify_token' => 'whatsapp_verify_token',
                 'app_secret' => 'whatsapp_app_secret',
                 'api_version' => 'whatsapp_api_version',
-                default => null,
-            };
-            if ($tenant && $legacyAttribute && filled($tenant->getAttribute($legacyAttribute))) {
-                $config[$key] = $tenant->getAttribute($legacyAttribute);
-            }
-        }
-
-        return $config;
+            ],
+            ['phone_number_id', 'access_token'],
+        );
     }
 }

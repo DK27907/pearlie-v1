@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\MissingProviderCredentialsException;
 use App\Models\Hospital;
 use App\Models\NotificationLog;
 use Illuminate\Support\Facades\Http;
@@ -10,6 +11,14 @@ use RuntimeException;
 
 class NotificationService
 {
+    private readonly ProviderCredentialResolver $credentialResolver;
+
+    public function __construct(?ProviderCredentialResolver $credentialResolver = null)
+    {
+        $this->credentialResolver = $credentialResolver
+            ?? new ProviderCredentialResolver(new HospitalSettings);
+    }
+
     public function sendSms(string $to, string $message): bool
     {
         $this->ensureTenantContext();
@@ -430,14 +439,57 @@ class NotificationService
      */
     private function smsConfig(): array
     {
+        $hospital = hospital();
         $hospitalSettings = HospitalSettings::currentOrNull();
-        if ($hospitalSettings) {
-            $credentials = $hospitalSettings->credential('sms');
-            if ($credentials) {
-                return $credentials;
-            }
+        $credentials = $hospitalSettings?->credential('sms') ?? [];
+        $globalConfig = $this->globalSmsConfig();
+
+        if (! $hospital) {
+            return $globalConfig;
         }
 
+        $allowGlobalFallback = (bool) config('integrations.allow_global_fallback', false);
+        if ($credentials !== [] && $allowGlobalFallback) {
+            return $credentials;
+        }
+
+        $provider = (string) ($credentials['provider'] ?? (
+            $credentials !== []
+                ? (filled($credentials['username'] ?? null) && filled($credentials['api_key'] ?? null)
+                    ? 'africastalking'
+                    : 'twilio')
+                : $globalConfig['provider']
+        ));
+        if ($allowGlobalFallback) {
+            return $credentials !== [] ? $credentials : $globalConfig;
+        }
+
+        $tenantCredentials = array_replace($credentials, ['provider' => $provider]);
+        $missingCredentials = match ($provider) {
+            'africastalking' => array_values(array_filter(
+                ['username', 'api_key'],
+                fn (string $key): bool => blank($tenantCredentials[$key] ?? null),
+            )),
+            'twilio' => $this->missingTwilioCredentials($tenantCredentials),
+            default => [],
+        };
+
+        if ($missingCredentials !== []) {
+            throw MissingProviderCredentialsException::forHospital(
+                $hospital,
+                'SMS',
+                $missingCredentials,
+            );
+        }
+
+        return $tenantCredentials;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function globalSmsConfig(): array
+    {
         $legacyProvider = config('services.sms_provider');
         if ($legacyProvider === null) {
             $legacyProvider = filled(config('services.africastalking.username'))
@@ -460,33 +512,51 @@ class NotificationService
     }
 
     /**
+     * @param  array<string, mixed>  $credentials
+     * @return array<int, string>
+     */
+    private function missingTwilioCredentials(array $credentials): array
+    {
+        $missing = [];
+        if (blank($credentials['from_number'] ?? null)) {
+            $missing[] = 'from_number';
+        }
+        if (blank($credentials['account_sid'] ?? null)) {
+            $missing[] = 'account_sid';
+        }
+        if (blank($credentials['auth_token'] ?? null)
+            && (blank($credentials['twilio_api_key'] ?? null)
+                || blank($credentials['api_secret'] ?? null))
+        ) {
+            $missing[] = 'auth_token or twilio_api_key/api_secret';
+        }
+
+        return $missing;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function whatsappConfig(): array
     {
         $config = (array) config('whatsapp');
-        $hospitalSettings = HospitalSettings::currentOrNull();
-        $credentials = $hospitalSettings?->credential('whatsapp') ?? [];
         $tenant = hospital();
-
-        foreach (['phone_number_id', 'access_token', 'api_version'] as $key) {
-            if (isset($credentials[$key])) {
-                $config[$key] = $credentials[$key];
-
-                continue;
-            }
-
-            $legacyAttribute = match ($key) {
-                'phone_number_id' => 'whatsapp_phone_number_id',
-                'access_token' => 'whatsapp_access_token',
-                'api_version' => 'whatsapp_api_version',
-                default => null,
-            };
-            if ($tenant && $legacyAttribute && filled($tenant->getAttribute($legacyAttribute))) {
-                $config[$key] = $tenant->getAttribute($legacyAttribute);
-            }
+        if (! $tenant) {
+            return $config;
         }
 
-        return $config;
+        return $this->credentialResolver->resolve(
+            $tenant,
+            'WhatsApp',
+            $config,
+            [
+                'phone_number_id' => 'whatsapp_phone_number_id',
+                'access_token' => 'whatsapp_access_token',
+                'verify_token' => 'whatsapp_verify_token',
+                'app_secret' => 'whatsapp_app_secret',
+                'api_version' => 'whatsapp_api_version',
+            ],
+            ['phone_number_id', 'access_token'],
+        );
     }
 }
