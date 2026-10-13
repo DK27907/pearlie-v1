@@ -70,6 +70,27 @@ class MpesaHealthCheckTest extends TestCase
             ->assertExitCode(2);
     }
 
+    public function test_long_window_task_reports_not_due_until_its_next_cron_window(): void
+    {
+        $this->configureMpesa();
+        $this->travelTo(Carbon::parse('2026-06-18 06:00:00', config('app.timezone')));
+        $this->recordHeartbeat(now());
+        Cache::put(
+            MpesaHealthCheck::SCHEDULER_HEALTH_BASELINE_CACHE_KEY,
+            Carbon::parse('2026-06-17 08:00:00', config('app.timezone'))->timestamp,
+            now()->addYear(),
+        );
+        Cache::forget(MpesaHealthCheck::schedulerHeartbeatCacheKey('doctor:daily-summary'));
+
+        $exitCode = Artisan::call('mpesa:health-check');
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exitCode, $output);
+        $this->assertStringContainsString('Scheduled task doctor:daily-summary', $output);
+        $this->assertStringContainsString('NOT-DUE', $output);
+        $this->assertStringContainsString('no run is due since health monitoring began', $output);
+    }
+
     public function test_reconciliation_command_records_heartbeat_when_no_payments_are_stale(): void
     {
         $this->artisan('app:reconcile-mpesa-payments')

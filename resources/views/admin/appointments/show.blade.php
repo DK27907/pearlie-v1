@@ -22,6 +22,11 @@
             <p><strong>Preferred Date:</strong> {{ $appt->preferred_date }}</p>
             <p><strong>Reason:</strong> {{ $appt->reason }}</p>
             <p><strong>Status:</strong> {{ $appt->status }}</p>
+            @if ($appt->patient_id === null)
+                <p class="my-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                    Guest booking (not linked to a patient account)
+                </p>
+            @endif
             @if ($repeatNoShowCount > 0)
                 <p class="my-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
                     This patient has {{ $repeatNoShowCount }} previous no-show{{ $repeatNoShowCount === 1 ? '' : 's' }}.

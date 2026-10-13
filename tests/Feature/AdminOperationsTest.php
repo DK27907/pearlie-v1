@@ -110,6 +110,17 @@ class AdminOperationsTest extends TestCase
             ->assertDontSee("document.getElementById('verify-mpesa-payment')", false);
     }
 
+    public function test_guest_bookings_show_guest_indicator_in_admin_appointments(): void
+    {
+        [$hospital, $admin] = $this->createAdminTenant('guest-booking-admin');
+        $appointment = $this->createAppointment($hospital, 'Guest Booking Patient');
+
+        $this->actingAs($admin)
+            ->get(route('admin.appointments.show', $appointment))
+            ->assertOk()
+            ->assertSeeText('Guest booking (not linked to a patient account)');
+    }
+
     public function test_admin_appointment_filters_have_associated_labels(): void
     {
         [, $admin] = $this->createAdminTenant('appointment-filter-labels-admin');

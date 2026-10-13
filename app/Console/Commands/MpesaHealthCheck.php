@@ -145,18 +145,20 @@ class MpesaHealthCheck extends Command
             $timestamp = Cache::get(self::schedulerHeartbeatCacheKey($command));
             $isRecent = is_int($timestamp)
                 && $timestamp >= now()->subMinutes($ttlMinutes)->timestamp;
-            $isDue = $this->hasScheduledWindowPassed($command);
-            $description = is_int($timestamp)
-                ? 'last successful run at '.CarbonImmutable::createFromTimestamp($timestamp)->toDateTimeString()
-                : ($isDue
-                    ? 'scheduled window passed without a successful run'
+            $isDue = $this->hasScheduledWindowPassed($command, is_int($timestamp) ? $timestamp : null);
+            $description = $isDue
+                ? (is_int($timestamp)
+                    ? 'scheduled window passed since the last successful run at '.CarbonImmutable::createFromTimestamp($timestamp)->toDateTimeString()
+                    : 'scheduled window passed without a successful run')
+                : (is_int($timestamp)
+                    ? 'next scheduled window is in the future; last successful run at '.CarbonImmutable::createFromTimestamp($timestamp)->toDateTimeString()
                     : 'no run is due since health monitoring began');
             $checks[] = [
                 'Scheduled task '.$command,
-                $isRecent ? 'PASS' : ((is_int($timestamp) || $isDue) ? 'STALE' : 'NOT-DUE'),
+                $isRecent ? 'PASS' : ($isDue ? 'STALE' : 'NOT-DUE'),
                 $description,
             ];
-            $failed = $failed || (! $isRecent && (is_int($timestamp) || $isDue));
+            $failed = $failed || (! $isRecent && $isDue);
         }
 
         if (Schema::hasTable('failed_jobs')) {
@@ -181,9 +183,9 @@ class MpesaHealthCheck extends Command
         return $warned ? 2 : self::SUCCESS;
     }
 
-    private function hasScheduledWindowPassed(string $command): bool
+    private function hasScheduledWindowPassed(string $command, ?int $afterTimestamp = null): bool
     {
-        $baseline = Cache::get(self::SCHEDULER_HEALTH_BASELINE_CACHE_KEY);
+        $baseline = $afterTimestamp ?? Cache::get(self::SCHEDULER_HEALTH_BASELINE_CACHE_KEY);
         if (! is_int($baseline)) {
             $baseline = now()->timestamp;
             Cache::add(
@@ -196,7 +198,9 @@ class MpesaHealthCheck extends Command
 
         $expression = self::SCHEDULED_TASK_EXPRESSIONS[$command];
         $nextRun = CronExpression::factory($expression)
-            ->getNextRunDate(CarbonImmutable::createFromTimestamp($baseline));
+            ->getNextRunDate(
+                CarbonImmutable::createFromTimestamp($baseline, config('app.timezone')),
+            );
 
         return CarbonImmutable::instance($nextRun)->lessThanOrEqualTo(now());
     }

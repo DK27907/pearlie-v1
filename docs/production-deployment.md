@@ -4,9 +4,11 @@ Deploy only after staging has passed the payment, tenant-isolation, authorizatio
 
 ## Prepare an isolated production environment
 
-Use separate production and staging environments, databases, provider credentials, and sending identities. With Laravel Cloud, connect the repository and select the required PHP runtime and region; keep the application and attached resources in the same region where possible.
+Use separate production and staging environments, databases, provider credentials, and sending identities. In Laravel Cloud, connect the Git repository, create separate staging and production environments, select the required PHP runtime and region, and keep the application and attached resources in the same region where possible.
 
 Provision and attach the production database and shared cache before deploying. Configure the queue and persistent file storage for the workload. Cloud filesystems are ephemeral between deployments and replicas; do not rely on a local path for uploads, sessions, generated files, or cache. Use the environment's configured persistent storage and the Cloud storage visibility model appropriate to each bucket.
+
+Before the first production release, verify the environment's build and deploy commands, attach its database and cache, configure its worker and scheduler processes, and confirm that production secrets are linked only to production. Do not use a local `.env` file as the production configuration source.
 
 ## Configure deployment secrets
 
@@ -22,7 +24,7 @@ Do not place production keys in build logs, screenshots, command-line arguments,
 
 ## Build and release
 
-Use the platform's supported build/release hooks. A typical Laravel Cloud build command is:
+Use the platform's build and deploy commands. A typical Laravel Cloud build command is:
 
 ```sh
 composer install --no-dev --optimize-autoloader
@@ -41,9 +43,9 @@ Do not run local seeders or create demo accounts during production deployment. P
 
 ## Scheduler, queues, and persistent storage
 
-Enable Laravel's scheduler on a production app/worker cluster. The M-Pesa reconciliation, callback inbox processing, and slot-hold cleanup tasks run every minute; no-show and daily-summary tasks run on their configured schedules. The tasks use overlap and single-server locks, so production instances must share an atomic-lock-capable cache.
+Enable Laravel's scheduler on a production app/worker cluster so `php artisan schedule:run` runs every minute. The M-Pesa reconciliation, callback inbox processing, and slot-hold cleanup tasks run every minute; no-show, daily-summary, and pruning tasks run on their configured schedules. The tasks use overlap and single-server locks, so production instances must share an atomic-lock-capable cache.
 
-Use a running queue worker or the platform's managed queue for payment notifications, email, and other queued work. Verify the worker is processing jobs and that failures are visible in application logs. Attach persistent storage for uploads and configure public and private buckets according to the hosting platform's visibility rules.
+Configure a continuously running queue worker or the platform's managed queue for payment notifications, email, and other queued work. Verify that it is processing jobs and that failures are visible in application logs and the failed-jobs table. Attach persistent storage for uploads and configure public and private buckets according to the hosting platform's visibility rules.
 
 ## Domain and callback readiness
 
@@ -59,7 +61,7 @@ Do not weaken certificate verification to work around a TLS error. Production sh
 
 ## Post-deployment verification
 
-After release, verify the public health endpoint, representative tenant and role dashboards, and application logs. Then verify the following operational checks without making a real charge:
+After release, verify the public health endpoint, representative tenant and role dashboards, and application logs. Confirm that a scheduled task reports `NOT-DUE` when its next cron window is in the future; this is a passing health state, not a missed run. Then verify the following operational checks without making a real charge:
 
 ```sh
 php artisan route:list --path=mpesa -v
