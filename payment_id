@@ -1,1 +1,0 @@
-"latest_event_payment_id=" . ($latest?- ?? 'null') . PHP_EOL;
