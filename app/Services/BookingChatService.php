@@ -80,6 +80,7 @@ class BookingChatService
         private readonly KnowledgeBaseService $knowledgeBase,
         private readonly AppointmentPolicyService $appointmentPolicy,
         private readonly AppointmentLifecycleService $appointmentLifecycle,
+        private readonly ChatLanguageDetector $languageDetector,
     ) {}
 
     public function handle(string $channelId, string $message, string $channel = 'web'): ChatResponse
@@ -116,14 +117,18 @@ class BookingChatService
     ): ChatResponse {
         $previousState = $this->persistedState($channelId, $channel);
         $state = $this->reconcilePaymentState($previousState);
-        $state['language'] = $this->bookingLanguage($message, $state['language'] ?? self::LANGUAGE_ENGLISH);
+        $state['language'] = $this->resolveReplyLanguage($message, $state);
 
         if (($previousState['state'] ?? self::STATE_IDLE) === self::STATE_PAYMENT_PENDING
             && in_array($state['state'], [self::STATE_COMPLETED, self::STATE_CANCELLED], true)
         ) {
             $callbackResponse = $state['state'] === self::STATE_COMPLETED
-                ? 'Payment received. Your appointment has been updated.'
-                : 'The payment was not completed and the booking has been cancelled.';
+                ? ($state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Malipo yamepokelewa. Miadi yako imesasishwa.'
+                    : 'Payment received. Your appointment has been updated.')
+                : ($state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Malipo hayakukamilika na miadi imeghairiwa.'
+                    : 'The payment was not completed and the booking has been cancelled.');
 
             return $this->respond(
                 $sessionId,
@@ -144,7 +149,9 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                'Please type a message so I can help.',
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Tafadhali andika ujumbe ili niweze kukusaidia.'
+                    : 'Please type a message so I can help.',
                 $state,
             );
         }
@@ -154,7 +161,9 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                'Please send a question using words so I can help.',
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Tafadhali tuma swali kwa maneno ili niweze kukusaidia.'
+                    : 'Please send a question using words so I can help.',
                 $state,
                 source: 'clarification',
             );
@@ -166,7 +175,9 @@ class BookingChatService
                 $channel,
                 $message,
                 $this->knowledgeBase->search($message)
-                    ?? 'For an emergency, contact the hospital emergency team immediately.',
+                    ?? ($state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Kwa dharura, wasiliana na timu ya dharura ya hospitali mara moja.'
+                        : 'For an emergency, contact the hospital emergency team immediately.'),
                 $state,
                 source: 'emergency',
             );
@@ -206,7 +217,9 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                'Your booking is waiting for the M-Pesa payment callback.',
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Ombi lako la miadi linasubiri uthibitisho wa malipo ya M-Pesa.'
+                    : 'Your booking is waiting for the M-Pesa payment callback.',
                 $state,
                 $state['appointment_id'],
                 true,
@@ -220,7 +233,9 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                'Your booking details have been cleared. What would you like help with?',
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Taarifa za miadi zimefutwa. Ungependa nikusaidie nini?'
+                    : 'Your booking details have been cleared. What would you like help with?',
                 $state,
                 source: 'booking_reset',
             );
@@ -229,7 +244,15 @@ class BookingChatService
         if ($intent === 'cancel') {
             $state = $this->emptyState(self::STATE_CANCELLED, $state['language']);
 
-            return $this->respond($sessionId, $channel, $message, 'Your booking has been cancelled.', $state);
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Miadi yako imeghairiwa.'
+                    : 'Your booking has been cancelled.',
+                $state,
+            );
         }
 
         if (in_array($state['state'], [self::STATE_COLLECTING, self::STATE_CONFIRMING], true)
@@ -276,13 +299,16 @@ class BookingChatService
         if (($state['escalation_pending'] ?? false) && $this->extractPhone($message) !== null) {
             $escalationPhone = $this->extractPhone($message);
             $pendingMessage = (string) ($state['pending_escalation_message'] ?? $message);
+            $escalationResponse = $state['language'] === self::LANGUAGE_SWAHILI
+                ? sprintf('Asante. Ombi lako limetumwa kwa timu ya %s. Ninakuunganisha na mhudumu wa afya; mtu atawasiliana nawe hivi karibuni.', $hospital->name)
+                : sprintf(
+                    "Thank you. Your request has been passed to the %s team. I'm connecting you to a health worker now; someone will reach out shortly.",
+                    $hospital->name,
+                );
             app(EscalationService::class)->createEscalation(
                 $sessionId,
                 $pendingMessage,
-                sprintf(
-                    "Thank you. Your request has been passed to the %s team. I'm connecting you to a health worker now; someone will reach out shortly.",
-                    $hospital->name,
-                ),
+                $escalationResponse,
                 $escalationPhone,
             );
             $state['patient_phone'] ??= $escalationPhone;
@@ -294,10 +320,7 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                sprintf(
-                    "Thank you. Your request has been passed to the %s team. I'm connecting you to a health worker now; someone will reach out shortly.",
-                    $hospital->name,
-                ),
+                $escalationResponse,
                 $state,
                 source: 'human_escalation',
                 escalated: true,
@@ -333,7 +356,9 @@ class BookingChatService
         if (in_array($intent, ['yes', 'no'], true) && $state['state'] !== self::STATE_CONFIRMING) {
             $response = $state['state'] === self::STATE_COLLECTING
                 ? $this->promptForNextField($state, $hospital, $message, $sessionId, $channel)
-                : 'There is no booking waiting for confirmation. Would you like to book an appointment?';
+                : ($state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Hakuna miadi inayosubiri uthibitisho. Je, ungependa kuweka miadi?'
+                    : 'There is no booking waiting for confirmation. Would you like to book an appointment?');
 
             return $this->respond($sessionId, $channel, $message, $response, $state, source: 'clarification');
         }
@@ -386,7 +411,7 @@ class BookingChatService
         }
 
         if ($intent === 'pricing') {
-            $response = preg_match('/\b(bei|ada)\b/iu', $message)
+            $response = $state['language'] === self::LANGUAGE_SWAHILI
                 ? sprintf(
                     'Kwa bei za sasa, wasiliana na %s kwa %s. Pia naweza kukusaidia kuweka miadi.',
                     $hospital->name,
@@ -408,10 +433,7 @@ class BookingChatService
         }
 
         if ($intent === 'greeting') {
-            $isSwahiliGreeting = preg_match(
-                '/\b(habari|hujambo|jambo|mambo|niaje|sasa|shikamoo|marahaba|salama|poa)\b/iu',
-                $message,
-            ) === 1;
+            $isSwahiliGreeting = $state['language'] === self::LANGUAGE_SWAHILI;
             $greeting = $isSwahiliGreeting
                 ? null
                 : $this->knowledgeBase->search($message);
@@ -437,7 +459,7 @@ class BookingChatService
         }
 
         if ($intent === 'thanks') {
-            $response = preg_match('/\b(asante|shukran)\b/iu', $message)
+            $response = $state['language'] === self::LANGUAGE_SWAHILI
                 ? 'Karibu! Naweza kukusaidia na huduma au miadi.'
                 : "You're welcome! I can help with hospital information or an appointment.";
 
@@ -453,8 +475,19 @@ class BookingChatService
 
             $services = $hospital->services()->active()->orderBy('name')->pluck('name');
             $response = $services->isEmpty()
-                ? sprintf('%s has no active services listed right now. Please contact the hospital for help.', $hospital->name)
-                : sprintf('Available services at %s: %s.', $hospital->name, $services->implode(', '));
+                ? sprintf(
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? '%s haina huduma zilizoorodheshwa kwa sasa. Tafadhali wasiliana na hospitali kwa msaada.'
+                        : '%s has no active services listed right now. Please contact the hospital for help.',
+                    $hospital->name,
+                )
+                : sprintf(
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Huduma zinazopatikana katika %s ni: %s.'
+                        : 'Available services at %s: %s.',
+                    $hospital->name,
+                    $services->implode(', '),
+                );
 
             return $this->respond($sessionId, $channel, $message, $response, $state, source: 'hospital_services');
         }
@@ -481,13 +514,21 @@ class BookingChatService
 
             $response = $doctors->isEmpty()
                 ? sprintf(
-                    'I could not find an active %s listed at %s. Please contact the hospital to confirm current clinic availability.',
-                    $specialtyTerms !== [] ? 'doctor in that specialty' : 'doctor',
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Sikupata %s anayepatikana katika %s. Tafadhali wasiliana na hospitali kuthibitisha upatikanaji wa kliniki.'
+                        : 'I could not find an active %s listed at %s. Please contact the hospital to confirm current clinic availability.',
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? ($specialtyTerms !== [] ? 'daktari wa taaluma hiyo' : 'daktari')
+                        : ($specialtyTerms !== [] ? 'doctor in that specialty' : 'doctor'),
                     $hospital->name,
                 )
                 : sprintf(
-                    'Doctors currently listed%s: %s. Tell me if you would like me to check appointment times.',
-                    $specialtyTerms !== [] ? ' for this specialty' : ' at '.$hospital->name,
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Madaktari walioorodheshwa%s: %s. Nijulishe ikiwa ungependa nikague muda wa miadi.'
+                        : 'Doctors currently listed%s: %s. Tell me if you would like me to check appointment times.',
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? ($specialtyTerms !== [] ? ' wa taaluma hii' : ' katika '.$hospital->name)
+                        : ($specialtyTerms !== [] ? ' for this specialty' : ' at '.$hospital->name),
                     $doctors->map(fn (User $doctor): string => $doctor->name.(
                         filled($doctor->specialization) ? ' ('.$doctor->specialization.')' : ''
                     ))->implode(', '),
@@ -499,13 +540,15 @@ class BookingChatService
         if (in_array($intent, ['hours', 'location', 'contact'], true)) {
             if ($intent === 'hours') {
                 $businessHours = collect($hospital->business_hours ?? [])
-                    ->map(function (mixed $hours, string $day): ?string {
+                    ->map(function (mixed $hours, string $day) use ($state): ?string {
                         if (! is_array($hours)) {
                             return null;
                         }
 
                         if ($hours['closed'] ?? false) {
-                            return ucfirst($day).': closed';
+                            return ucfirst($day).': '.(
+                                $state['language'] === self::LANGUAGE_SWAHILI ? 'imefungwa' : 'closed'
+                            );
                         }
 
                         if (! filled($hours['open'] ?? null) || ! filled($hours['close'] ?? null)) {
@@ -518,27 +561,53 @@ class BookingChatService
                     ->implode('; ');
                 $outpatientHours = $businessHours !== ''
                     ? $businessHours
-                    : ($hospital->hours_outpatient ?: 'Please contact the hospital to confirm');
+                    : ($hospital->hours_outpatient ?: (
+                        $state['language'] === self::LANGUAGE_SWAHILI
+                            ? 'Wasiliana na hospitali kuthibitisha'
+                            : 'Please contact the hospital to confirm'
+                    ));
 
                 $response = sprintf(
-                    '%s outpatient hours: %s. Emergency hours: %s.',
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Saa za huduma za wagonjwa wa nje katika %s: %s. Saa za dharura: %s.'
+                        : '%s outpatient hours: %s. Emergency hours: %s.',
                     $hospital->name,
                     $outpatientHours,
-                    $hospital->hours_emergency ?: 'Please contact the hospital to confirm',
+                    $hospital->hours_emergency ?: (
+                        $state['language'] === self::LANGUAGE_SWAHILI
+                            ? 'Wasiliana na hospitali kuthibitisha'
+                            : 'Please contact the hospital to confirm'
+                    ),
                 );
             } elseif ($intent === 'location') {
                 $response = $hospital->address
-                    ? sprintf('%s is located at %s.', $hospital->name, $hospital->address)
-                    : sprintf('Please contact %s for its current location.', $hospital->name);
+                    ? sprintf(
+                        $state['language'] === self::LANGUAGE_SWAHILI
+                            ? '%s iko katika %s.'
+                            : '%s is located at %s.',
+                        $hospital->name,
+                        $hospital->address,
+                    )
+                    : sprintf(
+                        $state['language'] === self::LANGUAGE_SWAHILI
+                            ? 'Tafadhali wasiliana na %s kwa taarifa za eneo ilipo.'
+                            : 'Please contact %s for its current location.',
+                        $hospital->name,
+                    );
             } else {
                 $contacts = collect([
-                    $hospital->phone ? 'Phone: '.$hospital->phone : null,
-                    $hospital->email ? 'Email: '.$hospital->email : null,
-                    $hospital->website ? 'Website: '.$hospital->website : null,
+                    $hospital->phone ? ($state['language'] === self::LANGUAGE_SWAHILI ? 'Simu: ' : 'Phone: ').$hospital->phone : null,
+                    $hospital->email ? ($state['language'] === self::LANGUAGE_SWAHILI ? 'Barua pepe: ' : 'Email: ').$hospital->email : null,
+                    $hospital->website ? ($state['language'] === self::LANGUAGE_SWAHILI ? 'Tovuti: ' : 'Website: ').$hospital->website : null,
                 ])->filter();
                 $response = $contacts->isNotEmpty()
                     ? $contacts->implode('. ')
-                    : sprintf('Please contact %s through its usual channels.', $hospital->name);
+                    : sprintf(
+                        $state['language'] === self::LANGUAGE_SWAHILI
+                            ? 'Tafadhali wasiliana na %s kupitia njia zake za kawaida.'
+                            : 'Please contact %s through its usual channels.',
+                        $hospital->name,
+                    );
             }
 
             return $this->respond($sessionId, $channel, $message, $response, $state, source: 'hospital_information');
@@ -550,7 +619,9 @@ class BookingChatService
                 $channel,
                 $message,
                 sprintf(
-                    'I can help with %s services, appointments, and hospital information. What can I help you with?',
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Naweza kukusaidia kuhusu huduma za %s, miadi na taarifa za hospitali. Nikusaidie nini?'
+                        : 'I can help with %s services, appointments, and hospital information. What can I help you with?',
                     $hospital->name,
                 ),
                 $state,
@@ -564,11 +635,15 @@ class BookingChatService
                 ->first();
             $response = $appointment
                 ? sprintf(
-                    'Your latest appointment request is %s. Payment status: %s.',
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Ombi lako la mwisho la miadi lina hali ya %s. Hali ya malipo: %s.'
+                        : 'Your latest appointment request is %s. Payment status: %s.',
                     str_replace('_', ' ', (string) $appointment->status),
                     str_replace('_', ' ', (string) $appointment->payment_status),
                 )
-                : 'I could not find an appointment request in this chat yet. I can help you book one.';
+                : ($state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Sikupata ombi la miadi kwenye mazungumzo haya bado. Naweza kukusaidia kuweka miadi.'
+                    : 'I could not find an appointment request in this chat yet. I can help you book one.');
 
             return $this->respond($sessionId, $channel, $message, $response, $state, source: 'appointment_status');
         }
@@ -579,7 +654,9 @@ class BookingChatService
                 $channel,
                 $message,
                 sprintf(
-                    'I can help with %s services, hospital information, and appointment bookings. To book, tell me the service you need.',
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Naweza kukusaidia kuhusu huduma za %s, taarifa za hospitali na kuweka miadi. Ili kuweka miadi, niambie huduma unayohitaji.'
+                        : 'I can help with %s services, hospital information, and appointment bookings. To book, tell me the service you need.',
                     $hospital->name,
                 ),
                 $state,
@@ -593,8 +670,10 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                'Online appointment booking is not included in this hospital plan yet. Please contact the hospital directly for assistance.',
-                $this->emptyState(),
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Kuweka miadi mtandaoni hakujajumuishwa kwenye mpango wa hospitali hii. Tafadhali wasiliana na hospitali moja kwa moja kwa msaada.'
+                    : 'Online appointment booking is not included in this hospital plan yet. Please contact the hospital directly for assistance.',
+                $this->emptyState(language: $state['language']),
                 source: 'subscription_feature_unavailable',
             );
         }
@@ -605,13 +684,15 @@ class BookingChatService
             }
 
             if ($intent === 'no') {
-                $state = $this->emptyState();
+                $state = $this->emptyState(language: $state['language']);
 
                 return $this->respond(
                     $sessionId,
                     $channel,
                     $message,
-                    "OK, I've cancelled this booking request.",
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Sawa, nimeghairi ombi hili la miadi.'
+                        : "OK, I've cancelled this booking request.",
                     $state,
                 );
             }
@@ -726,7 +807,8 @@ class BookingChatService
 
     public function reset(string $channelId, string $channel = 'web'): void
     {
-        $state = $this->emptyState();
+        $previousState = $this->persistedState($channelId, $channel);
+        $state = $this->emptyState(language: $previousState['language']);
         $this->persistState(
             $this->sessionId($channelId, $channel),
             $channel,
@@ -848,7 +930,9 @@ class BookingChatService
                     $sessionId,
                     $channel,
                     $message,
-                    'There are no available doctors for this service. Please contact the hospital for assistance.',
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Hakuna madaktari wanaopatikana kwa huduma hii. Tafadhali wasiliana na hospitali kwa msaada.'
+                        : 'There are no available doctors for this service. Please contact the hospital for assistance.',
                     $state,
                 );
             }
@@ -902,20 +986,35 @@ class BookingChatService
             $state['state'] = self::STATE_COLLECTING;
             $state['time'] = null;
 
-            $response = $availableTimes !== []
-                ? sprintf(
-                    "%s doesn't have availability at %s.\nShe's available from 8:00 AM to 5:00 PM. The next available times with %s on %s are: %s. What time works?",
-                    $doctorName,
-                    $this->formatTimeForResponse($requestedTime),
-                    $doctorName,
-                    $requestedDate->format('F j'),
-                    implode(', ', $availableTimes),
-                )
-                : sprintf(
-                    "%s doesn't have availability at %s.\nShe's available from 8:00 AM to 5:00 PM. What time works?",
-                    $doctorName,
-                    $this->formatTimeForResponse($requestedTime),
-                );
+            $response = $state['language'] === self::LANGUAGE_SWAHILI
+                ? ($availableTimes !== []
+                    ? sprintf(
+                        '%s hapatikani saa %s. Saa zake za kazi ni 8:00 AM hadi 5:00 PM. Nafasi zinazofuata kwa %s tarehe %s ni: %s. Ni muda gani unaokufaa?',
+                        $doctorName,
+                        $this->formatTimeForResponse($requestedTime),
+                        $doctorName,
+                        $requestedDate->format('d/m/Y'),
+                        implode(', ', $availableTimes),
+                    )
+                    : sprintf(
+                        '%s hapatikani saa %s. Saa zake za kazi ni 8:00 AM hadi 5:00 PM. Ni muda gani unaokufaa?',
+                        $doctorName,
+                        $this->formatTimeForResponse($requestedTime),
+                    ))
+                : ($availableTimes !== []
+                    ? sprintf(
+                        "%s doesn't have availability at %s.\nShe's available from 8:00 AM to 5:00 PM. The next available times with %s on %s are: %s. What time works?",
+                        $doctorName,
+                        $this->formatTimeForResponse($requestedTime),
+                        $doctorName,
+                        $requestedDate->format('F j'),
+                        implode(', ', $availableTimes),
+                    )
+                    : sprintf(
+                        "%s doesn't have availability at %s.\nShe's available from 8:00 AM to 5:00 PM. What time works?",
+                        $doctorName,
+                        $this->formatTimeForResponse($requestedTime),
+                    ));
 
             return $this->respond($sessionId, $channel, $message, $response, $state);
         }
@@ -1040,7 +1139,9 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                'Your appointment request has been submitted. The hospital will contact you to confirm the details.',
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Ombi lako la miadi limetumwa. Hospitali itawasiliana nawe kuthibitisha maelezo.'
+                    : 'Your appointment request has been submitted. The hospital will contact you to confirm the details.',
                 $state,
                 $appointment->id,
             );
@@ -1052,7 +1153,9 @@ class BookingChatService
             $sessionId,
             $channel,
             $message,
-            'Starting the M-Pesa payment request.',
+            $state['language'] === self::LANGUAGE_SWAHILI
+                ? 'Tunaanzisha ombi la malipo ya M-Pesa.'
+                : 'Starting the M-Pesa payment request.',
             $state,
             $appointment->id,
         );
@@ -1068,7 +1171,9 @@ class BookingChatService
             $state['state'] = self::STATE_CANCELLED;
             $response = $exception instanceof MissingProviderCredentialsException
                 ? $exception->getMessage()
-                : 'Your appointment request was saved, but the M-Pesa prompt could not be sent. Please contact the hospital for help.';
+                : ($state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Ombi lako la miadi limehifadhiwa, lakini ombi la M-Pesa halikutumwa. Tafadhali wasiliana na hospitali kwa msaada.'
+                    : 'Your appointment request was saved, but the M-Pesa prompt could not be sent. Please contact the hospital for help.');
 
             return $this->respond(
                 $sessionId,
@@ -1085,7 +1190,9 @@ class BookingChatService
             $channel,
             $message,
             sprintf(
-                'We sent an M-Pesa prompt to %s. Your appointment will be updated when payment is verified.',
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Tumetuma ombi la M-Pesa kwa %s. Miadi yako itasasishwa baada ya malipo kuthibitishwa.'
+                    : 'We sent an M-Pesa prompt to %s. Your appointment will be updated when payment is verified.',
                 $this->mpesa->formatPhone((string) $state['patient_phone']),
             ),
             $state,
@@ -1146,7 +1253,10 @@ class BookingChatService
 
     private function hasExplicitHumanPhrase(string $message): bool
     {
-        return preg_match('/\b(talk\s+to\s+a\s+human|speak\s+to\s+someone|i\s+need\s+a\s+human|i\s+need\s+someone|call\s+me|need\s+someone\s+to\s+call|real\s+person|health\s+worker|talk\s+to\s+someone|human\s+please|need\s+a\s+human|need\s+someone|speak\s+to\s+a\s+person)\b/iu', $message) === 1;
+        return preg_match(
+            '/\b(talk\s+to\s+a\s+human|speak\s+to\s+someone|i\s+need\s+a\s+human|i\s+need\s+someone|call\s+me|need\s+someone\s+to\s+call|real\s+person|health\s+worker|talk\s+to\s+someone|human\s+please|need\s+a\s+human|need\s+someone|speak\s+to\s+a\s+person|(?:nataka|naomba)\s+(?:kuongea|kuzungumza)\s+na\s+(?:mtu|mhudumu|daktari)|niunganishe\s+na\s+(?:mhudumu|daktari)|mhudumu\s+wa\s+afya)\b/iu',
+            $message,
+        ) === 1;
     }
 
     private function hasAdditionalBookingContent(string $message): bool
@@ -1475,22 +1585,35 @@ class BookingChatService
         ) === 1;
     }
 
-    private function bookingLanguage(string $message, string $currentLanguage): string
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private function resolveReplyLanguage(string $message, array $state): string
     {
-        if ($this->isSwahiliDateMessage($message)) {
-            return self::LANGUAGE_SWAHILI;
-        }
-
-        if (preg_match(
-            '/\b(i|we|my|book|appointment|tomorrow|today|please|yes|no|service|want|need|name|phone|help|cancel)\b/iu',
-            $message,
-        ) === 1) {
-            return self::LANGUAGE_ENGLISH;
-        }
-
-        return in_array($currentLanguage, [self::LANGUAGE_ENGLISH, self::LANGUAGE_SWAHILI], true)
-            ? $currentLanguage
+        $sessionLanguage = in_array($state['language'] ?? null, [
+            self::LANGUAGE_ENGLISH,
+            self::LANGUAGE_SWAHILI,
+        ], true)
+            ? $state['language']
             : self::LANGUAGE_ENGLISH;
+        $normalizedMessage = mb_strtolower(trim($message));
+
+        if (in_array($normalizedMessage, ['yes', 'no', 'ok', 'sawa', 'y', 'n'], true)) {
+            return $sessionLanguage;
+        }
+
+        $messageLanguage = $this->languageDetector->detectLanguage($message);
+        if ($messageLanguage === self::LANGUAGE_SWAHILI
+            && ! $this->languageDetector->hasConfidentLanguageSignal($message)
+        ) {
+            return $messageLanguage;
+        }
+
+        if ($this->languageDetector->hasConfidentLanguageSignal($message)) {
+            return $messageLanguage;
+        }
+
+        return $sessionLanguage;
     }
 
     private function extractTime(string $message): ?string
@@ -1717,11 +1840,11 @@ class BookingChatService
             return 'contact';
         }
         if ($state === self::STATE_IDLE
-            && preg_match('/^(?:hi|hello|hey|habari|hujambo|jambo|mambo(?:\s+vipi)?|vipi|niaje|sasa|shikamoo|marahaba|salama|poa|freshi|mzuri|nzuri|yo|sup|what\s+s\s+up|whats\s+up|good morning|good afternoon|good evening)[.!?,\s]*$/u', $normalized)
+            && preg_match('/^(?:hi|hello|hey|habari(?:\s+yako|\s+za\s+(?:asubuhi|mchana|jioni))?|hujambo|jambo|mambo(?:\s+vipi)?|vipi|niaje|sasa|shikamoo|marahaba|salama|poa|freshi|mzuri|nzuri|yo|sup|what\s+s\s+up|whats\s+up|good morning|good afternoon|good evening)[.!?,\s]*$/u', $normalized)
         ) {
             return 'greeting';
         }
-        if (preg_match('/\b(help|support|what can you do|how does this work)\b/u', $normalized)) {
+        if (preg_match('/\b(help|support|what can you do|how does this work|nisaidie|msaada|saidia)\b/iu', $normalized)) {
             return 'help';
         }
         if (preg_match('/\b(thank you|thanks|thank you very much|asante|shukran|appreciate it)\b/iu', $normalized)) {
@@ -1840,7 +1963,9 @@ class BookingChatService
                     $sessionId,
                     $channel,
                     $message,
-                    'I could not find an upcoming appointment to change. Your in-progress booking details are unchanged.',
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Sikupata miadi ijayo ya kubadilisha. Maelezo ya miadi unayojaza hayajabadilika.'
+                        : 'I could not find an upcoming appointment to change. Your in-progress booking details are unchanged.',
                     $state,
                 );
             }
@@ -1849,12 +1974,14 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                'I could not find an upcoming appointment linked to this chat that can be changed. Please sign in to manage appointments in your patient dashboard.',
-                $this->emptyState(),
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Sikupata miadi ijayo inayohusishwa na mazungumzo haya ambayo inaweza kubadilishwa. Tafadhali ingia kwenye dashibodi ya wagonjwa kusimamia miadi.'
+                    : 'I could not find an upcoming appointment linked to this chat that can be changed. Please sign in to manage appointments in your patient dashboard.',
+                $this->emptyState(language: $state['language']),
             );
         }
 
-        $state = $this->emptyState(self::STATE_LIFECYCLE_SELECT);
+        $state = $this->emptyState(self::STATE_LIFECYCLE_SELECT, $state['language']);
         $state['lifecycle_action'] = $action;
         $state['appointment_candidates'] = $eligible->pluck('id')->map(fn ($id): int => (int) $id)->all();
 
@@ -1869,7 +1996,7 @@ class BookingChatService
             );
         }
 
-        $isSwahili = $this->isSwahiliDateMessage($message);
+        $isSwahili = $state['language'] === self::LANGUAGE_SWAHILI;
         $items = $eligible->values()->map(fn (AppointmentRequest $appointment, int $index): string => sprintf(
             '%d. #%d — %s %s',
             $index + 1,
@@ -1900,7 +2027,9 @@ class BookingChatService
                     $sessionId,
                     $channel,
                     $message,
-                    'Reply with the number beside the appointment you want to change.',
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Jibu kwa nambari iliyo karibu na miadi unayotaka kubadilisha.'
+                        : 'Reply with the number beside the appointment you want to change.',
                     $state,
                 );
             }
@@ -1912,7 +2041,9 @@ class BookingChatService
                     $sessionId,
                     $channel,
                     $message,
-                    'That selection is not valid. Reply with one of the appointment numbers shown.',
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Chaguo hilo si sahihi. Jibu kwa mojawapo ya nambari za miadi zilizoonyeshwa.'
+                        : 'That selection is not valid. Reply with one of the appointment numbers shown.',
                     $state,
                 );
             }
@@ -1961,8 +2092,10 @@ class BookingChatService
                     $sessionId,
                     $channel,
                     $message,
-                    'That appointment cannot be changed under the current hospital policy.',
-                    $this->emptyState(),
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Miadi hiyo haiwezi kubadilishwa kulingana na sera ya sasa ya hospitali.'
+                        : 'That appointment cannot be changed under the current hospital policy.',
+                    $this->emptyState(language: $state['language']),
                 );
             }
 
@@ -1970,7 +2103,9 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                'Reply with the number of the appointment you want to change.',
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Jibu kwa nambari ya miadi unayotaka kubadilisha.'
+                    : 'Reply with the number of the appointment you want to change.',
                 $state,
             );
         }
@@ -1983,8 +2118,10 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                'I could not verify that appointment for this chat. Please sign in to manage it in your patient dashboard.',
-                $this->emptyState(),
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Sikuweza kuthibitisha miadi hiyo kwa mazungumzo haya. Tafadhali ingia kwenye dashibodi yako ya wagonjwa kuisimamia.'
+                    : 'I could not verify that appointment for this chat. Please sign in to manage it in your patient dashboard.',
+                $this->emptyState(language: $state['language']),
             );
         }
 
@@ -1992,7 +2129,7 @@ class BookingChatService
             ->where('hospital_id', $hospital->id)
             ->findOrFail($appointmentId);
         $intent = $this->extractIntent($message, $state['state']);
-        $isSwahili = $this->isSwahiliDateMessage($message);
+        $isSwahili = $state['language'] === self::LANGUAGE_SWAHILI;
 
         if ($state['state'] === self::STATE_LIFECYCLE_CANCEL_CONFIRM) {
             if (preg_match('/^\s*(?:no|n|nope|hapana)\b/iu', $message) === 1) {
@@ -2001,7 +2138,7 @@ class BookingChatService
                     $channel,
                     $message,
                     $isSwahili ? 'Sawa, miadi yako haijaghairiwa.' : 'Okay, your appointment has not been cancelled.',
-                    $this->emptyState(),
+                    $this->emptyState(language: $state['language']),
                 );
             }
             if (preg_match('/^\s*(?:yes|y|yeah|yep|ok|confirm|book it|proceed|ndiyo|ndio|sawa)\b/iu', $message) !== 1) {
@@ -2027,7 +2164,7 @@ class BookingChatService
                     $channel,
                     $message,
                     $exception->getMessage(),
-                    $this->emptyState(),
+                    $this->emptyState(language: $state['language']),
                 );
             }
 
@@ -2035,9 +2172,13 @@ class BookingChatService
                 ? 'Miadi yako imeghairiwa.'
                 : 'Your appointment has been cancelled.';
             if ($result->forfeitedAmount > 0) {
-                $response .= ' KSh '.number_format($result->forfeitedAmount, 2).' was retained under the hospital cancellation policy.';
+                $response .= $isSwahili
+                    ? ' KSh '.number_format($result->forfeitedAmount, 2).' zimezuiliwa kulingana na sera ya kughairi ya hospitali.'
+                    : ' KSh '.number_format($result->forfeitedAmount, 2).' was retained under the hospital cancellation policy.';
             } elseif ($result->paymentOutcome === 'refund_pending') {
-                $response .= ' Any refundable balance is pending manual payment review.';
+                $response .= $isSwahili
+                    ? ' Marejesho yoyote yanayosubiri yanahitaji ukaguzi wa malipo kwa mikono.'
+                    : ' Any refundable balance is pending manual payment review.';
             }
 
             return $this->respond(
@@ -2045,7 +2186,7 @@ class BookingChatService
                 $channel,
                 $message,
                 $response,
-                $this->emptyState(),
+                $this->emptyState(language: $state['language']),
                 $appointmentId,
             );
         }
@@ -2060,7 +2201,9 @@ class BookingChatService
                     $sessionId,
                     $channel,
                     $message,
-                    'Please choose a valid future date within the next 12 months, such as 15/10/2026.',
+                    $isSwahili
+                        ? 'Tafadhali chagua tarehe halali ya baadaye ndani ya miezi 12 ijayo, kwa mfano 15/10/2026.'
+                        : 'Please choose a valid future date within the next 12 months, such as 15/10/2026.',
                     $state,
                 );
             }
@@ -2084,7 +2227,9 @@ class BookingChatService
                     $sessionId,
                     $channel,
                     $message,
-                    'Please enter a valid time, such as 10:30 AM.',
+                    $isSwahili
+                        ? 'Tafadhali weka muda halali, kama 10:30 AM.'
+                        : 'Please enter a valid time, such as 10:30 AM.',
                     $state,
                 );
             }
@@ -2098,7 +2243,9 @@ class BookingChatService
                     $sessionId,
                     $channel,
                     $message,
-                    'That time is not available with your current doctor. Please choose another time or start again with a different date.',
+                    $isSwahili
+                        ? 'Muda huo haupatikani kwa daktari wako wa sasa. Tafadhali chagua muda mwingine au anza tena kwa tarehe tofauti.'
+                        : 'That time is not available with your current doctor. Please choose another time or start again with a different date.',
                     $state,
                 );
             }
@@ -2111,7 +2258,9 @@ class BookingChatService
                 $channel,
                 $message,
                 sprintf(
-                    'Please confirm moving appointment #%d to %s at %s. Reply yes or no.',
+                    $isSwahili
+                        ? 'Tafadhali thibitisha kuhamisha miadi #%d hadi %s saa %s. Jibu ndiyo au hapana.'
+                        : 'Please confirm moving appointment #%d to %s at %s. Reply yes or no.',
                     $appointment->id,
                     CarbonImmutable::parse((string) $state['lifecycle_date'])->format('d/m/Y'),
                     CarbonImmutable::parse($time)->format('g:i A'),
@@ -2127,8 +2276,8 @@ class BookingChatService
                     $sessionId,
                     $channel,
                     $message,
-                    'Okay, your appointment has not been changed.',
-                    $this->emptyState(),
+                    $isSwahili ? 'Sawa, miadi yako haijabadilishwa.' : 'Okay, your appointment has not been changed.',
+                    $this->emptyState(language: $state['language']),
                 );
             }
             if (preg_match('/^\s*(?:yes|y|yeah|yep|ok|confirm|book it|proceed|ndiyo|ndio|sawa)\b/iu', $message) !== 1) {
@@ -2136,7 +2285,9 @@ class BookingChatService
                     $sessionId,
                     $channel,
                     $message,
-                    'Please reply yes or no to confirm the new appointment time.',
+                    $isSwahili
+                        ? 'Tafadhali jibu ndiyo au hapana kuthibitisha muda mpya wa miadi.'
+                        : 'Please reply yes or no to confirm the new appointment time.',
                     $state,
                 );
             }
@@ -2157,7 +2308,7 @@ class BookingChatService
                     $channel,
                     $message,
                     $exception->getMessage(),
-                    $this->emptyState(),
+                    $this->emptyState(language: $state['language']),
                 );
             }
 
@@ -2165,8 +2316,8 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                'Your appointment has been rescheduled.',
-                $this->emptyState(),
+                $isSwahili ? 'Miadi yako imebadilishwa.' : 'Your appointment has been rescheduled.',
+                $this->emptyState(language: $state['language']),
                 $appointmentId,
             );
         }
@@ -2175,8 +2326,10 @@ class BookingChatService
             $sessionId,
             $channel,
             $message,
-            'I could not continue that appointment request. Please start again.',
-            $this->emptyState(),
+            $isSwahili
+                ? 'Sikuweza kuendelea na ombi hilo la miadi. Tafadhali anza tena.'
+                : 'I could not continue that appointment request. Please start again.',
+            $this->emptyState(language: $state['language']),
         );
     }
 
@@ -2199,8 +2352,10 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                'I could not verify that appointment for this chat.',
-                $this->emptyState(),
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Sikuweza kuthibitisha miadi hiyo kwa mazungumzo haya.'
+                    : 'I could not verify that appointment for this chat.',
+                $this->emptyState(language: $state['language']),
             );
         }
 
@@ -2209,14 +2364,16 @@ class BookingChatService
         if ($state['lifecycle_action'] === 'cancel') {
             $state['state'] = self::STATE_LIFECYCLE_CANCEL_CONFIRM;
             $response = sprintf(
-                'Cancel appointment #%d on %s at %s? Reply yes or no.',
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Ungependa kughairi miadi #%d ya tarehe %s saa %s? Jibu ndiyo au hapana.'
+                    : 'Cancel appointment #%d on %s at %s? Reply yes or no.',
                 $appointment->id,
                 $appointment->preferred_date?->format('d/m/Y'),
                 $appointment->slot_start_time ? CarbonImmutable::parse($appointment->slot_start_time)->format('g:i A') : 'the scheduled time',
             );
         } else {
             $state['state'] = self::STATE_LIFECYCLE_RESCHEDULE_DATE;
-            $response = $this->isSwahiliDateMessage($message)
+            $response = $state['language'] === self::LANGUAGE_SWAHILI
                 ? 'Ni tarehe gani mpya ungependa? Tumia DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema "kesho".'
                 : 'What new date would you prefer? Use DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say "tomorrow".';
         }
@@ -2339,10 +2496,12 @@ class BookingChatService
         ?string $source = null,
         bool $escalated = false,
     ): ChatResponse {
-        $state['language'] = $this->bookingLanguage(
-            $userMessage,
-            $state['language'] ?? self::LANGUAGE_ENGLISH,
-        );
+        $state['language'] = in_array($state['language'] ?? null, [
+            self::LANGUAGE_ENGLISH,
+            self::LANGUAGE_SWAHILI,
+        ], true)
+            ? $state['language']
+            : self::LANGUAGE_ENGLISH;
         $this->persistState($sessionId, $channel, $userMessage, $response, $state, $appointmentId, $escalated);
 
         return new ChatResponse(
@@ -2395,8 +2554,18 @@ class BookingChatService
         $patientPhone = filled($state['patient_phone'] ?? null)
             ? (string) $state['patient_phone']
             : null;
-        $result = $this->assistant->processMessageWithPatientPhone($message, $sessionId, $channel, $patientPhone);
-        $response = (string) ($result['response'] ?? 'I could not process that message. Please try again.');
+        $result = $this->assistant->processMessageWithPatientPhone(
+            $message,
+            $sessionId,
+            $channel,
+            $patientPhone,
+            $state['language'],
+        );
+        $response = (string) ($result['response'] ?? (
+            $state['language'] === self::LANGUAGE_SWAHILI
+                ? 'Sikuweza kuchakata ujumbe huo. Tafadhali jaribu tena.'
+                : 'I could not process that message. Please try again.'
+        ));
         $conversation = Conversation::query()
             ->where('session_id', $sessionId)
             ->where('channel', $channel)
@@ -2501,6 +2670,19 @@ class BookingChatService
     ): ChatResponse {
         $phone = $this->extractPhone($message) ?? ($state['patient_phone'] ?? null);
         $state['state'] ??= self::STATE_IDLE;
+        $isSwahili = $state['language'] === self::LANGUAGE_SWAHILI;
+        $phonePrompt = $isSwahili
+            ? sprintf('Nimeandika ombi lako. Tafadhali shiriki namba yako ya simu — ni namba gani bora kwa timu ya %s kukufikia?', $hospital->name)
+            : sprintf(
+                "I've noted your request. Please share your phone number — what's the best phone number for a member of the %s team to reach you on?",
+                $hospital->name,
+            );
+        $handoffConfirmation = $isSwahili
+            ? sprintf(
+                'Ombi lako limetumwa kwa timu ya %s. Mtu atawasiliana nawe hivi karibuni.',
+                $hospital->name,
+            )
+            : sprintf("I've passed your request to the %s team. Someone will reach out shortly.", $hospital->name);
 
         if ($state['escalation_pending'] ?? false) {
             if ($phone !== null) {
@@ -2508,7 +2690,7 @@ class BookingChatService
                 app(EscalationService::class)->createEscalation(
                     $sessionId,
                     $pendingMessage,
-                    "I've passed your request to the {$hospital->name} team. Someone will reach out shortly.",
+                    $handoffConfirmation,
                     $phone,
                 );
                 $state['patient_phone'] ??= $phone;
@@ -2520,10 +2702,9 @@ class BookingChatService
                     $sessionId,
                     $channel,
                     $message,
-                    sprintf(
-                        "I've passed your request to the %s team. Someone will reach out shortly.\n\nYour booking details are saved — say \"continue booking\" whenever you're ready to finish.",
-                        $hospital->name,
-                    ),
+                    $isSwahili
+                        ? $handoffConfirmation."\n\nTaarifa za miadi yako zimehifadhiwa — sema \"endelea na miadi\" ukiwa tayari kumalizia."
+                        : $handoffConfirmation."\n\nYour booking details are saved — say \"continue booking\" whenever you're ready to finish.",
                     $state,
                     source: 'human_escalation',
                     escalated: true,
@@ -2536,10 +2717,7 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                sprintf(
-                    "I've noted your request. Please share your phone number — what's the best phone number for a member of the %s team to reach you on?",
-                    $hospital->name,
-                ),
+                $phonePrompt,
                 $state,
                 source: 'human_escalation_contact_details',
             );
@@ -2549,7 +2727,7 @@ class BookingChatService
             app(EscalationService::class)->createEscalation(
                 $sessionId,
                 $message,
-                sprintf("I've noted your request. Please share your phone number — what's the best phone number for a member of the %s team to reach you on?", $hospital->name),
+                $phonePrompt,
                 $phone,
             );
             $state['patient_phone'] ??= $phone;
@@ -2559,10 +2737,12 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                sprintf(
-                    "Thank you. Your request has been passed to the %s team. I'm connecting you to a health worker now; someone will reach out shortly.",
-                    $hospital->name,
-                ),
+                $isSwahili
+                    ? 'Asante. Ombi lako limepelekwa kwa timu ya hospitali. Mhudumu wa afya atawasiliana nawe hivi karibuni.'
+                    : sprintf(
+                        "Thank you. Your request has been passed to the %s team. I'm connecting you to a health worker now; someone will reach out shortly.",
+                        $hospital->name,
+                    ),
                 $state,
                 source: 'human_escalation',
                 escalated: true,
@@ -2578,10 +2758,7 @@ class BookingChatService
             $sessionId,
             $channel,
             $message,
-            sprintf(
-                "I've noted your request. Please share your phone number — what's the best phone number for a member of the %s team to reach you on?",
-                $hospital->name,
-            ),
+            $phonePrompt,
             $state,
             source: 'human_escalation_contact_details',
         );
@@ -2763,9 +2940,13 @@ class BookingChatService
                 $channel,
                 $message,
                 sprintf(
-                    "That time isn't available. The nearest available times with %s on %s are: %s. Which works for you?",
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Muda huo haupatikani. Nafasi za karibu zaidi kwa %s tarehe %s ni: %s. Ni ipi inayokufaa?'
+                        : "That time isn't available. The nearest available times with %s on %s are: %s. Which works for you?",
                     $doctor->name,
-                    $requestedDate->format('F j'),
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? $requestedDate->format('d/m/Y')
+                        : $requestedDate->format('F j'),
                     $times,
                 ),
                 $state,
@@ -2791,9 +2972,7 @@ class BookingChatService
         $state['state'] = self::STATE_COLLECTING;
         $state['date'] = null;
         $state['time'] = null;
-        $previousMessage = $this->latestConversation($sessionId, $channel)?->user_message;
-        $isSwahili = $this->isSwahiliDateMessage($message)
-            || (is_string($previousMessage) && $this->isSwahiliDateMessage($previousMessage));
+        $isSwahili = $state['language'] === self::LANGUAGE_SWAHILI;
 
         if ($availableDates === []) {
             $response = $isSwahili

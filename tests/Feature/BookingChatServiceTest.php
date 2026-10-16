@@ -592,10 +592,34 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame($services[0]->id, $handoffCreated->collectedFields['service_id']);
         $this->assertSame('254748249882', $handoffCreated->collectedFields['patient_phone']);
         $this->assertDatabaseHas('escalations', ['session_id' => 'booking-explicit-handoff']);
-        $this->assertDatabaseCount('escalations', 1);
         $this->assertSame('COLLECTING', $continued->state);
         $this->assertSame($services[0]->id, $continued->collectedFields['service_id']);
         $this->assertStringContainsString('What date would you prefer', $continued->message);
+    }
+
+    public function test_swahili_handoff_preserves_booking_fields_and_language(): void
+    {
+        [, $services] = $this->createContext();
+        Http::preventStrayRequests();
+        $chat = app(BookingChatService::class);
+        $sessionId = 'swahili-booking-handoff';
+
+        $chat->handle($sessionId, 'Nataka kuweka miadi', 'web');
+        $chat->handle($sessionId, 'Dental Cleaning', 'web');
+        $handoff = $chat->handle($sessionId, 'Nataka kuongea na mhudumu', 'web');
+        $phonePromptState = $chat->getState($sessionId);
+        $phoneResponse = $chat->handle($sessionId, '254748249882', 'web');
+
+        $this->assertStringContainsString('shiriki namba yako ya simu', mb_strtolower($handoff->message));
+        $this->assertSame('COLLECTING', $phonePromptState['state']);
+        $this->assertSame('sw', $phonePromptState['language']);
+        $this->assertSame($services[0]->id, $phonePromptState['service_id']);
+        $this->assertTrue($phonePromptState['escalation_pending']);
+        $this->assertSame('sw', $phoneResponse->collectedFields['language']);
+        $this->assertSame($services[0]->id, $phoneResponse->collectedFields['service_id']);
+        $this->assertSame('254748249882', $phoneResponse->collectedFields['patient_phone']);
+        $this->assertFalse($phoneResponse->collectedFields['escalation_pending']);
+        $this->assertDatabaseCount('escalations', 1);
     }
 
     public function test_explicit_human_request_triggers_escalation(): void
@@ -1473,6 +1497,57 @@ class BookingChatServiceTest extends TestCase
         $this->assertStringContainsString("I'm Pearlie", $response->message);
         $this->assertStringContainsString('Booking Chat Hospital', $response->message);
         $this->assertSame('IDLE', $response->state);
+    }
+
+    public function test_swahili_greeting_and_ambiguous_follow_up_keep_the_session_language(): void
+    {
+        $this->createContext();
+        Http::preventStrayRequests();
+        $chat = app(BookingChatService::class);
+
+        $greeting = $chat->handle('swahili-language-session', 'Habari yako', 'web');
+        $followUp = $chat->handle('swahili-language-session', 'yes', 'web');
+
+        $this->assertStringContainsString('Habari!', $greeting->message);
+        $this->assertSame('sw', $greeting->collectedFields['language']);
+        $this->assertStringContainsString('Hakuna miadi', $followUp->message);
+        $this->assertSame('sw', $followUp->collectedFields['language']);
+        $this->assertSame('sw', $chat->getState('swahili-language-session')['language']);
+    }
+
+    public function test_swahili_help_services_location_and_thanks_intents_use_swahili_replies(): void
+    {
+        [$hospital] = $this->createContext();
+        $hospital->forceFill(['address' => '12 Hospital Road'])->save();
+        Http::preventStrayRequests();
+        $chat = app(BookingChatService::class);
+
+        $help = $chat->handle('swahili-help', 'Nisaidie', 'web');
+        $services = $chat->handle('swahili-services', 'Mnatoa huduma gani', 'web');
+        $location = $chat->handle('swahili-location', 'Mko wapi', 'web');
+        $thanks = $chat->handle('swahili-thanks', 'Asante', 'web');
+
+        $this->assertStringContainsString('Naweza kukusaidia', $help->message);
+        $this->assertStringContainsString('Huduma zinazopatikana', $services->message);
+        $this->assertStringContainsString('iko katika 12 Hospital Road', $location->message);
+        $this->assertStringContainsString('Karibu!', $thanks->message);
+        $this->assertSame('sw', $chat->getState('swahili-services')['language']);
+    }
+
+    public function test_swahili_booking_intent_uses_swahili_collection_prompts(): void
+    {
+        $this->createContext();
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'swahili-booking-language',
+            'Nataka kuweka miadi',
+            'web',
+        );
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertStringContainsString('Unahitaji huduma gani?', $response->message);
+        $this->assertSame('sw', $response->collectedFields['language']);
     }
 
     public function test_chat_keeps_general_knowledge_questions_in_hospital_scope(): void

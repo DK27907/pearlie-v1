@@ -127,8 +127,9 @@ class ChatAdversarialInputTest extends TestCase
 
         $this->postJson(route('tenant.chat.post', $hospital->slug), ['message' => 'mnapatikana wapi'])
             ->assertOk()
-            ->assertJsonPath('response', $hospital->name.' is located at '.$hospital->address.'.')
-            ->assertJsonPath('state', 'IDLE');
+            ->assertJsonPath('response', $hospital->name.' iko katika '.$hospital->address.'.')
+            ->assertJsonPath('state', 'IDLE')
+            ->assertJsonPath('collected_fields.language', 'sw');
     }
 
     private function createHospital(?string $slug = null): Hospital

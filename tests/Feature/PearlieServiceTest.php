@@ -11,6 +11,7 @@ use App\Services\PearlieServiceV2;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class PearlieServiceTest extends TestCase
@@ -34,6 +35,50 @@ class PearlieServiceTest extends TestCase
             'doctor_id' => null,
             'phone' => '0712345678',
         ]);
+    }
+
+    public function test_scoped_chat_language_is_used_for_ai_prompts_and_restored_after_each_call(): void
+    {
+        $this->createBookingHospital('scoped-chat-language');
+        Http::fake([
+            '*' => Http::response([
+                'choices' => [['message' => ['content' => 'I can help with that.']]],
+            ]),
+        ]);
+        $assistant = app(PearlieServiceV2::class);
+
+        $assistant->processMessageWithPatientPhone(
+            'Do you provide bicycle repairs?',
+            'scoped-language-swahili',
+            'web',
+            null,
+            'sw',
+        );
+        $assistant->processMessageWithPatientPhone(
+            'Do you provide bicycle repairs?',
+            'scoped-language-english',
+            'web',
+            null,
+            'en',
+        );
+        $assistant->processMessage(
+            'Do you provide bicycle repairs?',
+            'unscoped-language',
+        );
+
+        Http::assertSent(fn ($request): bool => str_contains(
+            $request['messages'][0]['content'],
+            'The current conversation language is Swahili.',
+        ));
+        Http::assertSent(fn ($request): bool => str_contains(
+            $request['messages'][0]['content'],
+            'The current conversation language is English.',
+        ));
+        Http::assertSent(fn ($request): bool => str_contains(
+            $request['messages'][0]['content'],
+            'Detect the language of the user’s message automatically and reply in that language.',
+        ));
+        Http::assertSentCount(3);
     }
 
     public function test_named_doctor_selection_is_kept_when_the_patient_replies_with_a_time(): void

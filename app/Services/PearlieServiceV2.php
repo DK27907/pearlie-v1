@@ -19,6 +19,8 @@ class PearlieServiceV2
 {
     protected ?string $bookingPatientPhone = null;
 
+    protected ?string $responseLanguage = null;
+
     protected KnowledgeBaseService $knowledgeBase;
 
     protected EscalationService $escalationService;
@@ -291,14 +293,18 @@ class PearlieServiceV2
         string $sessionId,
         string $channel,
         ?string $patientPhone,
+        ?string $language = null,
     ): array {
         $previousPatientPhone = $this->bookingPatientPhone;
+        $previousResponseLanguage = $this->responseLanguage;
         $this->bookingPatientPhone = $patientPhone;
+        $this->responseLanguage = in_array($language, ['en', 'sw'], true) ? $language : null;
 
         try {
             return $this->processMessage($message, $sessionId, $channel);
         } finally {
             $this->bookingPatientPhone = $previousPatientPhone;
+            $this->responseLanguage = $previousResponseLanguage;
         }
     }
 
@@ -1052,6 +1058,11 @@ class PearlieServiceV2
         $emergencyHours = $hospital ? $hospital->hours_emergency : pearlie_config('hospital.hours_emergency', '');
         $outpatientHours = $hospital ? $hospital->hours_outpatient : pearlie_config('hospital.hours_outpatient', '');
         $assistantName = $hospital?->chatbotName() ?? 'Assistant';
+        $languageInstruction = match ($this->responseLanguage) {
+            'sw' => 'The current conversation language is Swahili. Reply in Swahili, including for short or ambiguous follow-up messages.',
+            'en' => 'The current conversation language is English. Reply in English, including for short or ambiguous follow-up messages.',
+            default => 'Detect the language of the user’s message automatically and reply in that language.',
+        };
         $hospitalDetails = collect([
             'Address' => $hospitalAddress,
             'Appointment phone' => $hospitalPhone,
@@ -1076,8 +1087,8 @@ HOSPITAL IDENTITY:
 - Website: {$hospitalWebsite}
 
 LANGUAGE RULES:
-- Detect the language of the user’s message automatically.
-- Reply in Swahili when the user writes in Swahili, in English when they write in English, and match mixed Sheng or code-switching.
+- {$languageInstruction}
+- Match mixed Sheng or code-switching when the language is not explicitly established for this conversation.
 - Never force a language the user did not use.
 - Be warm, clear, respectful, and concise. Use “Karibu” or “Welcome” where appropriate.
 
@@ -1124,6 +1135,10 @@ PROMPT;
 
     protected function isSwahili(string $message): bool
     {
+        if ($this->responseLanguage !== null) {
+            return $this->responseLanguage === 'sw';
+        }
+
         return (bool) preg_match(
             '/\b(habari|hujambo|sijambo|jambo|mambo|vipi|niaje|sasa|shikamoo|marahaba|salama|poa|freshi|mzuri|nzuri|miadi|daktari|ninaumwa|naumwa|kichwa|tumbo|homa|dharura|maumivu|kifua|shida|kupumua|damu|nyingi|kiharusi|ajali|nimeumia|vibaya|wapi|asante|karibu|kwaheri|tafadhali|samahani|ndiyo|hapana|kesho|leo|huduma|namba|simu|jina|barua pepe)\b/iu',
             $message,
