@@ -98,7 +98,10 @@ class Hospital extends Model
     {
         return $this->hasMany(Service::class);
     }
-
+    public function chatbotName(): ?string
+    {
+        return $this->chatbot_name;
+    }
 
     public function knowledgeBases(): HasMany
     {
