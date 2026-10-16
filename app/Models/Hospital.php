@@ -93,6 +93,12 @@ class Hospital extends Model
     {
         return $this->hasMany(AppointmentRequest::class);
     }
+    
+    public function services(): HasMany
+    {
+        return $this->hasMany(Service::class);
+    }
+
 
     public function knowledgeBases(): HasMany
     {
