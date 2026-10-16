@@ -103,6 +103,11 @@ class Hospital extends Model
         return $this->chatbot_name;
     }
 
+    public function integrationCredentials(): HasMany
+    {
+        return $this->hasMany(HospitalIntegrationCredential::class);
+    }
+
     public function knowledgeBases(): HasMany
     {
         return $this->hasMany(KnowledgeBase::class);
