@@ -38,7 +38,7 @@ return new class extends Migration
             $table->string('hours_emergency')->default('24/7');
             $table->string('hours_outpatient')->default('8:00 AM - 6:00 PM, Mon-Sat');
             $table->string('default_language', 8)->default('en');
-            $table->json('supported_languages')->default(json_encode(['en', 'sw']));
+            $table->json('supported_languages')->nullable();
             $table->enum('subscription_plan', ['starter', 'professional', 'enterprise'])->default('starter');
             $table->enum('subscription_status', ['active', 'trial', 'suspended'])->default('trial');
             $table->timestamp('trial_ends_at')->nullable();
