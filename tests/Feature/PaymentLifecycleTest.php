@@ -170,6 +170,54 @@ class PaymentLifecycleTest extends TestCase
         Queue::assertPushed(SendPaymentNotification::class, 1);
     }
 
+    public function test_payment_notification_job_skips_when_payment_is_missing(): void
+    {
+        $hospital = Hospital::factory()->create();
+        app()->instance('currentHospital', $hospital);
+        Http::preventStrayRequests();
+        Log::spy();
+
+        $whatsapp = $this->mock(WhatsAppService::class);
+        $whatsapp->shouldNotReceive('sendAppointmentConfirmation');
+        $notifications = $this->mock(NotificationService::class);
+        $notifications->shouldNotReceive('sendSms');
+
+        (new SendPaymentNotification(
+            paymentId: 999_999,
+            hospitalId: $hospital->id,
+            outcome: 'payment_completed',
+        ))->handle($whatsapp, $notifications);
+
+        Log::shouldHaveReceived('warning')
+            ->once()
+            ->with('SendPaymentNotification skipped: payment missing.', [
+                'payment_id' => 999_999,
+                'hospital_id' => $hospital->id,
+            ]);
+    }
+
+    public function test_payment_notification_job_notifies_for_an_existing_payment(): void
+    {
+        [$hospital, $appointment, $payment] = $this->createPaymentScenario();
+        $whatsapp = $this->mock(WhatsAppService::class);
+        $whatsapp->shouldReceive('sendAppointmentConfirmation')
+            ->once()
+            ->with(\Mockery::on(
+                fn (AppointmentRequest $notifiedAppointment): bool => $notifiedAppointment->is($appointment),
+            ))
+            ->andReturn(true);
+        $notifications = $this->mock(NotificationService::class);
+        $notifications->shouldNotReceive('sendSms');
+
+        (new SendPaymentNotification(
+            paymentId: $payment->id,
+            hospitalId: $hospital->id,
+            outcome: 'payment_completed',
+        ))->handle($whatsapp, $notifications);
+
+        $this->assertNotNull($payment->fresh()->notified_at);
+    }
+
     public function test_awaiting_confirmation_notifications_send_patient_message_and_notify_hospital_admin(): void
     {
         [$hospital, $appointment, $payment] = $this->createPaymentScenario();

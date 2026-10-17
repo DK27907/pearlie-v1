@@ -1618,7 +1618,7 @@ class BookingChatService
 
     private function extractTime(string $message): ?string
     {
-        $normalized = trim($message);
+        $normalized = $this->normalizeSwahiliTime(trim($message));
         if (preg_match('/^\d{1,2}[\/-]\d{1,2}\s*[?.!]*$/u', $normalized) === 1) {
             return null;
         }
@@ -1679,6 +1679,27 @@ class BookingChatService
         }
 
         return null;
+    }
+
+    private function normalizeSwahiliTime(string $input): string
+    {
+        return preg_replace_callback(
+            '/(?<![\pL\pN])(?:saa\s+)?(0?[1-9]|1[0-2])(?::([0-5]\d))?\s*(asubuhi|mchana|jioni|usiku)\b/iu',
+            static function (array $matches): string {
+                $hour = (int) $matches[1];
+                $minute = (int) ($matches[2] ?? 0);
+
+                $hour = match (mb_strtolower($matches[3])) {
+                    'asubuhi' => $hour === 12 ? 0 : $hour,
+                    'mchana' => $hour === 12 ? 12 : $hour + 12,
+                    'jioni' => $hour === 12 ? 0 : $hour + 12,
+                    'usiku' => $hour === 12 ? 0 : ($hour <= 4 ? $hour : $hour + 12),
+                };
+
+                return sprintf('%02d:%02d', $hour, $minute);
+            },
+            $input,
+        ) ?? $input;
     }
 
     private function looksLikeTimeAttempt(string $message): bool

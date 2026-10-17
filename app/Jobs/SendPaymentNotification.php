@@ -41,7 +41,17 @@ class SendPaymentNotification implements ShouldQueue
 
             $payment = MpesaPayment::query()
                 ->with('appointment')
-                ->findOrFail($this->paymentId);
+                ->find($this->paymentId);
+
+            if (! $payment) {
+                Log::warning('SendPaymentNotification skipped: payment missing.', [
+                    'payment_id' => $this->paymentId,
+                    'hospital_id' => $this->hospitalId,
+                ]);
+
+                return;
+            }
+
             $appointment = $payment->appointment;
 
             if (! $appointment) {

@@ -85,6 +85,33 @@ class HospitalBrandingTest extends TestCase
             ->assertDontSee('Custom Hospital X');
     }
 
+    public function test_login_page_uses_platform_branding_with_no_tenant_context(): void
+    {
+        $this->get(route('login'))
+            ->assertSee('MediDesk AI')
+            ->assertDontSee('Pearl Hospital')
+            ->assertDontSee('Vin Plaza')
+            ->assertDontSee('0707799114');
+    }
+
+    public function test_register_page_uses_platform_branding_with_no_tenant_context(): void
+    {
+        $this->get(route('register'))
+            ->assertSee('MediDesk AI')
+            ->assertDontSee('Pearl Hospital')
+            ->assertDontSee('Vin Plaza')
+            ->assertDontSee('0707799114');
+    }
+
+    public function test_forgot_password_page_uses_platform_branding_without_tenant_context(): void
+    {
+        $this->get(route('password.request'))
+            ->assertSee('MediDesk AI')
+            ->assertDontSee('Pearl Hospital')
+            ->assertDontSee('Vin Plaza')
+            ->assertDontSee('0707799114');
+    }
+
     public function test_two_hospitals_show_their_own_headers(): void
     {
         $hospitalA = Hospital::factory()->create([

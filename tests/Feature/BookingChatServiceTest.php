@@ -11,6 +11,7 @@ use App\Models\MpesaPayment;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\BookingChatService;
+use App\Services\Chat\ChatResponse;
 use App\Services\MpesaService;
 use App\Services\PearlieServiceV2;
 use Carbon\CarbonImmutable;
@@ -300,15 +301,7 @@ class BookingChatServiceTest extends TestCase
 
     public function test_swahili_name_is_collected_before_phone_and_date_hint_is_complete(): void
     {
-        [, $services] = $this->createContext();
-        $chat = app(BookingChatService::class);
-        $sessionId = 'swahili-booking-fields';
-
-        $chat->handle($sessionId, 'Nataka kuweka miadi', 'web');
-        $datePrompt = $chat->handle($sessionId, 'Dental Cleaning', 'web');
-        $namePrompt = $chat->handle($sessionId, 'kesho', 'web');
-        $phonePrompt = $chat->handle($sessionId, 'Jina langu ni Juma', 'web');
-        $timePrompt = $chat->handle($sessionId, '0712345678', 'web');
+        [, $services, , $chat, $sessionId, $datePrompt, $namePrompt, $phonePrompt, $timePrompt] = $this->advanceToSwahiliBookingTimeStep();
         $confirmation = $chat->handle($sessionId, '9am', 'web');
 
         $this->assertStringContainsString('DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD', $datePrompt->message);
@@ -322,6 +315,50 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame('254712345678', $confirmation->collectedFields['patient_phone']);
         $this->assertSame('CONFIRMING', $confirmation->state);
         $this->assertStringContainsString('Tafadhali thibitisha', $confirmation->message);
+    }
+
+    #[DataProvider('swahiliNaturalTimeProvider')]
+    public function test_swahili_natural_time_is_parsed_in_booking_flow(
+        string $input,
+        string $expectedTime,
+    ): void {
+        [, , $doctor, $chat, $sessionId] = $this->advanceToSwahiliBookingTimeStep();
+        DoctorAvailability::query()->where('doctor_id', $doctor->id)->update([
+            'start_time' => '00:00',
+            'end_time' => '23:30',
+        ]);
+
+        $response = $chat->handle($sessionId, $input, 'web');
+
+        if (in_array($expectedTime, ['03:00', '19:00'], true)) {
+            $displayTime = $expectedTime === '03:00' ? '3:00 AM' : '7:00 PM';
+
+            $this->assertStringContainsString($displayTime, $response->message);
+            $this->assertStringContainsString('Saa zake za kazi ni 8:00 AM hadi 5:00 PM', $response->message);
+            $this->assertNull($response->collectedFields['time']);
+
+            return;
+        }
+
+        $this->assertSame('CONFIRMING', $response->state);
+        $this->assertSame($expectedTime, $response->collectedFields['time']);
+        $this->assertStringContainsString($expectedTime, $response->message);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function swahiliNaturalTimeProvider(): array
+    {
+        return [
+            'morning digit' => ['9 asubuhi', '09:00'],
+            'morning explicit' => ['saa 3 asubuhi', '03:00'],
+            'midday' => ['12 mchana', '12:00'],
+            'afternoon' => ['3 mchana', '15:00'],
+            'evening' => ['7 jioni', '19:00'],
+            'still accepts 24h' => ['09:00', '09:00'],
+            'still accepts am/pm' => ['9:30 am', '09:30'],
+        ];
     }
 
     public function test_cancelling_mid_booking_clears_fields_without_creating_an_escalation(): void
@@ -2096,6 +2133,35 @@ class BookingChatServiceTest extends TestCase
         }
 
         return [$hospital, $services, $doctors];
+    }
+
+    /**
+     * @return array{Hospital, array<int, Service>, User, BookingChatService, string, ChatResponse, ChatResponse, ChatResponse, ChatResponse}
+     */
+    private function advanceToSwahiliBookingTimeStep(): array
+    {
+        [$hospital, $services, $doctors] = $this->createContext();
+        Http::preventStrayRequests();
+        $chat = app(BookingChatService::class);
+        $sessionId = 'swahili-booking-natural-time';
+
+        $chat->handle($sessionId, 'Nataka kuweka miadi', 'web');
+        $datePrompt = $chat->handle($sessionId, 'Dental Cleaning', 'web');
+        $namePrompt = $chat->handle($sessionId, 'kesho', 'web');
+        $phonePrompt = $chat->handle($sessionId, 'Jina langu ni Juma', 'web');
+        $timePrompt = $chat->handle($sessionId, '0712345678', 'web');
+
+        return [
+            $hospital,
+            $services,
+            $doctors[0],
+            $chat,
+            $sessionId,
+            $datePrompt,
+            $namePrompt,
+            $phonePrompt,
+            $timePrompt,
+        ];
     }
 
     /**
