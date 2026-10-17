@@ -6,6 +6,7 @@ use App\Models\Hospital;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -165,6 +166,179 @@ class HospitalBrandingTest extends TestCase
             ->assertSee('Pearlie');
     }
 
+    public function test_tenant_login_route_is_available_to_guests_and_redirects_authenticated_users(): void
+    {
+        $hospital = Hospital::factory()->create([
+            'name' => 'Tenant Login Clinic',
+            'slug' => 'tenant-login-clinic',
+        ]);
+        $patient = User::factory()->create([
+            'hospital_id' => $hospital->id,
+        ]);
+
+        $this->get(route('tenant.login', ['hospital' => $hospital->slug]))
+            ->assertOk();
+
+        $this->actingAs($patient)
+            ->get(route('tenant.login', ['hospital' => $hospital->slug]))
+            ->assertRedirect();
+    }
+
+    public function test_tenant_login_rejects_credentials_from_another_hospital(): void
+    {
+        $pearl = Hospital::factory()->create([
+            'name' => 'Pearl Hospital',
+            'slug' => 'pearl-login-isolation',
+        ]);
+        $demo = Hospital::factory()->create([
+            'name' => 'Demo Hospital',
+            'slug' => 'demo-login-isolation',
+        ]);
+        $pearlAdmin = $this->createAdmin($pearl);
+
+        $this->post(route('tenant.login.store', ['hospital' => $demo->slug]), [
+            'email' => $pearlAdmin->email,
+            'password' => 'password',
+        ])
+            ->assertRedirect(route('tenant.login', ['hospital' => $demo->slug]))
+            ->assertSessionHasErrors([
+                'email' => 'This account does not belong to this hospital.',
+            ]);
+
+        $this->assertGuest();
+    }
+
+    public function test_superadmin_can_login_from_a_tenant_url_and_is_sent_to_platform_dashboard(): void
+    {
+        $hospital = Hospital::factory()->create([
+            'slug' => 'superadmin-tenant-login',
+        ]);
+        $superadmin = User::factory()->create([
+            'role' => 'super_admin',
+            'is_super_admin' => true,
+        ]);
+
+        $this->post(route('tenant.login.store', ['hospital' => $hospital->slug]), [
+            'email' => $superadmin->email,
+            'password' => 'password',
+        ])->assertRedirect(route('superadmin.dashboard'));
+
+        $this->assertAuthenticatedAs($superadmin);
+    }
+
+    public function test_tenant_logins_show_their_own_hospital_branding(): void
+    {
+        $pearl = Hospital::factory()->create([
+            'name' => 'Pearl Hospital',
+            'slug' => 'pearl-branding-isolation',
+        ]);
+        $demo = Hospital::factory()->create([
+            'name' => 'Demo Hospital',
+            'slug' => 'demo-branding-isolation',
+        ]);
+
+        $this->get(route('tenant.login', ['hospital' => $pearl->slug]))
+            ->assertOk()
+            ->assertSee('Pearl Hospital')
+            ->assertDontSee('Demo Hospital')
+            ->assertDontSee('<h1 class="mt-3 text-xl font-bold text-slate-900">MediDesk AI</h1>', false);
+
+        $this->get(route('tenant.login', ['hospital' => $demo->slug]))
+            ->assertOk()
+            ->assertSee('Demo Hospital')
+            ->assertDontSee('Pearl Hospital')
+            ->assertDontSee('<h1 class="mt-3 text-xl font-bold text-slate-900">MediDesk AI</h1>', false);
+    }
+
+    public function test_tenant_login_shows_configured_logo_contact_details_and_initial_placeholder(): void
+    {
+        Storage::fake('public');
+        $hospital = Hospital::factory()->create([
+            'name' => 'Logo Clinic',
+            'slug' => 'logo-clinic',
+            'phone' => '+254700123456',
+            'address' => '1 Clinic Road',
+            'site_logo_path' => 'hospitals/logo-clinic/logo.png',
+        ]);
+        Storage::disk('public')->put($hospital->site_logo_path, 'logo-bytes');
+
+        $this->get(route('tenant.login', ['hospital' => $hospital->slug]))
+            ->assertOk()
+            ->assertSee(Storage::disk('public')->url($hospital->site_logo_path), false)
+            ->assertSee('+254700123456')
+            ->assertSee('1 Clinic Road');
+
+        $hospital->update(['site_logo_path' => null]);
+
+        $this->get(route('tenant.login', ['hospital' => $hospital->slug]))
+            ->assertSee('L');
+    }
+
+    public function test_tenant_password_recovery_screen_keeps_the_hospital_branding(): void
+    {
+        $hospital = Hospital::factory()->create([
+            'name' => 'Recovery Clinic',
+            'slug' => 'recovery-clinic',
+        ]);
+
+        $this->get(route('tenant.password.request', ['hospital' => $hospital->slug]))
+            ->assertOk()
+            ->assertSee('Recovery Clinic')
+            ->assertSee(route('tenant.password.email', ['hospital' => $hospital->slug]), false);
+    }
+
+    public function test_each_tenant_login_uses_only_its_own_logo(): void
+    {
+        Storage::fake('public');
+        $pearl = Hospital::factory()->create([
+            'name' => 'Pearl Hospital',
+            'slug' => 'pearl-logo-isolation',
+            'site_logo_path' => 'hospitals/pearl-logo-isolation/logo.png',
+        ]);
+        $demo = Hospital::factory()->create([
+            'name' => 'Demo Hospital',
+            'slug' => 'demo-logo-isolation',
+            'site_logo_path' => 'hospitals/demo-logo-isolation/logo.png',
+        ]);
+        Storage::disk('public')->put($pearl->site_logo_path, 'pearl-logo');
+        Storage::disk('public')->put($demo->site_logo_path, 'demo-logo');
+
+        $this->get(route('tenant.login', ['hospital' => $pearl->slug]))
+            ->assertSee(Storage::disk('public')->url($pearl->site_logo_path), false)
+            ->assertDontSee(Storage::disk('public')->url($demo->site_logo_path), false);
+
+        $this->get(route('tenant.login', ['hospital' => $demo->slug]))
+            ->assertSee(Storage::disk('public')->url($demo->site_logo_path), false)
+            ->assertDontSee(Storage::disk('public')->url($pearl->site_logo_path), false);
+    }
+
+    public function test_platform_login_is_premium_and_has_no_tenant_data(): void
+    {
+        Hospital::factory()->create([
+            'name' => 'Pearl Hospital',
+            'slug' => 'platform-login-leak-check',
+            'phone' => '0707799114',
+            'address' => 'Private Tenant Address',
+        ]);
+
+        $this->get('/login')
+            ->assertOk()
+            ->assertSee('MediDesk AI')
+            ->assertSee('AI-powered healthcare operations')
+            ->assertSee('Need help?')
+            ->assertSee('v1.0')
+            ->assertSee(date('Y'))
+            ->assertSee('Privacy')
+            ->assertSee('Terms')
+            ->assertSee('mailto:'.config('mail.from.address'), false)
+            ->assertSee('All rights reserved.')
+            ->assertDontSee('Pearl Hospital')
+            ->assertDontSee('Demo Hospital')
+            ->assertDontSee('Vin Plaza')
+            ->assertDontSee('0707799114')
+            ->assertDontSee('Private Tenant Address');
+    }
+
     public function test_two_hospitals_show_their_own_headers(): void
     {
         $hospitalA = Hospital::factory()->create([
@@ -187,7 +361,10 @@ class HospitalBrandingTest extends TestCase
     public function test_logo_upload_saves_and_displays_the_logo(): void
     {
         Storage::fake('public');
-        $hospital = Hospital::factory()->create();
+        $hospital = Hospital::factory()->create([
+            'subscription_plan' => 'enterprise',
+            'subscription_status' => 'active',
+        ]);
         app()->instance('currentHospital', $hospital);
         $admin = $this->createAdmin($hospital);
 
@@ -201,13 +378,42 @@ class HospitalBrandingTest extends TestCase
 
         $logoPath = $hospital->fresh()->site_logo_path;
         $this->assertIsString($logoPath);
+        $this->assertSame("hospitals/{$hospital->slug}/logo.png", $logoPath);
         Storage::disk('public')->assertExists($logoPath);
-        $this->get(route('tenant.home', $hospital->slug))
+        $homeResponse = $this->get(route('tenant.home', $hospital->slug));
+        $this->assertSame(200, $homeResponse->getStatusCode(), 'Tenant home redirected to '.$homeResponse->headers->get('Location'));
+        $homeResponse->assertSee(Storage::disk('public')->url($logoPath), false);
+        $chatResponse = $this->get(route('tenant.chat.page', $hospital->slug));
+        $this->assertSame(200, $chatResponse->getStatusCode(), 'Tenant chat redirected to '.$chatResponse->headers->get('Location'));
+        $chatResponse
+            ->assertSee(Storage::disk('public')->url($logoPath), false);
+        Auth::logout();
+        $this->get(route('tenant.login', ['hospital' => $hospital->slug]))
             ->assertOk()
             ->assertSee(Storage::disk('public')->url($logoPath), false);
     }
 
-    public function test_logo_upload_rejects_scriptable_svg_files(): void
+    public function test_branding_settings_preview_the_existing_hospital_logo(): void
+    {
+        Storage::fake('public');
+        $hospital = Hospital::factory()->create([
+            'name' => 'Preview Clinic',
+            'slug' => 'preview-clinic',
+            'site_logo_path' => 'hospitals/preview-clinic/logo.png',
+        ]);
+        Storage::disk('public')->put($hospital->site_logo_path, 'logo-bytes');
+        app()->instance('currentHospital', $hospital);
+        $admin = $this->createAdmin($hospital);
+
+        $this->actingAs($admin)
+            ->get(route('admin.integration-settings.edit', ['tab' => 'branding']))
+            ->assertOk()
+            ->assertSee(Storage::disk('public')->url($hospital->site_logo_path), false)
+            ->assertSee('Current logo preview')
+            ->assertSee('image/webp');
+    }
+
+    public function test_logo_upload_sanitizes_scriptable_svg_files(): void
     {
         Storage::fake('public');
         $hospital = Hospital::factory()->create();
@@ -221,10 +427,56 @@ class HospitalBrandingTest extends TestCase
                     '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
                 ),
             ])
+            ->assertRedirect(route('admin.integration-settings.edit', ['tab' => 'branding']));
+
+        $logoPath = $hospital->fresh()->site_logo_path;
+        $this->assertSame("hospitals/{$hospital->slug}/logo.svg", $logoPath);
+        $sanitizedSvg = Storage::disk('public')->get($logoPath);
+        $this->assertStringNotContainsString('<script', $sanitizedSvg);
+        $this->assertStringContainsString('<svg', $sanitizedSvg);
+    }
+
+    public function test_replacing_a_hospital_logo_deletes_the_previous_file(): void
+    {
+        Storage::fake('public');
+        $hospital = Hospital::factory()->create();
+        $previousLogoPath = "hospitals/{$hospital->slug}/logo.png";
+        Storage::disk('public')->put($previousLogoPath, 'previous-logo');
+        $hospital->update(['site_logo_path' => $previousLogoPath]);
+        $admin = $this->createAdmin($hospital);
+
+        $this->actingAs($admin)
+            ->put(route('admin.integration-settings.branding.update'), [
+                'site_logo' => UploadedFile::fake()->create('replacement.jpg', 100, 'image/jpeg'),
+            ])
+            ->assertRedirect(route('admin.integration-settings.edit', ['tab' => 'branding']));
+
+        $newLogoPath = $hospital->fresh()->site_logo_path;
+        $this->assertSame("hospitals/{$hospital->slug}/logo.jpg", $newLogoPath);
+        Storage::disk('public')->assertMissing($previousLogoPath);
+        Storage::disk('public')->assertExists($newLogoPath);
+    }
+
+    public function test_logo_upload_rejects_unsupported_and_oversized_files(): void
+    {
+        Storage::fake('public');
+        $hospital = Hospital::factory()->create();
+        app()->instance('currentHospital', $hospital);
+        $admin = $this->createAdmin($hospital);
+
+        $this->actingAs($admin)
+            ->put(route('admin.integration-settings.branding.update'), [
+                'site_logo' => UploadedFile::fake()->create('document.pdf', 100, 'application/pdf'),
+            ])
             ->assertSessionHasErrors('site_logo');
 
-        $this->assertSame(null, $hospital->fresh()->site_logo_path);
-        $this->assertSame([], Storage::disk('public')->allFiles('branding'));
+        $this->actingAs($admin)
+            ->put(route('admin.integration-settings.branding.update'), [
+                'site_logo' => UploadedFile::fake()->create('large.png', 2049, 'image/png'),
+            ])
+            ->assertSessionHasErrors('site_logo');
+
+        $this->assertNull($hospital->fresh()->site_logo_path);
     }
 
     public function test_custom_branding_appears_on_chat_admin_and_doctor_pages(): void

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Models\Hospital;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,18 +21,56 @@ class AuthenticatedSessionController extends Controller
         return view('auth.login');
     }
 
+    public function createTenant(Hospital $hospital): View
+    {
+        return view('auth.tenant-login', [
+            'hospital' => $hospital,
+            'branding' => tenant_branding($hospital),
+        ]);
+    }
+
     /**
      * Handle an incoming authentication request.
      */
     public function store(LoginRequest $request): RedirectResponse
     {
+        return $this->authenticateAndRedirect($request);
+    }
+
+    public function storeForTenant(LoginRequest $request, Hospital $hospital): RedirectResponse
+    {
+        return $this->authenticateAndRedirect($request, $hospital);
+    }
+
+    private function authenticateAndRedirect(LoginRequest $request, ?Hospital $hospital = null): RedirectResponse
+    {
         $request->authenticate();
 
         $user = $request->user();
+        if (! $user instanceof User) {
+            throw new \LogicException('The login request completed without an authenticated user.');
+        }
+
+        if ($hospital && ! $user->isSuperAdmin() && (int) $user->hospital_id !== (int) $hospital->id) {
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()
+                ->route('tenant.login', ['hospital' => $hospital->slug])
+                ->withErrors(['email' => 'This account does not belong to this hospital.']);
+        }
+
         $request->session()->regenerate();
 
         if ($user->must_change_password) {
             return redirect()->route('password.force.edit');
+        }
+
+        if ($hospital && $user->isSuperAdmin()) {
+            $request->session()->forget('url.intended');
+
+            return redirect()->route('superadmin.dashboard');
         }
 
         $defaultDestination = match (true) {
@@ -82,11 +121,17 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        $user = $request->user();
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();
 
         $request->session()->regenerateToken();
+
+        if ($user instanceof User && ! $user->isSuperAdmin() && ($user->isAdmin() || $user->isDoctor()) && $user->hospital) {
+            return redirect()->route('tenant.login', ['hospital' => $user->hospital->slug]);
+        }
 
         return redirect()->route('login');
     }

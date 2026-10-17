@@ -6,6 +6,7 @@ use App\Models\Hospital;
 use App\Models\User;
 use App\Services\HospitalMailService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\TestCase;
@@ -18,6 +19,21 @@ class SuperAdminLifecycleTest extends TestCase
     {
         parent::setUp();
         $this->withoutVite();
+    }
+
+    public function test_super_admin_session_is_restored_without_the_tenant_scope_on_platform_routes(): void
+    {
+        $superAdmin = User::factory()->create([
+            'role' => 'super_admin',
+            'is_super_admin' => true,
+        ]);
+
+        Auth::forgetGuards();
+
+        $this->withSession([
+            Auth::guard('web')->getName() => $superAdmin->getAuthIdentifier(),
+        ])->get(route('superadmin.dashboard'))
+            ->assertOk();
     }
 
     public function test_super_admin_can_view_hospitals_edit_details_and_toggle_subscription_status(): void

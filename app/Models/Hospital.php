@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class Hospital extends Model
@@ -90,6 +92,25 @@ class Hospital extends Model
             'trial_ends_at' => 'datetime',
             'is_active' => 'boolean',
         ];
+    }
+
+    protected function logoUrl(): Attribute
+    {
+        return Attribute::get(function (?string $value): ?string {
+            if (filled($this->site_logo_path)) {
+                return Storage::disk('public')->url($this->site_logo_path);
+            }
+
+            if (! filled($value)) {
+                return null;
+            }
+
+            if (preg_match('#^https?://#i', $value) === 1) {
+                return $value;
+            }
+
+            return Storage::disk('public')->url($value);
+        });
     }
 
     protected $hidden = [

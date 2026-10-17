@@ -5,7 +5,9 @@ use App\Http\Controllers\Admin\DoctorController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\DoctorSetupController;
+use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\Doctor;
 use App\Http\Controllers\Doctor\AppointmentLifecycleController as DoctorAppointmentLifecycleController;
@@ -34,6 +36,22 @@ Route::post('/pearlie/chat', [ChatController::class, 'chat'])
     ->middleware('throttle:tenant-chat')
     ->name('pearlie.chat');
 Route::get('/h/{slug}', [TenantHomeController::class, 'index'])->name('tenant.home');
+Route::prefix('h/{hospital:slug}')->name('tenant.')->group(function (): void {
+    Route::middleware('guest')->group(function (): void {
+        Route::get('/login', [AuthenticatedSessionController::class, 'createTenant'])->name('login');
+        Route::post('/login', [AuthenticatedSessionController::class, 'storeForTenant'])
+            ->middleware('throttle:6,1')
+            ->name('login.store');
+        Route::get('/password/forgot', [PasswordResetLinkController::class, 'create'])->name('password.request');
+        Route::post('/password/email', [PasswordResetLinkController::class, 'store'])
+            ->middleware('throttle:10,1')
+            ->name('password.email');
+    });
+
+    Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
+        ->middleware('auth')
+        ->name('logout');
+});
 Route::get('/h/{slug}/chat', [ChatController::class, 'index'])->name('tenant.chat.page');
 Route::post('/h/{slug}/chat', [ChatController::class, 'chat'])
     ->middleware('throttle:tenant-chat')

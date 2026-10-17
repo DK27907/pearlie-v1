@@ -34,7 +34,7 @@ class UpdateBrandingSettingsRequest extends FormRequest
             'chatbot_name' => ['nullable', 'string', 'max:60'],
             'site_header_text' => ['nullable', 'string', 'max:120'],
             'site_footer_text' => ['nullable', 'string', 'max:2000'],
-            'site_logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
+            'site_logo' => ['nullable', 'file', 'mimes:png,jpg,jpeg,svg,webp', 'extensions:png,jpg,jpeg,svg,webp', 'max:2048'],
         ];
     }
 }

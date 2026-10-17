@@ -88,7 +88,7 @@ class AuthenticationTest extends TestCase
     }
 
     #[DataProvider('authenticatedRoleRoutes')]
-    public function test_logout_redirects_to_login(string $role, string $routeName): void
+    public function test_logout_redirects_to_the_correct_login_surface(string $role, string $routeName): void
     {
         $hospital = Hospital::query()->where('slug', 'pearl')->firstOrFail();
         $attributes = match ($role) {
@@ -102,9 +102,13 @@ class AuthenticationTest extends TestCase
             ...$attributes,
         ]);
 
+        $logoutDestination = in_array($role, ['doctor', 'hospital_admin'], true)
+            ? route('tenant.login', ['hospital' => $hospital->slug])
+            : route('login');
+
         $this->actingAs($user)
             ->post(route('logout'))
-            ->assertRedirect(route('login'));
+            ->assertRedirect($logoutDestination);
 
         $this->get(route($routeName))->assertRedirect(route('login'));
     }
@@ -120,6 +124,23 @@ class AuthenticationTest extends TestCase
             'hospital administrator' => ['hospital_admin', 'admin.dashboard'],
             'platform administrator' => ['super_admin', 'superadmin.dashboard'],
         ];
+    }
+
+    public function test_tenant_logout_redirects_to_the_same_hospital_login(): void
+    {
+        $hospital = Hospital::factory()->create([
+            'name' => 'Tenant Logout Clinic',
+            'slug' => 'tenant-logout-clinic',
+        ]);
+        $admin = User::factory()->create([
+            'hospital_id' => $hospital->id,
+            'role' => 'hospital_admin',
+            'is_admin' => true,
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('tenant.logout', ['hospital' => $hospital->slug]))
+            ->assertRedirect(route('tenant.login', ['hospital' => $hospital->slug]));
     }
 
     #[DataProvider('authenticatedRoleRoutes')]

@@ -14,8 +14,11 @@ use App\Models\HospitalIntegrationCredential;
 use App\Services\HospitalSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 class SettingsController extends Controller
 {
@@ -37,20 +40,19 @@ class SettingsController extends Controller
     {
         $hospital = $this->currentHospital();
         $settings->for($hospital);
-        $credentials = [];
-
-        foreach (self::PROVIDERS as $provider) {
-            $credentials[$provider] = $settings->credential($provider) ?? [];
-            foreach (self::SECRET_FIELDS[$provider] as $field) {
-                if (filled($credentials[$provider][$field] ?? null)) {
-                    $credentials[$provider][$field] = '••••••••'.substr($credentials[$provider][$field], -4);
-                }
-            }
-        }
-
         $activeTab = $request->query('tab', 'general');
         if (! in_array($activeTab, ['general', ...self::PROVIDERS, 'branding'], true)) {
             $activeTab = 'general';
+        }
+
+        $credentials = array_fill_keys(self::PROVIDERS, []);
+        if (in_array($activeTab, self::PROVIDERS, true)) {
+            $credentials[$activeTab] = $settings->credential($activeTab) ?? [];
+            foreach (self::SECRET_FIELDS[$activeTab] as $field) {
+                if (filled($credentials[$activeTab][$field] ?? null)) {
+                    $credentials[$activeTab][$field] = '••••••••'.substr($credentials[$activeTab][$field], -4);
+                }
+            }
         }
 
         return view('admin.settings.edit', [
@@ -225,8 +227,15 @@ class SettingsController extends Controller
         ];
 
         if ($request->hasFile('site_logo')) {
-            $logoPath = $request->file('site_logo')->store('branding', 'public');
-            if ($logoPath === false) {
+            $logo = $request->file('site_logo');
+            $extension = strtolower($logo->getClientOriginalExtension());
+            $logoPath = "hospitals/{$hospital->slug}/logo.{$extension}";
+            $disk = Storage::disk('public');
+            $stored = $extension === 'svg'
+                ? $disk->put($logoPath, $this->sanitizeSvg($logo))
+                : $logo->storeAs("hospitals/{$hospital->slug}", "logo.{$extension}", 'public');
+
+            if ($stored === false) {
                 throw new \RuntimeException('The hospital logo could not be stored.');
             }
 
@@ -235,7 +244,12 @@ class SettingsController extends Controller
             $hospital->update($updates);
 
             if ($previousLogoPath !== null && $previousLogoPath !== $logoPath) {
-                Storage::disk('public')->delete($previousLogoPath);
+                if (! $disk->delete($previousLogoPath) && $disk->exists($previousLogoPath)) {
+                    Log::warning('A replaced hospital logo could not be removed from public storage.', [
+                        'hospital_id' => $hospital->id,
+                        'path' => $previousLogoPath,
+                    ]);
+                }
             }
         } else {
             $hospital->update($updates);
@@ -266,5 +280,76 @@ class SettingsController extends Controller
         return redirect()
             ->route('admin.integration-settings.edit', ['tab' => $tab])
             ->with('status', $message);
+    }
+
+    private function sanitizeSvg(UploadedFile $logo): string
+    {
+        $previousErrorHandling = libxml_use_internal_errors(true);
+        $document = new \DOMDocument('1.0', 'UTF-8');
+
+        try {
+            $loaded = $document->loadXML($logo->get(), LIBXML_NONET | LIBXML_NOBLANKS);
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previousErrorHandling);
+        }
+
+        $root = $document->documentElement;
+        if (! $loaded
+            || $document->doctype !== null
+            || ! $root instanceof \DOMElement
+            || $root->localName !== 'svg'
+            || $root->namespaceURI !== 'http://www.w3.org/2000/svg') {
+            throw ValidationException::withMessages([
+                'site_logo' => 'The site logo must be a valid SVG image.',
+            ]);
+        }
+
+        $allowedElements = [
+            'svg', 'g', 'path', 'circle', 'ellipse', 'line', 'polyline',
+            'polygon', 'rect', 'text', 'tspan', 'defs', 'linearGradient',
+            'radialGradient', 'stop', 'clipPath', 'mask', 'title', 'desc',
+        ];
+        $allowedAttributes = [
+            'xmlns', 'viewBox', 'width', 'height', 'x', 'y', 'x1', 'x2', 'y1', 'y2',
+            'cx', 'cy', 'r', 'rx', 'ry', 'd', 'points', 'fill', 'fill-rule',
+            'fill-opacity', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin',
+            'stroke-dasharray', 'stroke-dashoffset', 'stroke-opacity', 'opacity',
+            'transform', 'offset', 'stop-color', 'stop-opacity', 'clip-path', 'mask',
+            'id', 'preserveAspectRatio', 'font-size', 'font-family', 'font-weight',
+            'text-anchor', 'dominant-baseline',
+        ];
+
+        for ($index = $document->getElementsByTagName('*')->length - 1; $index >= 0; $index--) {
+            $element = $document->getElementsByTagName('*')->item($index);
+            if (! $element instanceof \DOMElement) {
+                continue;
+            }
+
+            if (! in_array($element->localName, $allowedElements, true)) {
+                $element->parentNode?->removeChild($element);
+
+                continue;
+            }
+
+            foreach (iterator_to_array($element->attributes) as $attribute) {
+                $name = $attribute->nodeName;
+                $value = trim($attribute->nodeValue ?? '');
+                $isSafeLocalReference = $name === 'href' && str_starts_with($value, '#');
+                $containsExternalReference = preg_match('/(?:javascript:|data:|url\\((?!\\s*[\\\'"]?#))/i', $value) === 1;
+
+                if ((! in_array($name, $allowedAttributes, true) && ! $isSafeLocalReference)
+                    || $containsExternalReference) {
+                    $element->removeAttributeNode($attribute);
+                }
+            }
+        }
+
+        $sanitized = $document->saveXML($root);
+        if (! is_string($sanitized)) {
+            throw new \RuntimeException('The hospital SVG logo could not be sanitized.');
+        }
+
+        return $sanitized;
     }
 }

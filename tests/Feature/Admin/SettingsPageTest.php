@@ -3,6 +3,7 @@
 namespace Tests\Feature\Admin;
 
 use App\Models\Hospital;
+use App\Models\HospitalIntegrationCredential;
 use App\Models\User;
 use App\Services\HospitalSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -31,6 +32,24 @@ class SettingsPageTest extends TestCase
             ->assertSee('WhatsApp')
             ->assertSee('SMS')
             ->assertSee('Email');
+    }
+
+    public function test_branding_tab_does_not_decrypt_unrelated_integration_credentials(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $admin = $this->createAdmin($hospital);
+        $credential = HospitalIntegrationCredential::factory()->create([
+            'hospital_id' => $hospital->id,
+            'provider' => 'whatsapp',
+        ]);
+        DB::table('hospital_integration_credentials')
+            ->where('id', $credential->id)
+            ->update(['credentials' => 'invalid-encrypted-value']);
+
+        $this->actingAs($admin)
+            ->get(route('admin.integration-settings.edit', ['tab' => 'branding']))
+            ->assertOk()
+            ->assertSee('Hospital logo');
     }
 
     public function test_non_admin_cannot_view_settings_page(): void

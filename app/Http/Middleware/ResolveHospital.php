@@ -19,6 +19,10 @@ class ResolveHospital
         if ($isHomeRoute || $request->routeIs('superadmin.*')) {
             app()->instance('currentHospital', null);
 
+            if ($request->routeIs('superadmin.*')) {
+                $this->authenticatedUser($request);
+            }
+
             return $next($request);
         }
 
@@ -146,8 +150,12 @@ class ResolveHospital
     {
         return $request->routeIs(
             'login',
+            'tenant.login',
+            'tenant.login.store',
             'password.request',
             'password.email',
+            'tenant.password.request',
+            'tenant.password.email',
             'password.reset',
             'password.store',
             'register',

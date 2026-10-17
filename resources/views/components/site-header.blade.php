@@ -7,22 +7,43 @@
         $homeUrl = ! $isPlatformPage && $tenantHospital ? route('tenant.home', $tenantHospital->slug) : route('home');
         $assistantUrl = ! $isPlatformPage && $tenantHospital ? route('tenant.chat.page', $tenantHospital->slug) : route('home');
         $botName = $tenantHospital?->chatbotName() ?? 'Assistant';
+        $isPlatformLogin = request()->routeIs('login');
+        $supportEmail = config('mail.from.address');
+        $logoutUrl = auth()->check()
+            && ! auth()->user()->isSuperAdmin()
+            && (auth()->user()->isAdmin() || auth()->user()->isDoctor())
+            && $tenantHospital
+            ? route('tenant.logout', ['hospital' => $tenantHospital->slug])
+            : route('logout');
     @endphp
     <nav aria-label="Main navigation" class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 sm:px-6 lg:px-8">
         <div class="flex min-h-20 items-center justify-between gap-4">
             <a href="{{ $homeUrl }}" class="flex shrink-0 items-center gap-3">
                 @if ($branding['logo_url'])
                     <img class="h-11 w-11 rounded-xl object-contain" src="{{ $branding['logo_url'] }}" alt="">
+                @elseif ($tenantHospital && ! $isPlatformPage)
+                    <span class="grid h-11 w-11 place-items-center rounded-xl bg-[var(--hospital-primary)] text-lg font-bold text-white" aria-hidden="true">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($tenantHospital->name, 0, 1)) }}</span>
                 @else
                     <span class="grid h-11 w-11 place-items-center rounded-xl bg-[var(--hospital-primary)] text-2xl" aria-hidden="true">🏥</span>
                 @endif
                 <span class="min-w-0">
                     <span class="block text-lg font-bold leading-tight text-[var(--hospital-primary)]">{{ $branding['header_text'] }}</span>
-                    @if (! $isPlatformPage)
+                    @if ($isPlatformLogin)
+                        <span class="block max-w-[15rem] truncate text-xs font-medium text-slate-500">{{ config('app.tagline', 'AI-powered healthcare operations') }}</span>
+                    @elseif (! $isPlatformPage)
                         <span class="block max-w-[15rem] truncate text-xs font-medium text-slate-500">{{ pearlie_config('hospital.location') }}</span>
                     @endif
                 </span>
             </a>
+
+            @if ($isPlatformLogin)
+                <div class="ml-auto flex items-center gap-3">
+                    @if ($supportEmail)
+                        <a href="mailto:{{ $supportEmail }}" class="hidden text-sm font-semibold text-slate-600 hover:text-[#0a2f44] sm:inline">Need help?</a>
+                    @endif
+                    <span class="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-500">v{{ config('app.version', '1.0') }}</span>
+                </div>
+            @endif
 
             @if (! $isPlatformPage)
                 <div class="hidden items-center gap-1 md:flex">
@@ -52,7 +73,7 @@
                         </summary>
                         <div class="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
                             <a href="{{ route('settings.profile') }}" class="block rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">Settings</a>
-                            <form method="POST" action="{{ route('logout') }}">
+                            <form method="POST" action="{{ $logoutUrl }}">
                                 @csrf
                                 <button type="submit" class="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Logout</button>
                             </form>
@@ -90,7 +111,7 @@
                     <a href="{{ route('appointments.index') }}" class="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">My Appointments</a>
                 @endif
                 <a href="{{ route('settings.profile') }}" class="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Settings</a>
-                <form method="POST" action="{{ route('logout') }}">
+                <form method="POST" action="{{ $logoutUrl }}">
                     @csrf
                     <button type="submit" class="block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50">Logout</button>
                 </form>

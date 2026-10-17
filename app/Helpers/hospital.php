@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\Hospital;
-use Illuminate\Support\Facades\Storage;
 
 if (! function_exists('hospital')) {
     function hospital(): ?Hospital
@@ -61,7 +60,6 @@ if (! function_exists('hospital_branding')) {
         if (filled($tenantHospital->address)) {
             $defaultFooter .= ' · '.$tenantHospital->address;
         }
-        $logoPath = $tenantHospital->site_logo_path ?: $tenantHospital->logo_url;
 
         return [
             'header_text' => filled($tenantHospital->site_header_text)
@@ -70,9 +68,33 @@ if (! function_exists('hospital_branding')) {
             'footer_text' => filled($tenantHospital?->site_footer_text)
                 ? $tenantHospital->site_footer_text
                 : $defaultFooter,
-            'logo_url' => $logoPath ? Storage::disk('public')->url($logoPath) : null,
+            'logo_url' => $tenantHospital->logo_url,
             'primary_color' => $tenantHospital->primary_color ?: '#0a2f44',
             'secondary_color' => $tenantHospital->secondary_color ?: '#1a5276',
+        ];
+    }
+}
+
+if (! function_exists('tenant_branding')) {
+    /**
+     * @return array{header_text: string, footer_text: string, logo_url: ?string, primary_color: string, secondary_color: string}|array{name: string, tagline: ?string, logo_url: ?string, phone: ?string, address: ?string, hours: array<string, mixed>|string|null, is_tenant: bool}
+     */
+    function tenant_branding(?Hospital $hospital): array
+    {
+        if (! $hospital) {
+            return platform_branding();
+        }
+
+        return [
+            'name' => $hospital->name,
+            'tagline' => null,
+            'logo_url' => $hospital->logo_url,
+            'phone' => $hospital->phone,
+            'address' => $hospital->address,
+            'hours' => filled($hospital->business_hours)
+                ? $hospital->business_hours
+                : ($hospital->hours_outpatient ?: null),
+            'is_tenant' => true,
         ];
     }
 }

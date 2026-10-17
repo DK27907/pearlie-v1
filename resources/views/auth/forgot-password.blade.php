@@ -9,7 +9,7 @@
     <!-- Session Status -->
     <x-auth-session-status class="mb-4" :status="session('status')" />
 
-    <form method="POST" action="{{ route('password.email') }}">
+    <form method="POST" action="{{ request()->routeIs('tenant.password.request', 'tenant.password.email') ? route('tenant.password.email', ['hospital' => hospital()->slug]) : route('password.email') }}">
         @csrf
 
         <!-- Email Address -->

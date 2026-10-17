@@ -300,11 +300,15 @@
                             <textarea class="{{ $inputClass }}" name="site_footer_text" rows="4" maxlength="2000">{{ old('site_footer_text', $hospital->site_footer_text ?? trim($hospital->name.' — '.($hospital->address ?? ''))) }}</textarea>
                         </label>
                         <label class="block text-sm font-semibold text-slate-700">Hospital logo
-                            <input class="{{ $inputClass }}" type="file" name="site_logo" accept="image/png,image/jpeg,image/svg+xml">
-                            <span class="mt-1 block text-xs font-normal text-slate-500">Optional PNG, JPG, JPEG, or SVG image, up to 2 MB.</span>
+                            <input class="{{ $inputClass }}" type="file" name="site_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp">
+                            <span class="mt-1 block text-xs font-normal text-slate-500">Optional PNG, JPG, JPEG, SVG, or WebP image, up to 2 MB.</span>
+                            <x-input-error :messages="$errors->get('site_logo')" class="mt-2" />
                         </label>
-                        @if ($hospital->site_logo_path)
-                            <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($hospital->site_logo_path) }}" alt="Current hospital logo" class="h-16 w-auto rounded-lg border border-slate-200 bg-white p-2">
+                        @if ($hospital->logo_url)
+                            <div class="flex items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                <img src="{{ $hospital->logo_url }}" alt="Current hospital logo" class="h-16 w-16 rounded-lg border border-slate-200 bg-white p-2 object-contain">
+                                <p class="text-sm text-slate-600">Current logo preview. Upload another image to replace it.</p>
+                            </div>
                         @endif
                         <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save branding settings</button>
                     </form>
