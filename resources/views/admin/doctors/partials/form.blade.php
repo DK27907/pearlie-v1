@@ -71,6 +71,26 @@
     @enderror
 </div>
 
+<div class="rounded-lg border border-cyan-100 bg-cyan-50 p-4">
+    <label for="use_temporary_password" class="flex items-start gap-3">
+        <input
+            id="use_temporary_password"
+            name="use_temporary_password"
+            type="checkbox"
+            value="1"
+            @checked(old('use_temporary_password'))
+            class="mt-1 rounded border-slate-300 text-cyan-700 focus:ring-cyan-600"
+        >
+        <span>
+            <span class="block text-sm font-semibold text-slate-900">Use temporary password (doctor must change on first login)</span>
+            <span class="mt-1 block text-sm text-slate-600">The generated password is shown only once after saving. Otherwise, the usual invitation email is sent for a new account.</span>
+        </span>
+    </label>
+    @error('use_temporary_password')
+        <p class="mt-2 text-sm text-rose-700">{{ $message }}</p>
+    @enderror
+</div>
+
 <div class="flex items-center justify-end gap-3 border-t border-slate-100 pt-5">
     <a href="{{ route('admin.doctors.index') }}" class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</a>
     <button type="submit" class="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800">{{ $submitLabel }}</button>

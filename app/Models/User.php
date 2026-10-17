@@ -29,6 +29,7 @@ use Spatie\Permission\Traits\HasRoles;
     'bio',
     'consultation_fee',
     'licence_number',
+    'must_change_password',
 ])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
@@ -54,6 +55,7 @@ class User extends Authenticatable
             'is_doctor' => 'boolean',
             'is_super_admin' => 'boolean',
             'is_active' => 'boolean',
+            'must_change_password' => 'boolean',
             'consultation_fee' => 'decimal:2',
         ];
     }

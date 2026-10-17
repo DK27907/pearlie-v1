@@ -87,6 +87,93 @@ class AuthenticationTest extends TestCase
         $response->assertRedirect(route('dashboard', absolute: false));
     }
 
+    #[DataProvider('authenticatedRoleRoutes')]
+    public function test_logout_redirects_to_login(string $role, string $routeName): void
+    {
+        $hospital = Hospital::query()->where('slug', 'pearl')->firstOrFail();
+        $attributes = match ($role) {
+            'doctor' => ['role' => 'doctor', 'is_doctor' => true],
+            'hospital_admin' => ['role' => 'hospital_admin', 'is_admin' => true],
+            'super_admin' => ['role' => 'super_admin', 'is_super_admin' => true],
+            default => ['role' => 'patient'],
+        };
+        $user = User::factory()->create([
+            'hospital_id' => $hospital->id,
+            ...$attributes,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('logout'))
+            ->assertRedirect(route('login'));
+
+        $this->get(route($routeName))->assertRedirect(route('login'));
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function authenticatedRoleRoutes(): array
+    {
+        return [
+            'patient' => ['patient', 'dashboard'],
+            'doctor' => ['doctor', 'doctor.dashboard'],
+            'hospital administrator' => ['hospital_admin', 'admin.dashboard'],
+            'platform administrator' => ['super_admin', 'superadmin.dashboard'],
+        ];
+    }
+
+    #[DataProvider('authenticatedRoleRoutes')]
+    public function test_authenticated_users_visiting_login_are_redirected_to_their_dashboard(string $role, string $routeName): void
+    {
+        $hospital = Hospital::query()->where('slug', 'pearl')->firstOrFail();
+        $attributes = match ($role) {
+            'doctor' => ['role' => 'doctor', 'is_doctor' => true],
+            'hospital_admin' => ['role' => 'hospital_admin', 'is_admin' => true],
+            'super_admin' => ['role' => 'super_admin', 'is_super_admin' => true],
+            default => ['role' => 'patient'],
+        };
+        $user = User::factory()->create([
+            'hospital_id' => $hospital->id,
+            ...$attributes,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('login'))
+            ->assertRedirect(route($routeName));
+    }
+
+    #[DataProvider('dashboardRoleRoutes')]
+    public function test_authenticated_dashboard_refreshes_succeed_repeatedly(string $role, string $routeName): void
+    {
+        $hospital = Hospital::query()->where('slug', 'pearl')->firstOrFail();
+        $attributes = match ($role) {
+            'doctor' => ['role' => 'doctor', 'is_doctor' => true],
+            'hospital administrator' => ['role' => 'hospital_admin', 'is_admin' => true],
+            default => ['role' => 'super_admin', 'is_super_admin' => true],
+        };
+        $user = User::factory()->create([
+            'hospital_id' => $hospital->id,
+            ...$attributes,
+        ]);
+
+        $this->actingAs($user);
+        foreach (range(1, 5) as $refresh) {
+            $this->get(route($routeName))->assertOk();
+        }
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function dashboardRoleRoutes(): array
+    {
+        return [
+            'doctor' => ['doctor', 'doctor.dashboard'],
+            'hospital administrator' => ['hospital administrator', 'admin.dashboard'],
+            'platform administrator' => ['platform administrator', 'superadmin.dashboard'],
+        ];
+    }
+
     public function test_patient_login_ignores_an_intended_admin_route(): void
     {
         $patient = User::factory()->create([
@@ -301,7 +388,7 @@ class AuthenticationTest extends TestCase
         $response = $this->actingAs($user)->post('/logout');
 
         $this->assertGuest();
-        $response->assertRedirect('/');
+        $response->assertRedirect(route('login'));
     }
 
     public function test_get_logout_does_not_end_an_authenticated_session(): void

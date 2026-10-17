@@ -60,7 +60,7 @@ class SettingsPageTest extends TestCase
 
         $this->assertDatabaseHas('hospitals', [
             'id' => $hospital->id,
-            'deposit_amount' => 750,
+            'deposit_amount' => '750.00',
             'slot_duration_minutes' => 45,
             'auto_confirm_paid_appointments' => true,
         ]);
@@ -103,7 +103,7 @@ class SettingsPageTest extends TestCase
         ])->assertUnprocessable()
             ->assertJsonValidationErrors('deposit_amount');
 
-        $this->assertSame(500, $hospital->fresh()->deposit_amount);
+        $this->assertSame('500.00', $hospital->fresh()->deposit_amount);
     }
 
     public function test_admin_can_save_mpesa_credentials(): void

@@ -1,13 +1,18 @@
 @extends('layouts.master')
 
 @section('page')
-    @php($branding = hospital_branding())
+    @php
+        $isPlatformPage = request()->routeIs('login', 'register', 'password.request', 'password.email', 'password.reset', 'password.store', 'superadmin.*');
+        $branding = $isPlatformPage ? platform_branding() : hospital_branding();
+    @endphp
     <div class="mx-auto flex w-full max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] flex-1 items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
         <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl sm:p-8">
             <div class="mb-6 text-center">
                 <span class="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-[#0a2f44] text-2xl text-white" aria-hidden="true">🏥</span>
                 <p class="mt-3 text-lg font-bold text-[#0a2f44]">{{ $branding['header_text'] }}</p>
-                <p class="text-sm text-slate-500">{{ pearlie_config('hospital.location') }}</p>
+                @if (! request()->routeIs('login', 'register', 'password.request', 'password.email', 'password.reset', 'password.store') && hospital())
+                    <p class="text-sm text-slate-500">{{ pearlie_config('hospital.location') }}</p>
+                @endif
             </div>
             {{ $slot }}
             <div class="mt-6 border-t border-slate-100 pt-4 text-center">

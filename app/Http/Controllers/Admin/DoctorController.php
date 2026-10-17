@@ -34,6 +34,13 @@ class DoctorController extends Controller
     {
         $result = $this->doctorManagement->createDoctor($request->validated());
 
+        if ($result['temporary_password'] !== null) {
+            return redirect()
+                ->route('admin.doctors.index')
+                ->with('status', 'Doctor account created. Share this temporary password securely; it will only be shown once.')
+                ->with('temporary_password', $result['temporary_password']);
+        }
+
         if (! $result['invite_sent']) {
             return redirect()
                 ->route('admin.doctors.index')
@@ -55,7 +62,14 @@ class DoctorController extends Controller
     public function update(UpdateDoctorRequest $request, int $doctor): RedirectResponse
     {
         $record = $this->doctorRecord($doctor);
-        $this->doctorManagement->updateDoctor($record, $request->validated());
+        $temporaryPassword = $this->doctorManagement->updateDoctor($record, $request->validated());
+
+        if ($temporaryPassword !== null) {
+            return redirect()
+                ->route('admin.doctors.index')
+                ->with('status', 'Doctor password reset. Share this temporary password securely; it will only be shown once.')
+                ->with('temporary_password', $temporaryPassword);
+        }
 
         return redirect()->route('admin.doctors.index')->with('status', 'Doctor details updated.');
     }

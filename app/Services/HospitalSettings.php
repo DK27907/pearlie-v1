@@ -57,6 +57,10 @@ class HospitalSettings
     {
         $hospital = $this->freshHospital();
 
+        if ($key === 'auto_confirm_paid_appointments') {
+            return $hospital->shouldAutoConfirmPaidAppointments();
+        }
+
         if (isset(self::COLUMN_MAP[$key])) {
             $value = $hospital->getAttribute(self::COLUMN_MAP[$key]);
             if ($value !== null) {
@@ -96,9 +100,17 @@ class HospitalSettings
             throw new InvalidArgumentException("The [{$key}] setting cannot be stored as a hospital column.");
         }
 
-        $this->freshHospital()->update([
+        $hospital = $this->freshHospital();
+        $attributes = [
             self::COLUMN_MAP[$key] => $value,
-        ]);
+        ];
+        if ($key === 'auto_confirm_paid_appointments') {
+            $settings = $hospital->settings ?? [];
+            $settings[$key] = $value;
+            $attributes['settings'] = $settings;
+        }
+
+        $hospital->update($attributes);
     }
 
     public function has(string $key): bool

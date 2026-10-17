@@ -29,6 +29,7 @@ class UpdateDoctorRequest extends FormRequest
             'bio' => ['sometimes', 'nullable', 'string', 'max:3000'],
             'consultation_fee' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:1000000'],
             'licence_number' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'use_temporary_password' => ['sometimes', 'boolean'],
         ];
     }
 }

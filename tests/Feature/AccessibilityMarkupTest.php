@@ -35,12 +35,13 @@ class AccessibilityMarkupTest extends TestCase
             ->assertSee('<select id="revoke-permission-role" name="role"', false)
             ->assertSee('<select id="revoke-permission-permission" name="permission"', false);
 
-        $this->get(route('admin.roles.index'))
+        $this->get(route('admin.users.index'))
             ->assertOk()
-            ->assertSee('<select id="assign-role-user" name="user_id"', false)
-            ->assertSee('<select id="assign-role-name" name="role"', false)
-            ->assertSee('<select id="remove-role-user" name="user_id"', false)
-            ->assertSee('<select id="remove-role-name" name="role"', false);
+            ->assertSee('<select id="role" name="role"', false);
+
+        $this->get(route('admin.users.edit', $admin))
+            ->assertOk()
+            ->assertSee('<select id="role" name="role"', false);
     }
 
     public function test_admin_webhook_url_has_readable_contrast_classes(): void

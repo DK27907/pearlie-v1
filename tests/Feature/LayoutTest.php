@@ -180,12 +180,13 @@ class LayoutTest extends TestCase
         $this->assertSame(1, substr_count($response->getContent(), 'name="email"'));
     }
 
-    public function test_auth_pages_share_the_hospital_branding_and_chat_link(): void
+    public function test_auth_pages_use_platform_branding_and_keep_the_return_link(): void
     {
         $this->get(route('password.request'))
             ->assertOk()
-            ->assertSee(config('pearlie.hospital.name'))
-            ->assertSee(config('pearlie.hospital.emergency_phone'))
+            ->assertSee(config('app.platform_name'))
+            ->assertDontSee(config('pearlie.hospital.name'))
+            ->assertDontSee(config('pearlie.hospital.emergency_phone'))
             ->assertSee('Return to chat');
     }
 }

@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AppointmentLifecycleController as AdminAppointmen
 use App\Http\Controllers\Admin\DoctorController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\SettingsController;
+use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Auth\DoctorSetupController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\Doctor;
@@ -87,7 +88,7 @@ Route::middleware(['auth', 'verified', 'patient'])->group(function (): void {
         ->name('appointments.reschedule.store');
 });
 
-Route::middleware(['auth', 'doctor', 'feature:doctors'])
+Route::middleware(['auth', 'doctor', 'feature:doctors', 'password.changed'])
     ->prefix('doctor')
     ->name('doctor.')
     ->group(function () {
@@ -176,6 +177,10 @@ Route::middleware(['auth', 'hospital.admin'])
     ->name('admin.')
     ->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+        Route::get('/users', [UserController::class, 'index'])->name('users.index');
+        Route::get('/users/{user}/edit', [UserController::class, 'edit'])->whereNumber('user')->name('users.edit');
+        Route::put('/users/{user}', [UserController::class, 'update'])->whereNumber('user')->name('users.update');
+        Route::delete('/users/{user}', [UserController::class, 'destroy'])->whereNumber('user')->name('users.destroy');
         Route::resource('doctors', DoctorController::class)->except('show')->middleware('feature:doctors');
         Route::post('doctors/{doctor}/invite', [DoctorController::class, 'invite'])
             ->name('doctors.invite');

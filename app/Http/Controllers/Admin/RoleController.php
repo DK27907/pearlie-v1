@@ -4,46 +4,44 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Spatie\Permission\Models\Role;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
 
 class RoleController extends Controller
 {
-    public function index()
-    {
-        $users = User::orderBy('name')->get();
-        $roles = Role::orderBy('name')->get();
+    private const MANAGED_ROLES = ['hospital_admin', 'doctor', 'patient'];
 
-        return view('admin.roles.index', compact('users', 'roles'));
+    public function index(): RedirectResponse
+    {
+        return redirect()->route('admin.users.index');
     }
 
-    public function assign(Request $request)
+    public function assign(Request $request): RedirectResponse
     {
-        $request->validate([
-            'user_id' => 'required|integer',
-            'role' => 'required|string|exists:roles,name',
-        ]);
-
-        $user = User::findOrFail($request->input('user_id'));
-        $role = $request->input('role');
-
-        $user->assignRole($role);
-
-        return redirect()->back()->with('status', 'Role assigned.');
+        return $this->redirectToUserEditor($request);
     }
 
-    public function remove(Request $request)
+    public function remove(Request $request): RedirectResponse
     {
-        $request->validate([
-            'user_id' => 'required|integer',
-            'role' => 'required|string|exists:roles,name',
+        return $this->redirectToUserEditor($request);
+    }
+
+    private function redirectToUserEditor(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'user_id' => ['required', 'integer'],
+            'role' => ['required', Rule::in(self::MANAGED_ROLES)],
         ]);
+        $user = User::query()
+            ->where('hospital_id', $request->user()->hospital_id)
+            ->whereKey($validated['user_id'])
+            ->firstOrFail();
+        Gate::authorize('update', $user);
 
-        $user = User::findOrFail($request->input('user_id'));
-        $role = $request->input('role');
-
-        $user->removeRole($role);
-
-        return redirect()->back()->with('status', 'Role removed.');
+        return redirect()
+            ->route('admin.users.edit', $user)
+            ->with('status', 'Update the role in the user account form and save your changes.');
     }
 }

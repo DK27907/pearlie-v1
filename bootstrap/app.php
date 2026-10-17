@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureFeatureEnabled;
+use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\EnsureSuperAdmin;
 use App\Http\Middleware\EnsureUserIsDoctor;
 use App\Http\Middleware\EnsureUserIsHospitalAdmin;
@@ -25,6 +26,21 @@ $application = Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->redirectUsersTo(static function (Request $request): string {
+            $user = $request->user();
+            if (! $user) {
+                return route('login');
+            }
+
+            return match (true) {
+                $user->must_change_password && $user->isDoctor() => route('password.force.edit'),
+                $user->isSuperAdmin() => route('superadmin.dashboard'),
+                $user->isDoctor() => route('doctor.dashboard'),
+                $user->isAdmin() => route('admin.dashboard'),
+                default => route('dashboard'),
+            };
+        });
+
         $middleware->web(
             append: [ResolveHospital::class, SubstituteBindings::class, SecurityHeaders::class],
             remove: [SubstituteBindings::class],
@@ -35,6 +51,7 @@ $application = Application::configure(basePath: dirname(__DIR__))
         );
         $middleware->alias([
             'doctor' => EnsureUserIsDoctor::class,
+            'password.changed' => EnsurePasswordChanged::class,
             'hospital.admin' => EnsureUserIsHospitalAdmin::class,
             'patient' => EnsureUserIsPatient::class,
             'superadmin' => EnsureSuperAdmin::class,

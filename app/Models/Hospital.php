@@ -6,10 +6,12 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Hospital extends Model
 {
     use HasFactory;
+
     protected $attributes = [
         'supported_languages' => '["en","sw"]',
     ];
@@ -17,7 +19,11 @@ class Hospital extends Model
     protected $fillable = [
         'name',
         'slug',
+        'chatbot_name',
         'logo_url',
+        'site_header_text',
+        'site_footer_text',
+        'site_logo_path',
         'primary_color',
         'secondary_color',
         'address',
@@ -39,7 +45,16 @@ class Hospital extends Model
         'mpesa_passkey',
         'deposit_amount',
         'slot_duration_minutes',
+        'auto_confirm_paid_appointments',
+        'business_hours',
+        'notification_preferences',
         'no_show_grace_minutes',
+        'patient_cancellation_enabled',
+        'patient_rescheduling_enabled',
+        'cancellation_cutoff_hours',
+        'rescheduling_cutoff_hours',
+        'late_cancellation_fee',
+        'deposits_refundable',
         'hours_emergency',
         'hours_outpatient',
         'default_language',
@@ -61,6 +76,15 @@ class Hospital extends Model
             'whatsapp_app_secret' => 'encrypted',
             'whatsapp_verify_token' => 'encrypted',
             'deposit_amount' => 'decimal:2',
+            'auto_confirm_paid_appointments' => 'boolean',
+            'business_hours' => 'array',
+            'notification_preferences' => 'array',
+            'patient_cancellation_enabled' => 'boolean',
+            'patient_rescheduling_enabled' => 'boolean',
+            'cancellation_cutoff_hours' => 'integer',
+            'rescheduling_cutoff_hours' => 'integer',
+            'late_cancellation_fee' => 'decimal:2',
+            'deposits_refundable' => 'boolean',
             'supported_languages' => 'array',
             'settings' => 'array',
             'trial_ends_at' => 'datetime',
@@ -93,14 +117,39 @@ class Hospital extends Model
     {
         return $this->hasMany(AppointmentRequest::class);
     }
-    
+
+    public function shouldAutoConfirmPaidAppointments(): bool
+    {
+        $legacyValue = data_get($this->settings, 'auto_confirm_paid_appointments');
+        if ($legacyValue !== null) {
+            $parsedValue = filter_var($legacyValue, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if ($parsedValue !== null) {
+                return $parsedValue;
+            }
+        }
+
+        return (bool) $this->auto_confirm_paid_appointments;
+    }
+
     public function services(): HasMany
     {
         return $this->hasMany(Service::class);
     }
+
     public function chatbotName(): ?string
     {
-        return $this->chatbot_name;
+        if (filled($this->chatbot_name)) {
+            return $this->chatbot_name;
+        }
+
+        $hospitalName = Str::of($this->name)->trim()->before(' ')->toString();
+        if ($hospitalName === '') {
+            return null;
+        }
+
+        $hospitalName = preg_replace('/a$/i', '', $hospitalName) ?? $hospitalName;
+
+        return Str::ucfirst($hospitalName).'ie';
     }
 
     public function integrationCredentials(): HasMany

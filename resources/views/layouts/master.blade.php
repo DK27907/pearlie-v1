@@ -1,6 +1,11 @@
 @php
-    $branding = hospital_branding();
-    $botName = hospital()?->chatbotName() ?? 'Assistant';
+    $isPlatformPage = request()->routeIs('login', 'register', 'password.request', 'password.email', 'password.reset', 'password.store', 'superadmin.*')
+        || hospital() === null;
+    $branding = $isPlatformPage ? platform_branding() : hospital_branding();
+    $botName = $isPlatformPage ? 'Assistant' : (hospital()?->chatbotName() ?? 'Assistant');
+    $metaDescription = $isPlatformPage
+        ? $branding['header_text'].' — healthcare platform.'
+        : $branding['header_text'].' in '.pearlie_config('hospital.location').'. Chat with '.$botName.' or book an appointment.';
 @endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
@@ -8,13 +13,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <meta name="description" content="@yield('meta_description', $branding['header_text'].' in '.pearlie_config('hospital.location').'. Chat with '.$botName.' or book an appointment.')">
-    <meta name="theme-color" content="{{ hospital()?->primary_color ?? '#0a2f44' }}">
+    <meta name="description" content="@yield('meta_description', $metaDescription)">
+    <meta name="theme-color" content="{{ $branding['primary_color'] }}">
     <title>@yield('title', $branding['header_text'])</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('styles')
 </head>
-<body class="flex min-h-screen flex-col bg-slate-50 font-sans antialiased text-slate-900" style="--hospital-primary: {{ hospital()?->primary_color ?? '#0a2f44' }}; --hospital-secondary: {{ hospital()?->secondary_color ?? '#1a5276' }}">
+<body class="flex min-h-screen flex-col bg-slate-50 font-sans antialiased text-slate-900" style="--hospital-primary: {{ $branding['primary_color'] }}; --hospital-secondary: {{ $branding['secondary_color'] }}">
     <x-site-header />
 
     @if (auth()->user()?->isSuperAdmin() && session()->has('impersonating_hospital_id'))
@@ -37,6 +42,7 @@
                 <p class="px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-500">Hospital admin</p>
                 <nav aria-label="Admin navigation" class="grid grid-cols-2 gap-1 lg:grid-cols-1">
                     <a href="{{ route('admin.dashboard') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Dashboard</a>
+                    <a href="{{ route('admin.users.index') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Users</a>
                     @if (hospital()?->hasFeature('booking'))
                         <a href="{{ route('admin.appointments.index') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Appointments</a>
                     @endif

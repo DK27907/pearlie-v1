@@ -21,7 +21,35 @@ class HospitalSettingsTest extends TestCase
 
         $value = (new HospitalSettings)->for($hospital)->get('deposit_amount');
 
-        $this->assertSame(750, $value);
+        $this->assertSame('750.00', $value);
+    }
+
+    public function test_auto_confirm_setting_reads_legacy_json_value(): void
+    {
+        $hospital = Hospital::factory()->create([
+            'auto_confirm_paid_appointments' => false,
+            'settings' => ['auto_confirm_paid_appointments' => true],
+        ]);
+
+        $value = (new HospitalSettings)->for($hospital)->get('auto_confirm_paid_appointments');
+
+        $this->assertTrue($value);
+        $this->assertTrue($hospital->shouldAutoConfirmPaidAppointments());
+    }
+
+    public function test_setting_auto_confirm_synchronizes_legacy_json_and_column(): void
+    {
+        $hospital = Hospital::factory()->create([
+            'auto_confirm_paid_appointments' => true,
+            'settings' => ['auto_confirm_paid_appointments' => true],
+        ]);
+
+        (new HospitalSettings)->for($hospital)->set('auto_confirm_paid_appointments', false);
+
+        $hospital->refresh();
+        $this->assertFalse($hospital->auto_confirm_paid_appointments);
+        $this->assertFalse($hospital->settings['auto_confirm_paid_appointments']);
+        $this->assertFalse($hospital->shouldAutoConfirmPaidAppointments());
     }
 
     public function test_get_falls_back_to_env_config(): void
@@ -51,7 +79,7 @@ class HospitalSettingsTest extends TestCase
 
         $this->assertDatabaseHas('hospitals', [
             'id' => $hospital->id,
-            'deposit_amount' => 999,
+            'deposit_amount' => '999.00',
         ]);
     }
 

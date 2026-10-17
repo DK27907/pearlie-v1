@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Spatie\Permission\Models\Role;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
@@ -45,17 +46,35 @@ class DoctorManagementService
     }
 
     /**
-     * @param  array{name: string, email: string, specialization: string, phone: string, bio?: string|null, consultation_fee?: int|float|string|null, licence_number?: string|null}  $attributes
-     * @return array{doctor: User, invite_sent: bool}
+     * @param  array<string, mixed>  $attributes
+     * @return array{doctor: User, invite_sent: bool, temporary_password: ?string}
      */
     public function createDoctor(array $attributes): array
     {
-        [$doctor, $token, $invite] = DB::transaction(function () use ($attributes): array {
+        $useTemporaryPassword = (bool) ($attributes['use_temporary_password'] ?? false);
+        unset($attributes['use_temporary_password']);
+        $temporaryPassword = $useTemporaryPassword ? Str::random(12) : null;
+
+        [$doctor, $token, $invite] = DB::transaction(function () use ($attributes, $temporaryPassword): array {
+            $doctorRole = Role::query()->firstOrCreate([
+                'name' => 'doctor',
+                'guard_name' => 'web',
+            ]);
             $doctor = User::query()->create([
                 ...$attributes,
-                'password' => Str::random(64),
+                'password' => $temporaryPassword ?? Str::random(64),
+                'role' => 'doctor',
+                'is_admin' => false,
+                'is_super_admin' => false,
                 'is_doctor' => true,
+                'is_active' => true,
+                'must_change_password' => $temporaryPassword !== null,
             ]);
+            $doctor->assignRole($doctorRole);
+
+            if ($temporaryPassword !== null) {
+                return [$doctor, null, null];
+            }
 
             $token = Str::random(64);
             $invite = $doctor->doctorInvites()->create([
@@ -68,16 +87,32 @@ class DoctorManagementService
 
         return [
             'doctor' => $doctor,
-            'invite_sent' => $this->sendInvite($doctor, $token, $invite->expires_at),
+            'invite_sent' => $invite !== null && $this->sendInvite($doctor, $token, $invite->expires_at),
+            'temporary_password' => $temporaryPassword,
         ];
     }
 
     /**
      * @param  array{name: string, email: string, specialization: string, phone: string, bio?: string|null, consultation_fee?: int|float|string|null, licence_number?: string|null}  $attributes
      */
-    public function updateDoctor(User $doctor, array $attributes): void
+    public function updateDoctor(User $doctor, array $attributes): ?string
     {
+        $useTemporaryPassword = (bool) ($attributes['use_temporary_password'] ?? false);
+        unset($attributes['use_temporary_password']);
+
         $doctor->update($attributes);
+
+        if (! $useTemporaryPassword) {
+            return null;
+        }
+
+        $temporaryPassword = Str::random(12);
+        $doctor->forceFill([
+            'password' => $temporaryPassword,
+            'must_change_password' => true,
+        ])->save();
+
+        return $temporaryPassword;
     }
 
     public function deactivateDoctor(User $doctor): void

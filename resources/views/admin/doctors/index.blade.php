@@ -13,6 +13,12 @@
     @if (session('status'))
         <div role="status" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{{ session('status') }}</div>
     @endif
+    @if (session('temporary_password'))
+        <div role="alert" class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+            <p class="font-semibold">Temporary password (shown once)</p>
+            <p class="mt-1 font-mono">{{ session('temporary_password') }}</p>
+        </div>
+    @endif
     @if (session('error'))
         <div role="alert" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{{ session('error') }}</div>
     @endif

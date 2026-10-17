@@ -14,6 +14,9 @@ return [
     */
 
     'name' => env('APP_NAME', 'Laravel'),
+    'platform_name' => env('PLATFORM_NAME', 'MediDesk AI'),
+    'platform_footer' => env('PLATFORM_FOOTER', 'MediDesk AI — AxiomForge Digital Solutions'),
+    'platform_logo' => env('PLATFORM_LOGO'),
 
     /*
     |--------------------------------------------------------------------------

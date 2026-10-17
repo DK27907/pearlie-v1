@@ -42,6 +42,10 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::get('password/edit', [PasswordController::class, 'edit'])
         ->name('password.edit');
+    Route::get('password/force', [PasswordController::class, 'editForced'])
+        ->name('password.force.edit');
+    Route::put('password/force', [PasswordController::class, 'updateForced'])
+        ->name('password.force.update');
 
     Route::get('verify-email', EmailVerificationPromptController::class)
         ->name('verification.notice');

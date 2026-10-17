@@ -32,4 +32,27 @@ class PasswordController extends Controller
 
         return back()->with('status', 'password-updated');
     }
+
+    public function editForced(Request $request): View
+    {
+        abort_unless($request->user()?->isDoctor() && $request->user()->must_change_password, 404);
+
+        return view('auth.password-force-change');
+    }
+
+    public function updateForced(Request $request): RedirectResponse
+    {
+        abort_unless($request->user()?->isDoctor() && $request->user()->must_change_password, 404);
+
+        $validated = $request->validate([
+            'password' => ['required', Password::defaults(), 'confirmed'],
+        ]);
+
+        $request->user()->forceFill([
+            'password' => Hash::make($validated['password']),
+            'must_change_password' => false,
+        ])->save();
+
+        return redirect()->route('doctor.dashboard')->with('status', 'Your password has been changed.');
+    }
 }

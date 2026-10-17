@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -15,7 +16,8 @@ class EnsureUserIsDoctor
      */
     public function handle(Request $request, Closure $next): Response
     {
-        abort_unless($request->user()?->is_active && $request->user()?->isDoctor(), 403);
+        $user = $request->user();
+        abort_unless($user instanceof User && $user->is_active && $user->isDoctor(), 403);
 
         return $next($request);
     }

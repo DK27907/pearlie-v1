@@ -1,9 +1,11 @@
 <header class="sticky top-0 z-40 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
     @php
         $tenantHospital = hospital();
-        $branding = hospital_branding();
-        $homeUrl = $tenantHospital ? route('tenant.home', $tenantHospital->slug) : route('home');
-        $assistantUrl = $tenantHospital ? route('tenant.chat.page', $tenantHospital->slug) : route('pearlie.index');
+        $isPlatformPage = $tenantHospital === null
+            || request()->routeIs('login', 'register', 'password.request', 'password.email', 'password.reset', 'password.store', 'superadmin.*');
+        $branding = $isPlatformPage ? platform_branding() : hospital_branding();
+        $homeUrl = ! $isPlatformPage && $tenantHospital ? route('tenant.home', $tenantHospital->slug) : route('home');
+        $assistantUrl = ! $isPlatformPage && $tenantHospital ? route('tenant.chat.page', $tenantHospital->slug) : route('home');
         $botName = $tenantHospital?->chatbotName() ?? 'Assistant';
     @endphp
     <nav aria-label="Main navigation" class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 sm:px-6 lg:px-8">
@@ -16,27 +18,31 @@
                 @endif
                 <span class="min-w-0">
                     <span class="block text-lg font-bold leading-tight text-[var(--hospital-primary)]">{{ $branding['header_text'] }}</span>
-                    <span class="block max-w-[15rem] truncate text-xs font-medium text-slate-500">{{ pearlie_config('hospital.location') }}</span>
+                    @if (! $isPlatformPage)
+                        <span class="block max-w-[15rem] truncate text-xs font-medium text-slate-500">{{ pearlie_config('hospital.location') }}</span>
+                    @endif
                 </span>
             </a>
 
-            <div class="hidden items-center gap-1 md:flex">
-                <a href="{{ $homeUrl }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-[var(--hospital-primary)]">Home</a>
-                <a href="{{ $assistantUrl }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-[var(--hospital-primary)]">Chat with {{ $botName }}</a>
-                <a href="{{ $assistantUrl }}" class="rounded-lg bg-[var(--hospital-secondary)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--hospital-primary)]">Book Appointment</a>
-            </div>
+            @if (! $isPlatformPage)
+                <div class="hidden items-center gap-1 md:flex">
+                    <a href="{{ $homeUrl }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-[var(--hospital-primary)]">Home</a>
+                    <a href="{{ $assistantUrl }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-[var(--hospital-primary)]">Chat with {{ $botName }}</a>
+                    <a href="{{ $assistantUrl }}" class="rounded-lg bg-[var(--hospital-secondary)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--hospital-primary)]">Book Appointment</a>
+                </div>
+            @endif
 
             <div class="hidden items-center gap-3 md:flex">
                 @auth
                     @if (auth()->user()->isSuperAdmin())
                         <a href="{{ route('superadmin.dashboard') }}" class="text-sm font-semibold text-[#1a5276] hover:text-[#0a2f44]">Platform Admin</a>
-                    @elseif (auth()->user()->isAdmin())
+                    @elseif (! $isPlatformPage && auth()->user()->isAdmin())
                         <a href="{{ url('/admin/dashboard') }}" class="text-sm font-semibold text-[#1a5276] hover:text-[#0a2f44]">Admin Dashboard</a>
                     @endif
-                    @if (auth()->user()->isDoctor())
+                    @if (! $isPlatformPage && auth()->user()->isDoctor())
                         <a href="{{ url('/doctor/dashboard') }}" class="text-sm font-semibold text-[#1a5276] hover:text-[#0a2f44]">My Dashboard</a>
                     @endif
-                    @if (! auth()->user()->isSuperAdmin() && ! auth()->user()->isAdmin() && ! auth()->user()->isDoctor())
+                    @if (! $isPlatformPage && ! auth()->user()->isSuperAdmin() && ! auth()->user()->isAdmin() && ! auth()->user()->isDoctor())
                         <a href="{{ route('appointments.index') }}" class="text-sm font-semibold text-[#1a5276] hover:text-[#0a2f44]">My Appointments</a>
                     @endif
                     <details class="group relative">
@@ -65,20 +71,22 @@
         </div>
 
         <div id="site-mobile-menu" hidden class="space-y-1 border-t border-slate-100 py-3 md:hidden">
-            <a href="{{ $homeUrl }}" class="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Home</a>
-            <a href="{{ $assistantUrl }}" class="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Chat with {{ $botName }}</a>
-            <a href="{{ $assistantUrl }}" class="block rounded-lg px-3 py-2 text-sm font-semibold text-[var(--hospital-secondary)] hover:bg-slate-50">Book Appointment</a>
+            @if (! $isPlatformPage)
+                <a href="{{ $homeUrl }}" class="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Home</a>
+                <a href="{{ $assistantUrl }}" class="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Chat with {{ $botName }}</a>
+                <a href="{{ $assistantUrl }}" class="block rounded-lg px-3 py-2 text-sm font-semibold text-[var(--hospital-secondary)] hover:bg-slate-50">Book Appointment</a>
+            @endif
             @auth
                 <p class="px-3 py-2 text-sm font-semibold text-[#0a2f44]">{{ auth()->user()->name }}</p>
                 @if (auth()->user()->isSuperAdmin())
                     <a href="{{ route('superadmin.dashboard') }}" class="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Platform Admin</a>
-                @elseif (auth()->user()->isAdmin())
+                @elseif (! $isPlatformPage && auth()->user()->isAdmin())
                     <a href="{{ url('/admin/dashboard') }}" class="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Admin Dashboard</a>
                 @endif
-                @if (auth()->user()->isDoctor())
+                @if (! $isPlatformPage && auth()->user()->isDoctor())
                     <a href="{{ url('/doctor/dashboard') }}" class="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">My Dashboard</a>
                 @endif
-                @if (! auth()->user()->isSuperAdmin() && ! auth()->user()->isAdmin() && ! auth()->user()->isDoctor())
+                @if (! $isPlatformPage && ! auth()->user()->isSuperAdmin() && ! auth()->user()->isAdmin() && ! auth()->user()->isDoctor())
                     <a href="{{ route('appointments.index') }}" class="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">My Appointments</a>
                 @endif
                 <a href="{{ route('settings.profile') }}" class="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Settings</a>

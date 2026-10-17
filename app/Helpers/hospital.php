@@ -47,26 +47,48 @@ if (! function_exists('pearlie_config')) {
 
 if (! function_exists('hospital_branding')) {
     /**
-     * @return array{header_text: string, footer_text: string, logo_url: ?string}
+     * @return array{header_text: string, footer_text: string, logo_url: ?string, primary_color: string, secondary_color: string}
      */
     function hospital_branding(): array
     {
         $tenantHospital = hospital();
-        $hospitalName = $tenantHospital?->name ?? 'MediDesk AI';
+        if (! $tenantHospital) {
+            return platform_branding();
+        }
+
+        $hospitalName = $tenantHospital->name;
         $defaultFooter = '© '.date('Y').' '.$hospitalName;
-        if (filled($tenantHospital?->address)) {
+        if (filled($tenantHospital->address)) {
             $defaultFooter .= ' · '.$tenantHospital->address;
         }
-        $logoPath = $tenantHospital?->site_logo_path ?: $tenantHospital?->logo_url;
+        $logoPath = $tenantHospital->site_logo_path ?: $tenantHospital->logo_url;
 
         return [
-            'header_text' => filled($tenantHospital?->site_header_text)
+            'header_text' => filled($tenantHospital->site_header_text)
                 ? $tenantHospital->site_header_text
                 : $hospitalName,
             'footer_text' => filled($tenantHospital?->site_footer_text)
                 ? $tenantHospital->site_footer_text
                 : $defaultFooter,
             'logo_url' => $logoPath ? Storage::disk('public')->url($logoPath) : null,
+            'primary_color' => $tenantHospital->primary_color ?: '#0a2f44',
+            'secondary_color' => $tenantHospital->secondary_color ?: '#1a5276',
+        ];
+    }
+}
+
+if (! function_exists('platform_branding')) {
+    /**
+     * @return array{header_text: string, footer_text: string, logo_url: ?string, primary_color: string, secondary_color: string}
+     */
+    function platform_branding(): array
+    {
+        return [
+            'header_text' => (string) config('app.platform_name', 'MediDesk AI'),
+            'footer_text' => (string) config('app.platform_footer', 'MediDesk AI — AxiomForge Digital Solutions'),
+            'logo_url' => config('app.platform_logo'),
+            'primary_color' => '#0a2f44',
+            'secondary_color' => '#1a5276',
         ];
     }
 }

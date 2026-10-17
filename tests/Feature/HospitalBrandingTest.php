@@ -103,13 +103,66 @@ class HospitalBrandingTest extends TestCase
             ->assertDontSee('0707799114');
     }
 
-    public function test_forgot_password_page_uses_platform_branding_without_tenant_context(): void
+    public function test_forgot_password_page_uses_platform_branding_with_no_tenant_context(): void
     {
         $this->get(route('password.request'))
             ->assertSee('MediDesk AI')
             ->assertDontSee('Pearl Hospital')
             ->assertDontSee('Vin Plaza')
             ->assertDontSee('0707799114');
+    }
+
+    public function test_superadmin_dashboard_uses_platform_branding_without_tenant_contacts(): void
+    {
+        $pearl = Hospital::query()->where('slug', 'pearl')->firstOrFail();
+        $superadmin = User::factory()->create([
+            'role' => 'super_admin',
+            'is_super_admin' => true,
+        ]);
+
+        $this->actingAs($superadmin)
+            ->get(route('superadmin.dashboard'))
+            ->assertOk()
+            ->assertSee('MediDesk AI')
+            ->assertSee('MediDesk AI platform administration')
+            ->assertDontSee((string) $pearl->address)
+            ->assertDontSee((string) $pearl->phone)
+            ->assertDontSee((string) $pearl->email);
+    }
+
+    public function test_login_page_uses_platform_branding_without_pearl_contact_details(): void
+    {
+        $pearl = Hospital::query()->where('slug', 'pearl')->firstOrFail();
+
+        $this->get(route('login'))
+            ->assertOk()
+            ->assertSee(config('app.platform_name'))
+            ->assertDontSee('Pearl Hospital')
+            ->assertDontSee((string) $pearl->address)
+            ->assertDontSee((string) $pearl->phone)
+            ->assertDontSee((string) $pearl->email);
+    }
+
+    public function test_register_page_uses_platform_branding(): void
+    {
+        $this->get(route('register'))
+            ->assertOk()
+            ->assertSee(config('app.platform_name'))
+            ->assertDontSee('Pearl Hospital');
+    }
+
+    public function test_tenant_chat_page_retains_its_hospital_branding(): void
+    {
+        Hospital::query()
+            ->where('slug', 'pearl')
+            ->firstOrFail()
+            ->forceFill(['chatbot_name' => 'Pearlie'])
+            ->save();
+
+        $this->get(route('tenant.chat.page', 'pearl'))
+            ->assertOk()
+            ->assertSee('Pearl Hospital')
+            ->assertSee('Pearlie');
     }
 
     public function test_two_hospitals_show_their_own_headers(): void

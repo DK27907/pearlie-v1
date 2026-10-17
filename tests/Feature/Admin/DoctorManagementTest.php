@@ -7,6 +7,7 @@ use App\Models\DoctorInvite;
 use App\Models\Hospital;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -25,7 +26,7 @@ class DoctorManagementTest extends TestCase
         );
     }
 
-    public function test_admin_can_create_doctor_and_invitation_email_is_sent(): void
+    public function test_doctor_created_via_admin_has_doctor_role_and_flag(): void
     {
         Mail::fake();
         $admin = User::factory()->create(['is_admin' => true]);
@@ -53,6 +54,10 @@ class DoctorManagementTest extends TestCase
             'is_doctor' => true,
         ]);
         $this->assertDatabaseCount('doctor_invites', 1);
+        $doctor = User::query()->where('email', 'ada@example.test')->firstOrFail();
+        $this->assertSame('doctor', $doctor->role);
+        $this->assertTrue($doctor->is_doctor);
+        $this->assertTrue($doctor->hasRole('doctor'));
         $sentMail = null;
         Mail::assertSent(DoctorInviteMail::class, function (DoctorInviteMail $mail) use (&$sentMail): bool {
             $sentMail = $mail;
@@ -60,6 +65,77 @@ class DoctorManagementTest extends TestCase
             return $mail->doctor->email === 'ada@example.test';
         });
         $this->assertSame("You're invited to the MediDesk AI Doctor Dashboard", $sentMail->envelope()->subject);
+    }
+
+    public function test_doctor_with_temporary_password_must_change_on_first_login(): void
+    {
+        Mail::fake();
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $response = $this->actingAs($admin)->post(route('admin.doctors.store'), [
+            'name' => 'Dr. Temporary Password',
+            'email' => 'temporary-doctor@example.test',
+            'specialization' => 'General Medicine',
+            'phone' => '+254 712 345 678',
+            'use_temporary_password' => '1',
+        ]);
+
+        $response->assertRedirect(route('admin.doctors.index'))
+            ->assertSessionHas('temporary_password');
+        $temporaryPassword = session('temporary_password');
+        $doctor = User::query()->where('email', 'temporary-doctor@example.test')->firstOrFail();
+        $this->assertIsString($temporaryPassword);
+        $this->assertSame(12, strlen($temporaryPassword));
+        $this->assertTrue(Hash::check($temporaryPassword, $doctor->password));
+        $this->assertTrue($doctor->must_change_password);
+        $this->assertDatabaseCount('doctor_invites', 0);
+        Mail::assertNothingOutgoing();
+
+        $this->post(route('logout'));
+        $this->post('/login', [
+            'email' => $doctor->email,
+            'password' => $temporaryPassword,
+        ])->assertRedirect(route('password.force.edit'));
+        $this->get(route('doctor.dashboard'))->assertRedirect(route('password.force.edit'));
+    }
+
+    public function test_doctor_can_change_forced_password_and_access_dashboard(): void
+    {
+        $doctor = User::factory()->create([
+            'is_doctor' => true,
+            'role' => 'doctor',
+            'must_change_password' => true,
+        ]);
+
+        $this->actingAs($doctor)
+            ->get(route('doctor.dashboard'))
+            ->assertRedirect(route('password.force.edit'));
+
+        $this->put(route('password.force.update'), [
+            'password' => 'a-new-secure-password',
+            'password_confirmation' => 'a-new-secure-password',
+        ])->assertRedirect(route('doctor.dashboard'));
+
+        $doctor->refresh();
+        $this->assertFalse($doctor->must_change_password);
+        $this->assertTrue(Hash::check('a-new-secure-password', $doctor->password));
+        $this->get(route('doctor.dashboard'))->assertOk();
+    }
+
+    public function test_doctor_without_must_change_flag_skips_password_change(): void
+    {
+        $doctor = User::factory()->create([
+            'is_doctor' => true,
+            'role' => 'doctor',
+            'must_change_password' => false,
+        ]);
+
+        $this->post('/login', [
+            'email' => $doctor->email,
+            'password' => 'password',
+        ])->assertRedirect(route('doctor.dashboard'));
+
+        $this->get(route('doctor.dashboard'))->assertOk();
     }
 
     public function test_admin_cannot_create_doctor_with_a_negative_consultation_fee(): void

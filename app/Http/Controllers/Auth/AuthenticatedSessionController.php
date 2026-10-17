@@ -30,6 +30,10 @@ class AuthenticatedSessionController extends Controller
         $user = $request->user();
         $request->session()->regenerate();
 
+        if ($user->must_change_password) {
+            return redirect()->route('password.force.edit');
+        }
+
         $defaultDestination = match (true) {
             $user->isSuperAdmin() => route('superadmin.dashboard'),
             $user->isDoctor() => route('doctor.dashboard'),
@@ -84,6 +88,6 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerateToken();
 
-        return redirect('/');
+        return redirect()->route('login');
     }
 }

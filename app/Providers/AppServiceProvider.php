@@ -4,9 +4,11 @@ namespace App\Providers;
 
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Models\User;
+use App\Policies\UserPolicy;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
@@ -28,6 +30,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Gate::policy(User::class, UserPolicy::class);
+
         $tenantRateLimitKey = static function (Request $request): string {
             $tenant = (string) ($request->route('slug') ?? 'pearl');
             $sessionKey = 'tenant_rate_limit_session_'.hash('sha256', $tenant);

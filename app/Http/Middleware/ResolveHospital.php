@@ -16,7 +16,7 @@ class ResolveHospital
     {
         $isHomeRoute = $request->routeIs('home');
 
-        if ($isHomeRoute) {
+        if ($isHomeRoute || $request->routeIs('superadmin.*')) {
             app()->instance('currentHospital', null);
 
             return $next($request);

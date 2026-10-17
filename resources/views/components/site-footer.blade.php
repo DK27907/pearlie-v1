@@ -1,12 +1,21 @@
 <footer class="bg-[#0a2f44] text-slate-200">
     @php
         $tenantHospital = hospital();
-        $branding = hospital_branding();
-        $assistantUrl = $tenantHospital ? route('tenant.chat.page', $tenantHospital->slug) : route('pearlie.index');
+        $isPlatformPage = $tenantHospital === null
+            || request()->routeIs('login', 'register', 'password.request', 'password.email', 'password.reset', 'password.store', 'superadmin.*');
+        $branding = $isPlatformPage ? platform_branding() : hospital_branding();
+        $assistantUrl = $tenantHospital ? route('tenant.chat.page', $tenantHospital->slug) : route('home');
         $botName = $tenantHospital?->chatbotName() ?? 'Assistant';
         $servicesUrl = $tenantHospital ? route('tenant.home', $tenantHospital->slug).'#services' : route('home').'#services';
         $whatsappNumber = preg_replace('/\D+/', '', (string) pearlie_config('hospital.whatsapp_number'));
     @endphp
+    @if ($isPlatformPage)
+        <div class="border-t border-white/10">
+            <div class="mx-auto flex max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 py-4 text-xs text-slate-400 sm:px-6 lg:px-8">
+                <p>{{ $branding['footer_text'] }}</p>
+            </div>
+        </div>
+    @else
     <div class="mx-auto grid max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] gap-10 px-4 py-12 sm:px-6 md:grid-cols-3 lg:px-8">
         <section>
             <h2 class="text-lg font-bold text-white">{{ $branding['header_text'] }}</h2>
@@ -57,4 +66,5 @@
             <p>Powered by AxiomForge Digital Solutions</p>
         </div>
     </div>
+    @endif
 </footer>
