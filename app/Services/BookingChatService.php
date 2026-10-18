@@ -499,7 +499,7 @@ class BookingChatService
                 ->get();
             $normalizedMessage = mb_strtolower($message);
             $specialtyTerms = match (true) {
-                preg_match('/\b(dentist|dentists|dental)\b/iu', $normalizedMessage) === 1 => ['dent', 'oral'],
+                preg_match('/\b(dentist|dentists|dental|daktari wa meno|madaktari wa meno)\b/iu', $normalizedMessage) === 1 => ['dent', 'oral'],
                 preg_match('/\b(ob\/gyn|obstetrician|gynecologist|gynaecologist)\b/iu', $normalizedMessage) === 1 => ['obstetric', 'gynec', 'gynaec'],
                 preg_match('/\b(radiologist|radiology)\b/iu', $normalizedMessage) === 1 => ['radiolog'],
                 preg_match('/\b(physiotherapist|physiotherapy)\b/iu', $normalizedMessage) === 1 => ['physiotherap'],

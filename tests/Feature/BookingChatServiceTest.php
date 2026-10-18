@@ -1807,6 +1807,25 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame('hospital_doctors', $response->source);
     }
 
+    public function test_swahili_dental_doctor_question_only_returns_dental_specialists(): void
+    {
+        [, , $doctors] = $this->createContext(doctorNames: ['Dr. Amina Njeri', 'Dr. Brian Otieno']);
+        $doctors[0]->update(['specialization' => 'Dentist']);
+        $doctors[1]->update(['specialization' => 'General Practitioner']);
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'dynamic-swahili-dentist-question',
+            'Mna daktari wa meno?',
+            'web',
+        );
+
+        $this->assertStringContainsString('Dr. Amina Njeri', $response->message);
+        $this->assertStringNotContainsString('Dr. Brian Otieno', $response->message);
+        $this->assertSame('IDLE', $response->state);
+        $this->assertSame('hospital_doctors', $response->source);
+    }
+
     public function test_hospital_location_answer_uses_current_hospital_settings(): void
     {
         [$hospital] = $this->createContext();
