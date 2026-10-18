@@ -19,6 +19,7 @@ use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -326,6 +327,31 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
         $this->assertSame(503, $response->getStatusCode());
         $this->assertStringContainsString($hospital->slug, $response->getContent());
         $this->assertStringContainsString('WhatsApp is not configured', $response->getContent());
+    }
+
+    public function test_whatsapp_webhook_returns_503_when_tenant_credentials_cannot_be_decrypted(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $this->setCurrentHospital($hospital);
+        app(HospitalSettings::class)->for($hospital)->setCredential('whatsapp', [
+            'verify_token' => 'tenant-verify-token',
+        ]);
+        DB::table('hospital_integration_credentials')
+            ->where('hospital_id', $hospital->id)
+            ->where('provider', 'whatsapp')
+            ->update(['credentials' => 'invalid-encrypted-payload']);
+        config([
+            'integrations.allow_global_fallback' => true,
+            'whatsapp.verify_token' => 'global-verify-token',
+        ]);
+
+        $response = app(WhatsAppWebhookController::class)->verify(
+            Request::create('/webhooks/whatsapp?hub.verify_token=global-verify-token&hub.mode=subscribe'),
+        );
+
+        $this->assertSame(503, $response->getStatusCode());
+        $this->assertStringContainsString('WhatsApp is not configured', $response->getContent());
+        $this->assertStringNotContainsString('global-verify-token', $response->getContent());
     }
 
     public function test_tenant_without_sms_credentials_fails_closed(): void

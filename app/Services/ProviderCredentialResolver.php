@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Exceptions\MissingProviderCredentialsException;
 use App\Models\Hospital;
+use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Support\Facades\Log;
 
 class ProviderCredentialResolver
 {
@@ -24,16 +26,30 @@ class ProviderCredentialResolver
         array $legacyAttributeMap,
         array $requiredCredentials,
     ): array {
-        $tenantCredentials = $this->hospitalSettings
-            ->for($hospital)
-            ->credential(mb_strtolower(str_replace('-', '', $provider))) ?? [];
+        try {
+            $tenantCredentials = $this->hospitalSettings
+                ->for($hospital)
+                ->credential(mb_strtolower(str_replace('-', '', $provider))) ?? [];
 
-        foreach ($legacyAttributeMap as $key => $attribute) {
-            if (! filled($tenantCredentials[$key] ?? null)
-                && filled($hospital->getAttribute($attribute))
-            ) {
-                $tenantCredentials[$key] = $hospital->getAttribute($attribute);
+            foreach ($legacyAttributeMap as $key => $attribute) {
+                if (! filled($tenantCredentials[$key] ?? null)
+                    && filled($hospital->getAttribute($attribute))
+                ) {
+                    $tenantCredentials[$key] = $hospital->getAttribute($attribute);
+                }
             }
+        } catch (DecryptException $exception) {
+            Log::error('Stored provider credentials could not be decrypted.', [
+                'provider' => $provider,
+                'hospital_slug' => $hospital->slug,
+                'exception_type' => $exception::class,
+            ]);
+
+            throw MissingProviderCredentialsException::forHospital(
+                $hospital,
+                $provider,
+                $requiredCredentials,
+            );
         }
 
         $missingCredentials = array_values(array_filter(
