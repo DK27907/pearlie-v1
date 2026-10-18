@@ -22,7 +22,7 @@ class UpdateMpesaSettingsRequest extends FormRequest
 
     public function rules(): array
     {
-        $stored = app(HospitalSettings::class)->for(hospital())->credential('mpesa') ?? [];
+        $stored = app(HospitalSettings::class)->for(hospital())->credentialForAdminForm('mpesa')['credentials'];
         $secretRules = static fn (string $key, array $rules): array => filled($stored[$key] ?? null)
             ? ['sometimes', 'nullable', ...$rules]
             : ['required', ...$rules];

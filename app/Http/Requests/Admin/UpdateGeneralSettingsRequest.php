@@ -22,7 +22,10 @@ class UpdateGeneralSettingsRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'deposit_amount' => ['required', 'integer', 'min:0', 'max:1000000'],
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
+            'address' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'deposit_amount' => ['required', 'numeric', 'min:0', 'max:1000000'],
             'slot_duration_minutes' => ['required', 'integer', 'min:5', 'max:480'],
             'auto_confirm_paid_appointments' => ['sometimes', 'boolean'],
             'patient_cancellation_enabled' => ['sometimes', 'boolean'],

@@ -23,7 +23,7 @@ class UpdateSmsSettingsRequest extends FormRequest
     public function rules(): array
     {
         $provider = $this->input('provider');
-        $stored = app(HospitalSettings::class)->for(hospital())->credential('sms') ?? [];
+        $stored = app(HospitalSettings::class)->for(hospital())->credentialForAdminForm('sms')['credentials'];
         $conditionalRules = static function (string $key, array $rules) use ($stored): array {
             $providerRule = 'required_if:provider,'.($key === 'username' || $key === 'api_key' || $key === 'sender_id'
                 ? 'africastalking'
