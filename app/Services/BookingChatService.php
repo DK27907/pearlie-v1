@@ -1169,11 +1169,15 @@ class BookingChatService
                 'exception' => $exception,
             ]);
             $state['state'] = self::STATE_CANCELLED;
-            $response = $exception instanceof MissingProviderCredentialsException
-                ? $exception->getMessage()
-                : ($state['language'] === self::LANGUAGE_SWAHILI
+            if ($exception instanceof MissingProviderCredentialsException) {
+                $response = $state['language'] === self::LANGUAGE_SWAHILI
+                    ? "M-Pesa haijasanidiwa kwa hospitali [{$exception->hospitalSlug}]. Msimamizi anahitaji kuweka taarifa za malipo kwenye mipangilio ya hospitali."
+                    : $exception->getMessage();
+            } else {
+                $response = $state['language'] === self::LANGUAGE_SWAHILI
                     ? 'Ombi lako la miadi limehifadhiwa, lakini ombi la M-Pesa halikutumwa. Tafadhali wasiliana na hospitali kwa msaada.'
-                    : 'Your appointment request was saved, but the M-Pesa prompt could not be sent. Please contact the hospital for help.');
+                    : 'Your appointment request was saved, but the M-Pesa prompt could not be sent. Please contact the hospital for help.';
+            }
 
             return $this->respond(
                 $sessionId,

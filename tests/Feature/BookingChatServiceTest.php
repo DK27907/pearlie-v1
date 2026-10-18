@@ -1587,6 +1587,38 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame('sw', $response->collectedFields['language']);
     }
 
+    public function test_swahili_chat_cancels_booking_and_releases_its_slot_when_mpesa_credentials_are_missing(): void
+    {
+        $this->createContext(mpesaEnabled: true);
+        config(['integrations.allow_global_fallback' => false]);
+        Http::preventStrayRequests();
+
+        $chat = app(BookingChatService::class);
+        $sessionId = 'swahili-missing-mpesa-credentials';
+        $chat->handle($sessionId, 'Nataka kuweka miadi', 'web');
+        $chat->handle($sessionId, 'Dental Cleaning', 'web');
+        $chat->handle($sessionId, 'kesho', 'web');
+        $chat->handle($sessionId, 'Test Patient', 'web');
+        $chat->handle($sessionId, '0748249882', 'web');
+        $chat->handle($sessionId, '9 asubuhi', 'web');
+        $response = $chat->handle($sessionId, 'ndiyo', 'web');
+        $appointment = AppointmentRequest::withoutGlobalScopes()
+            ->where('session_id', $sessionId)
+            ->first();
+
+        $this->assertSame('CANCELLED', $response->state);
+        $this->assertStringContainsString('M-Pesa haijasanidiwa', $response->message);
+        $this->assertNotNull($appointment);
+        $this->assertSame(AppointmentRequest::STATUS_CANCELLED, $appointment->status);
+        $this->assertDatabaseMissing('slot_holds', [
+            'appointment_request_id' => $appointment->id,
+        ]);
+        $this->assertDatabaseMissing('mpesa_payments', [
+            'appointment_request_id' => $appointment->id,
+        ]);
+        Http::assertNothingSent();
+    }
+
     public function test_chat_keeps_general_knowledge_questions_in_hospital_scope(): void
     {
         $this->createContext();

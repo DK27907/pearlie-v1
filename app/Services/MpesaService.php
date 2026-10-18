@@ -190,14 +190,7 @@ class MpesaService
             }
 
             if ($appointmentId !== null) {
-                try {
-                    $this->lifecycle->cancelAppointmentAfterFailedInitiation($appointmentId);
-                } catch (Throwable $lifecycleException) {
-                    Log::error('Unable to cancel an appointment after M-Pesa initiation failed.', [
-                        'appointment_id' => $appointmentId,
-                        'exception_class' => $lifecycleException::class,
-                    ]);
-                }
+                $this->cancelAppointmentAfterFailedInitiation($appointmentId);
             }
 
             app(ExternalProviderLogger::class)->record('mpesa', 'stk_push', 'failed', $providerHttpStatus, null, $exception);
@@ -749,6 +742,18 @@ class MpesaService
     public function initiateStkPush(AppointmentRequest $appointment): array
     {
         try {
+            $config = $this->configForCurrentHospital();
+        } catch (Throwable $exception) {
+            $this->cancelAppointmentAfterFailedInitiation($appointment->id);
+            Log::error('Unable to resolve M-Pesa configuration for an appointment payment.', [
+                'appointment_id' => $appointment->id,
+                'exception_class' => $exception::class,
+            ]);
+
+            throw $exception;
+        }
+
+        try {
             return $this->stkPush(
                 (string) ($appointment->mpesa_phone ?: $appointment->phone),
                 (float) (
@@ -757,7 +762,7 @@ class MpesaService
                     ?? $appointment->booking_fee
                     ?? pearlie_config('appointment.deposit_amount')
                 ),
-                (string) $this->configForCurrentHospital()['account_reference'],
+                (string) $config['account_reference'],
                 (string) $this->config(
                     'transaction_description',
                     pearlie_config('hospital.name').' appointment booking',
@@ -828,6 +833,18 @@ class MpesaService
         }
 
         return $config;
+    }
+
+    private function cancelAppointmentAfterFailedInitiation(int $appointmentId): void
+    {
+        try {
+            $this->lifecycle->cancelAppointmentAfterFailedInitiation($appointmentId);
+        } catch (Throwable $exception) {
+            Log::error('Unable to cancel an appointment after M-Pesa initiation failed.', [
+                'appointment_id' => $appointmentId,
+                'exception_class' => $exception::class,
+            ]);
+        }
     }
 
     private function config(string $key, mixed $default = null): mixed
