@@ -22,7 +22,7 @@ class UpdateEmailSettingsRequest extends FormRequest
 
     public function rules(): array
     {
-        $stored = app(HospitalSettings::class)->for(hospital())->credential('email') ?? [];
+        $stored = app(HospitalSettings::class)->for(hospital())->credentialForAdminForm('email')['credentials'];
         $resendKeyRules = filled($stored['resend_api_key'] ?? null)
             ? ['sometimes', 'nullable', 'string', 'max:255']
             : ['required_if:mailer,resend', 'nullable', 'string', 'max:255'];

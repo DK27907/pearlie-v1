@@ -4,8 +4,11 @@ namespace App\Services;
 
 use App\Models\Hospital;
 use App\Models\HospitalIntegrationCredential;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -133,6 +136,30 @@ class HospitalSettings
     }
 
     /**
+     * @return array{credentials: array<string, mixed>, unreadable: bool}
+     */
+    public function credentialForAdminForm(string $provider): array
+    {
+        try {
+            return [
+                'credentials' => $this->credential($provider) ?? [],
+                'unreadable' => false,
+            ];
+        } catch (DecryptException $exception) {
+            Log::warning('Hospital integration credentials could not be decrypted.', [
+                'hospital_id' => $this->boundHospital()->id,
+                'provider' => $provider,
+                'exception' => $exception->getMessage(),
+            ]);
+
+            return [
+                'credentials' => [],
+                'unreadable' => true,
+            ];
+        }
+    }
+
+    /**
      * @param  array<string, mixed>  $credentials
      */
     public function setCredential(string $provider, array $credentials): void
@@ -143,15 +170,38 @@ class HospitalSettings
             throw new InvalidArgumentException("The [{$provider}] integration provider is not supported.");
         }
 
-        Model::withoutEvents(function () use ($provider, $credentials): void {
-            $this->credentialRelation()->updateOrCreate(
-                ['provider' => $provider],
-                [
-                    'credentials' => $credentials,
-                    'is_active' => true,
-                ],
-            );
-        });
+        try {
+            DB::transaction(function () use ($provider, $credentials): void {
+                Model::withoutEvents(function () use ($provider, $credentials): void {
+                    $this->credentialRelation()->updateOrCreate(
+                        ['provider' => $provider],
+                        [
+                            'credentials' => $credentials,
+                            'is_active' => true,
+                        ],
+                    );
+                });
+            });
+        } catch (DecryptException $exception) {
+            Log::warning('Replacing unreadable hospital integration credentials.', [
+                'hospital_id' => $this->boundHospital()->id,
+                'provider' => $provider,
+                'exception' => $exception->getMessage(),
+            ]);
+
+            DB::transaction(function () use ($provider, $credentials): void {
+                $relation = $this->credentialRelation();
+                $relation->where('provider', $provider)->delete();
+
+                Model::withoutEvents(function () use ($relation, $provider, $credentials): void {
+                    $relation->create([
+                        'provider' => $provider,
+                        'credentials' => $credentials,
+                        'is_active' => true,
+                    ]);
+                });
+            });
+        }
     }
 
     public function deleteCredential(string $provider): void

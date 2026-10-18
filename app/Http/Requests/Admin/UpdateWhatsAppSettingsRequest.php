@@ -22,7 +22,7 @@ class UpdateWhatsAppSettingsRequest extends FormRequest
 
     public function rules(): array
     {
-        $stored = app(HospitalSettings::class)->for(hospital())->credential('whatsapp') ?? [];
+        $stored = app(HospitalSettings::class)->for(hospital())->credentialForAdminForm('whatsapp')['credentials'];
         $secretRules = static fn (string $key, array $rules): array => filled($stored[$key] ?? null)
             ? ['sometimes', 'nullable', ...$rules]
             : ['required', ...$rules];

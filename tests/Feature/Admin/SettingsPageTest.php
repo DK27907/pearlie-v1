@@ -86,6 +86,86 @@ class SettingsPageTest extends TestCase
         $this->assertSame('08:00', $hospital->fresh()->business_hours['monday']['open']);
     }
 
+    public function test_admin_can_update_hospital_information_and_tenant_pages_show_it(): void
+    {
+        $hospital = Hospital::factory()->create(['deposit_amount' => '500.00']);
+        $admin = $this->createAdmin($hospital);
+        $updatedName = 'Pearl Hospital Audit';
+        $updatedPhone = '254748249882';
+        $updatedAddress = 'Audit Avenue, Nyeri';
+
+        $this->actingAs($admin)
+            ->put(route('admin.integration-settings.general.update'), [
+                'name' => $updatedName,
+                'phone' => $updatedPhone,
+                'address' => $updatedAddress,
+                'deposit_amount' => $hospital->deposit_amount,
+                'slot_duration_minutes' => 30,
+            ])
+            ->assertRedirect(route('admin.integration-settings.edit', ['tab' => 'general']));
+
+        $hospital->refresh();
+        $this->assertSame($updatedName, $hospital->name);
+        $this->assertSame($updatedPhone, $hospital->phone);
+        $this->assertSame($updatedAddress, $hospital->address);
+        $this->assertSame('500.00', $hospital->deposit_amount);
+
+        $this->get(route('tenant.home', ['slug' => $hospital->slug]))
+            ->assertSee($updatedName)
+            ->assertSee($updatedPhone)
+            ->assertSee($updatedAddress);
+        $this->get(route('tenant.chat.page', ['slug' => $hospital->slug]))
+            ->assertSee($updatedName);
+    }
+
+    public function test_provider_settings_tabs_render_a_warning_for_unreadable_credentials(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $admin = $this->createAdmin($hospital);
+
+        foreach (['mpesa', 'whatsapp', 'sms', 'email'] as $provider) {
+            $credential = HospitalIntegrationCredential::factory()->create([
+                'hospital_id' => $hospital->id,
+                'provider' => $provider,
+            ]);
+            DB::table('hospital_integration_credentials')
+                ->where('id', $credential->id)
+                ->update(['credentials' => 'not-valid-ciphertext']);
+
+            $this->actingAs($admin)
+                ->get(route('admin.integration-settings.edit', ['tab' => $provider]))
+                ->assertOk()
+                ->assertSee('Stored integration credentials are unreadable.')
+                ->assertSee('Please re-enter them to restore the integration.');
+        }
+    }
+
+    public function test_admin_can_reenter_whatsapp_credentials_after_decryption_failure(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $admin = $this->createAdmin($hospital);
+        $credential = HospitalIntegrationCredential::factory()->create([
+            'hospital_id' => $hospital->id,
+            'provider' => 'whatsapp',
+        ]);
+        DB::table('hospital_integration_credentials')
+            ->where('id', $credential->id)
+            ->update(['credentials' => 'not-valid-ciphertext']);
+        $credentials = [
+            'phone_number_id' => '123456789',
+            'access_token' => 'replacement-access-token',
+            'verify_token' => 'replacement-verify-token',
+            'app_secret' => 'replacement-app-secret',
+            'api_version' => 'v21.0',
+        ];
+
+        $this->actingAs($admin)
+            ->put(route('admin.integration-settings.whatsapp.update'), $credentials)
+            ->assertRedirect(route('admin.integration-settings.edit', ['tab' => 'whatsapp']));
+
+        $this->assertSame($credentials, app(HospitalSettings::class)->for($hospital)->credential('whatsapp'));
+    }
+
     public function test_admin_can_update_appointment_lifecycle_policy(): void
     {
         $hospital = Hospital::factory()->create();

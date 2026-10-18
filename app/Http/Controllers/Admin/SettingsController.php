@@ -47,7 +47,15 @@ class SettingsController extends Controller
 
         $credentials = array_fill_keys(self::PROVIDERS, []);
         if (in_array($activeTab, self::PROVIDERS, true)) {
-            $credentials[$activeTab] = $settings->credential($activeTab) ?? [];
+            $credentialResult = $settings->credentialForAdminForm($activeTab);
+            $credentials[$activeTab] = $credentialResult['credentials'];
+            if ($credentialResult['unreadable']) {
+                session()->flash(
+                    'warning',
+                    'Stored integration credentials are unreadable. Please re-enter them to restore the integration.',
+                );
+            }
+
             foreach (self::SECRET_FIELDS[$activeTab] as $field) {
                 if (filled($credentials[$activeTab][$field] ?? null)) {
                     $credentials[$activeTab][$field] = '••••••••'.substr($credentials[$activeTab][$field], -4);
@@ -75,12 +83,16 @@ class SettingsController extends Controller
 
     public function updateGeneral(UpdateGeneralSettingsRequest $request, HospitalSettings $settings): RedirectResponse
     {
-        $settings->for($this->currentHospital());
+        $hospital = $this->currentHospital();
+        $settings->for($hospital);
         $data = $request->validated();
         $settings->set('deposit_amount', $data['deposit_amount']);
         $settings->set('slot_duration_minutes', $data['slot_duration_minutes']);
         $settings->set('auto_confirm_paid_appointments', $data['auto_confirm_paid_appointments'] ?? false);
-        $policyFields = array_intersect_key($data, array_flip([
+        $hospitalFields = array_intersect_key($data, array_flip([
+            'name',
+            'phone',
+            'address',
             'patient_cancellation_enabled',
             'patient_rescheduling_enabled',
             'cancellation_cutoff_hours',
@@ -88,8 +100,8 @@ class SettingsController extends Controller
             'late_cancellation_fee',
             'deposits_refundable',
         ]));
-        if ($policyFields !== []) {
-            $this->currentHospital()->forceFill($policyFields)->save();
+        if ($hospitalFields !== []) {
+            $hospital->fill($hospitalFields)->save();
         }
         $businessHours = $data['business_hours'] ?? [];
         foreach ($businessHours as &$hours) {
@@ -105,7 +117,7 @@ class SettingsController extends Controller
     {
         $provider = 'mpesa';
         $settings->for($this->currentHospital());
-        $existing = $settings->credential($provider) ?? [];
+        $existing = $settings->credentialForAdminForm($provider)['credentials'];
         $submitted = $request->validated();
 
         $merged = [];
@@ -131,7 +143,7 @@ class SettingsController extends Controller
     {
         $provider = 'whatsapp';
         $settings->for($this->currentHospital());
-        $existing = $settings->credential($provider) ?? [];
+        $existing = $settings->credentialForAdminForm($provider)['credentials'];
         $submitted = $request->validated();
 
         $merged = [];
@@ -157,7 +169,7 @@ class SettingsController extends Controller
     {
         $provider = 'sms';
         $settings->for($this->currentHospital());
-        $existing = $settings->credential($provider) ?? [];
+        $existing = $settings->credentialForAdminForm($provider)['credentials'];
         $submitted = $request->validated();
         $selectedProvider = $submitted['provider'];
         $activeFields = $selectedProvider === 'africastalking'
@@ -194,7 +206,7 @@ class SettingsController extends Controller
     {
         $provider = 'email';
         $settings->for($this->currentHospital());
-        $existing = $settings->credential($provider) ?? [];
+        $existing = $settings->credentialForAdminForm($provider)['credentials'];
         $submitted = $request->validated();
 
         $merged = [];

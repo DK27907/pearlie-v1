@@ -36,6 +36,10 @@
             <p role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">{{ session('status') }}</p>
         @endif
 
+        @if (session('warning'))
+            <p role="alert" class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900">{{ session('warning') }}</p>
+        @endif
+
         @if ($errors->any())
             <div role="alert" class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800">
                 <p class="font-semibold">Please correct the highlighted settings.</p>
@@ -65,15 +69,29 @@
                 <section role="tabpanel" class="space-y-6 p-5 sm:p-7">
                     <div>
                         <h2 class="text-lg font-bold text-slate-900">General</h2>
-                        <p class="mt-1 text-sm text-slate-600">Set the booking deposit, appointment duration, confirmation policy, and weekly hours.</p>
+                        <p class="mt-1 text-sm text-slate-600">Update hospital contact information, booking defaults, confirmation policy, and weekly hours.</p>
                     </div>
                     <form method="POST" action="{{ route('admin.integration-settings.general.update') }}" class="space-y-6">
                         @csrf
                         @method('PUT')
                         <div class="grid gap-5 sm:grid-cols-2">
                             <label class="block text-sm font-semibold text-slate-700">
+                                Hospital name
+                                <input class="{{ $inputClass }}" type="text" name="name" maxlength="255" required value="{{ old('name', $hospital->name) }}">
+                            </label>
+                            <label class="block text-sm font-semibold text-slate-700">
+                                Phone
+                                <input class="{{ $inputClass }}" type="tel" name="phone" maxlength="30" value="{{ old('phone', $hospital->phone) }}">
+                            </label>
+                            <label class="block text-sm font-semibold text-slate-700 sm:col-span-2">
+                                Address
+                                <textarea class="{{ $inputClass }}" name="address" maxlength="500" rows="2">{{ old('address', $hospital->address) }}</textarea>
+                            </label>
+                        </div>
+                        <div class="grid gap-5 sm:grid-cols-2">
+                            <label class="block text-sm font-semibold text-slate-700">
                                 Deposit amount (KES)
-                                <input class="{{ $inputClass }}" type="number" name="deposit_amount" min="0" max="1000000" required value="{{ old('deposit_amount', $depositAmount) }}">
+                                <input class="{{ $inputClass }}" type="number" name="deposit_amount" min="0" max="1000000" step="0.01" required value="{{ old('deposit_amount', $depositAmount) }}">
                             </label>
                             <label class="block text-sm font-semibold text-slate-700">
                                 Slot duration (minutes)
