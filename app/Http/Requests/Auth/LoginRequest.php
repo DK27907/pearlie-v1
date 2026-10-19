@@ -49,7 +49,9 @@ class LoginRequest extends FormRequest
             ->where('email', $credentials['email'])
             ->first();
         $provider = Auth::guard()->getProvider();
-        $authenticated = $user !== null && $provider->validateCredentials($user, $credentials);
+        $authenticated = $user !== null
+            && $provider->validateCredentials($user, $credentials)
+            && (! $this->is('login') || $user->isSuperAdmin());
 
         if ($authenticated) {
             $provider->rehashPasswordIfRequired($user, $credentials);
