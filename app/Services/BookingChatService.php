@@ -508,11 +508,51 @@ class BookingChatService
         }
 
         if ($intent === 'doctors') {
-            $doctors = $hospital->doctors()
+            $normalizedMessage = mb_strtolower($message);
+            $asksAvailability = preg_match(
+                '/\b(?:who|which)\s+(?:is\s+)?available\s+(?:today|tomorrow|on\s+[\pL\d-]+)/iu',
+                $message,
+            ) === 1;
+
+            if ($asksAvailability && ($requestedDate = DateParser::parse($message)) !== null) {
+                $availableDoctors = collect($this->availability->getAllDoctorsWithSlots(
+                    $hospital,
+                    $requestedDate->toDateString(),
+                ))
+                    ->filter(fn (array $doctorAvailability): bool => collect($doctorAvailability['slots'])->contains(true))
+                    ->values();
+
+                $response = $availableDoctors->isEmpty()
+                    ? sprintf(
+                        'I do not see any appointment slots listed as available at %s on %s. Please contact the hospital to confirm current availability.',
+                        $hospital->name,
+                        $requestedDate->format('l, j F Y'),
+                    )
+                    : sprintf(
+                        'Doctors with appointment slots at %s on %s: %s.',
+                        $hospital->name,
+                        $requestedDate->format('l, j F Y'),
+                        $availableDoctors
+                            ->map(fn (array $doctorAvailability): string => $doctorAvailability['doctor']->name
+                                .' ('.collect($doctorAvailability['slots'])->filter()->keys()->implode(', ').')')
+                            ->implode(', '),
+                    );
+
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $response,
+                    $state,
+                    source: 'hospital_doctor_availability',
+                );
+            }
+
+            $listedDoctors = $hospital->doctors()
                 ->where('is_active', true)
                 ->orderBy('name')
                 ->get();
-            $normalizedMessage = mb_strtolower($message);
+            $doctors = $listedDoctors;
             $specialtyTerms = match (true) {
                 preg_match('/\b(dentist|dentists|dental|daktari wa meno|madaktari wa meno)\b/iu', $normalizedMessage) === 1 => ['dent', 'oral'],
                 preg_match('/\b(ob\/gyn|obstetrician|gynecologist|gynaecologist)\b/iu', $normalizedMessage) === 1 => ['obstetric', 'gynec', 'gynaec'],
@@ -527,11 +567,34 @@ class BookingChatService
                 );
             }
 
+            if ($doctors->isEmpty() && $specialtyTerms !== []) {
+                if ($listedDoctors->isNotEmpty()) {
+                    $doctorNames = $listedDoctors
+                        ->map(fn (User $doctor): string => $doctor->name.(
+                            filled($doctor->specialization) ? ' ('.$doctor->specialization.')' : ''
+                        ))
+                        ->implode(', ');
+                    $response = $state['language'] === self::LANGUAGE_SWAHILI
+                    ? sprintf(
+                        'Sioni daktari wa taaluma hii aliyeorodheshwa mahususi katika %s. Madaktari walioorodheshwa sasa ni: %s. Tafadhali wasiliana na hospitali kuthibitisha huduma hii.',
+                        $hospital->name,
+                        $doctorNames,
+                    )
+                    : sprintf(
+                        'I cannot confirm a doctor in this specialty from %s’s active staff listing. Currently listed doctors are: %s. Please contact the hospital to confirm this service.',
+                        $hospital->name,
+                        $doctorNames,
+                    );
+
+                    return $this->respond($sessionId, $channel, $message, $response, $state, source: 'hospital_doctors');
+                }
+            }
+
             $response = $doctors->isEmpty()
                 ? sprintf(
                     $state['language'] === self::LANGUAGE_SWAHILI
-                        ? 'Sikupata %s anayepatikana katika %s. Tafadhali wasiliana na hospitali kuthibitisha upatikanaji wa kliniki.'
-                        : 'I could not find an active %s listed at %s. Please contact the hospital to confirm current clinic availability.',
+                    ? 'Sikupata %s anayepatikana katika %s. Tafadhali wasiliana na hospitali kuthibitisha upatikanaji wa kliniki.'
+                    : 'I could not find an active %s listed at %s. Please contact the hospital to confirm current clinic availability.',
                     $state['language'] === self::LANGUAGE_SWAHILI
                         ? ($specialtyTerms !== [] ? 'daktari wa taaluma hiyo' : 'daktari')
                         : ($specialtyTerms !== [] ? 'doctor in that specialty' : 'doctor'),
@@ -1891,11 +1954,15 @@ class BookingChatService
         if (preg_match('/\b(what services|which services|services do you offer|services are available|hospital services|huduma zenu|huduma gani)\b/iu', $normalized)) {
             return 'services';
         }
-        if (preg_match('/\b(dentist|dentists|doctor|doctors|doc|daktari|madaktari|specialist|specialists|radiologist|physiotherapist|obstetrician|gynecologist|gynaecologist)\b/iu', $normalized)
-            && (
-                preg_match('/\b(do you have|is there|are there|available|availability|which|who|can i see|mna|yupo|wapo|yupi|yuko|gimme|give me)\b/iu', $normalized)
-                || preg_match('/^\s*(?:a\s+)?(?:dentists?|doctors?|docs?|daktari|madaktari)\s*[?!.]*\s*$/iu', $normalized)
+        if (
+            (
+                preg_match('/\b(dentist|dentists|doctor|doctors|doc|daktari|madaktari|specialist|specialists|radiologist|physiotherapist|obstetrician|gynecologist|gynaecologist)\b/iu', $normalized)
+                && (
+                    preg_match('/\b(do you have|is there|are there|available|availability|which|who|can i see|mna|yupo|wapo|yupi|yuko|gimme|give me)\b/iu', $normalized)
+                    || preg_match('/^\s*(?:a\s+)?(?:dentists?|doctors?|docs?|daktari|madaktari)\s*[?!.]*\s*$/iu', $normalized)
+                )
             )
+            || preg_match('/\b(?:who|which)\s+(?:is\s+)?available\s+(?:today|tomorrow|on\s+[\pL\d-]+)/iu', $message) === 1
         ) {
             return 'doctors';
         }

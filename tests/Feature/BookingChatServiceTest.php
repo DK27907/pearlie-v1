@@ -1838,6 +1838,72 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame('hospital_doctors', $response->source);
     }
 
+    public function test_dentist_question_discloses_listed_general_doctors_without_claiming_they_are_dentists(): void
+    {
+        [$hospital, , $doctors] = $this->createContext(doctorNames: ['Dr. Pearl Consultant']);
+        $doctors[0]->update(['specialization' => 'Consultation']);
+        $otherHospital = Hospital::factory()->create(['name' => 'Demo Hospital']);
+        app()->instance('currentHospital', $otherHospital);
+        User::factory()->for($otherHospital, 'hospital')->create([
+            'name' => 'Dr. Demo Dentist',
+            'is_doctor' => true,
+            'is_active' => true,
+            'role' => 'doctor',
+            'specialization' => 'Dentist',
+        ]);
+        app()->instance('currentHospital', $hospital);
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'dentist-question-with-general-provider',
+            'Do you have a dentist?',
+            'web',
+        );
+
+        $this->assertStringContainsString('Dr. Pearl Consultant', $response->message);
+        $this->assertStringContainsString('Consultation', $response->message);
+        $this->assertStringNotContainsString('Dr. Demo Dentist', $response->message);
+        $this->assertStringNotContainsString('doctor in that specialty listed', mb_strtolower($response->message));
+        $this->assertSame('hospital_doctors', $response->source);
+        $this->assertDatabaseCount('escalations', 0);
+    }
+
+    public function test_unqualified_tomorrow_availability_question_returns_only_tenant_doctors_with_open_slots(): void
+    {
+        [$hospital, , $doctors] = $this->createContext(doctorNames: ['Dr. Pearl Available']);
+        $otherHospital = Hospital::factory()->create(['name' => 'Demo Hospital']);
+        app()->instance('currentHospital', $otherHospital);
+        $demoDoctor = User::factory()->for($otherHospital, 'hospital')->create([
+            'name' => 'Dr. Demo Available',
+            'is_doctor' => true,
+            'is_active' => true,
+            'role' => 'doctor',
+        ]);
+        DoctorAvailability::query()->create([
+            'doctor_id' => $demoDoctor->id,
+            'day_of_week' => CarbonImmutable::tomorrow()->dayOfWeek,
+            'start_time' => '09:00',
+            'end_time' => '10:00',
+            'slot_duration_minutes' => 30,
+            'max_patients_per_slot' => 1,
+            'is_active' => true,
+        ]);
+        app()->instance('currentHospital', $hospital);
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'doctor-availability-tomorrow-question',
+            'who is available tomorrow',
+            'web',
+        );
+
+        $this->assertStringContainsString('Dr. Pearl Available', $response->message);
+        $this->assertStringContainsString('09:00', $response->message);
+        $this->assertStringNotContainsString('Dr. Demo Available', $response->message);
+        $this->assertSame('hospital_doctor_availability', $response->source);
+        $this->assertDatabaseCount('escalations', 0);
+    }
+
     public function test_swahili_dental_doctor_question_only_returns_dental_specialists(): void
     {
         [, , $doctors] = $this->createContext(doctorNames: ['Dr. Amina Njeri', 'Dr. Brian Otieno']);
