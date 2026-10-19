@@ -27,3 +27,13 @@ Homestead.yaml
 Thumbs.db
 .env 
 database/database.sqlite 
+tests/Browser/screenshots/deploy-ready/
+tests/Browser/screenshots/e2e-audit/
+tests/Browser/screenshots/final-check/
+tests/Browser/screenshots/final-ship/
+tests/Browser/screenshots/final-verification/
+tests/Browser/screenshots/fulltest/
+tests/Browser/screenshots/live-prod/
+tests/Browser/screenshots/live-prod-final/
+tests/Browser/screenshots/live-prod-recovery/
+tests/Browser/screenshots/final-closeout/
