@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
+use App\Mail\HospitalAdminWelcomeMail;
 use App\Models\Hospital;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 class HospitalManagementService
@@ -96,6 +98,10 @@ class HospitalManagementService
                 'must_change_password' => true,
             ]);
             $admin->syncRolesFromFlags();
+
+            Mail::to($admin->email)->queue(
+                (new HospitalAdminWelcomeMail($hospital, $admin, $adminPassword))->afterCommit(),
+            );
 
             return $hospital;
         });

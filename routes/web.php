@@ -144,7 +144,7 @@ Route::get('/api/payments/{paymentId}/status', [PaymentStatusController::class, 
     ->middleware(['auth', 'hospital.admin', 'throttle:30,1', 'feature:mpesa'])
     ->name('payments.status');
 
-Route::middleware(['auth', 'superadmin'])
+Route::middleware(['auth', 'superadmin', 'password.changed'])
     ->prefix('superadmin')
     ->name('superadmin.')
     ->group(function (): void {
