@@ -486,33 +486,25 @@ class MultiTenancyTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_super_admin_can_create_hospital_and_its_invited_admin_can_complete_setup(): void
+    public function test_super_admin_can_invite_an_admin_to_an_existing_hospital_and_the_admin_can_complete_setup(): void
     {
         Mail::fake();
         $pearl = Hospital::query()->where('slug', 'pearl')->firstOrFail();
+        $hospital = Hospital::factory()->create([
+            'name' => 'Invitation Test Hospital',
+            'slug' => 'invitation-test',
+        ]);
         $platformAdmin = User::factory()->create([
             'hospital_id' => $pearl->id,
             'role' => 'super_admin',
             'is_super_admin' => true,
         ]);
 
-        $response = $this->actingAs($platformAdmin)->post(route('superadmin.hospitals.store'), [
-            'name' => 'Invitation Test Hospital',
-            'slug' => 'invitation-test',
-            'deposit_amount' => 500,
-            'slot_duration_minutes' => 30,
-            'no_show_grace_minutes' => 30,
-            'hours_emergency' => '24/7',
-            'hours_outpatient' => '9:00 AM - 5:00 PM',
-            'default_language' => 'en',
-            'supported_languages' => ['en'],
-            'subscription_plan' => 'professional',
-            'trial_days' => 14,
-            'admin_email' => 'first-admin@invitation-test.co.ke',
-        ]);
-
-        $hospital = Hospital::query()->where('slug', 'invitation-test')->firstOrFail();
-        $response->assertRedirect(route('superadmin.hospitals.show', $hospital));
+        $this->actingAs($platformAdmin)
+            ->post(route('superadmin.hospitals.invite-admin', $hospital), [
+                'email' => 'first-admin@invitation-test.co.ke',
+            ])
+            ->assertRedirect();
 
         $sentInvite = null;
         Mail::assertSent(HospitalAdminInviteMail::class, function (HospitalAdminInviteMail $mail) use (&$sentInvite): bool {
