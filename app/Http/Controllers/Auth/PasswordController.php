@@ -35,14 +35,26 @@ class PasswordController extends Controller
 
     public function editForced(Request $request): View
     {
-        abort_unless($request->user()?->isDoctor() && $request->user()->must_change_password, 404);
+        $user = $request->user();
+        abort_unless(
+            $user
+                && ($user->isDoctor() || ($user->isAdmin() && ! $user->isSuperAdmin()))
+                && $user->must_change_password,
+            404,
+        );
 
         return view('auth.password-force-change');
     }
 
     public function updateForced(Request $request): RedirectResponse
     {
-        abort_unless($request->user()?->isDoctor() && $request->user()->must_change_password, 404);
+        $user = $request->user();
+        abort_unless(
+            $user
+                && ($user->isDoctor() || ($user->isAdmin() && ! $user->isSuperAdmin()))
+                && $user->must_change_password,
+            404,
+        );
 
         $validated = $request->validate([
             'password' => ['required', Password::defaults(), 'confirmed'],
@@ -53,6 +65,8 @@ class PasswordController extends Controller
             'must_change_password' => false,
         ])->save();
 
-        return redirect()->route('doctor.dashboard')->with('status', 'Your password has been changed.');
+        $destination = $user->isDoctor() ? 'doctor.dashboard' : 'admin.dashboard';
+
+        return redirect()->route($destination)->with('status', 'Your password has been changed.');
     }
 }

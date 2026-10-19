@@ -131,7 +131,7 @@ Route::middleware(['auth', 'doctor', 'feature:doctors', 'password.changed'])
         Route::post('/escalations/{id}/reply', [DoctorEscalationController::class, 'reply'])->middleware('feature:escalation')->name('escalations.reply');
     });
 
-Route::middleware(['auth', 'hospital.admin'])
+Route::middleware(['auth', 'hospital.admin', 'password.changed'])
     ->prefix('hospital')
     ->name('hospital.')
     ->group(function (): void {
@@ -190,7 +190,7 @@ Route::post('/mpesa/callback', [MpesaCallbackController::class, 'handleConfirmat
     ->name('mpesa.callback.legacy');
 
 // Admin routes - protected by auth and is_admin middleware
-Route::middleware(['auth', 'hospital.admin'])
+Route::middleware(['auth', 'hospital.admin', 'password.changed'])
     ->prefix('admin')
     ->name('admin.')
     ->group(function () {

@@ -71,17 +71,17 @@ class HospitalController extends Controller
             'secondary_color' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'subscription_plan' => ['required', Rule::in(['starter', 'professional', 'enterprise'])],
             'trial_days' => ['nullable', 'integer', 'min:0', 'max:90'],
+            'admin_name' => ['required', 'string', 'max:255'],
             'admin_email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'admin_password' => ['required', 'string', 'min:12', 'confirmed'],
         ]);
 
         $data['slug'] = Str::slug($data['slug']);
         $this->removeBlankSecrets($data);
-        $result = $hospitals->create($data, (int) $request->user()->id);
+        $hospital = $hospitals->createWithAdmin($data);
 
-        return redirect()->route('superadmin.hospitals.show', $result['hospital'])
-            ->with('status', $result['invitation_sent']
-                ? 'Hospital created. Its administrator invitation has been sent.'
-                : 'Hospital created, but the administrator invitation could not be delivered. Check email settings and resend the invitation.');
+        return redirect()->route('superadmin.hospitals.show', $hospital)
+            ->with('status', "Hospital created. Admin can log in at /h/{$hospital->slug}/login with {$data['admin_email']}.");
     }
 
     public function show(Hospital $hospital): View

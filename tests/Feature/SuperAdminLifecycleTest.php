@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Hospital;
 use App\Models\User;
 use App\Services\HospitalMailService;
+use App\Services\HospitalManagementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
@@ -110,7 +111,10 @@ class SuperAdminLifecycleTest extends TestCase
                 'supported_languages' => ['en', 'sw'],
                 'subscription_plan' => 'professional',
                 'trial_days' => 14,
+                'admin_name' => 'Test Clinic Admin',
                 'admin_email' => 'admin@test-clinic.example',
+                'admin_password' => 'SecureStart!2026',
+                'admin_password_confirmation' => 'SecureStart!2026',
             ]);
 
         $hospital = Hospital::query()->where('slug', 'test-clinic')->firstOrFail();
@@ -159,7 +163,7 @@ class SuperAdminLifecycleTest extends TestCase
             ->once()
             ->andThrow(new TransportException('Mail transport unavailable.'));
 
-        $response = $this->actingAs($superAdmin)->post(route('superadmin.hospitals.store'), [
+        $result = app(HospitalManagementService::class)->create([
             'name' => 'Delivery Failure Hospital',
             'slug' => 'delivery-failure-hospital',
             'deposit_amount' => 500,
@@ -172,15 +176,11 @@ class SuperAdminLifecycleTest extends TestCase
             'subscription_plan' => 'starter',
             'trial_days' => 14,
             'admin_email' => 'admin@delivery-failure.example',
-        ]);
+        ], $superAdmin->id);
 
-        $hospital = Hospital::query()->where('slug', 'delivery-failure-hospital')->firstOrFail();
+        $hospital = $result['hospital'];
 
-        $response->assertRedirect(route('superadmin.hospitals.show', $hospital))
-            ->assertSessionHas(
-                'status',
-                'Hospital created, but the administrator invitation could not be delivered. Check email settings and resend the invitation.',
-            );
+        $this->assertFalse($result['invitation_sent']);
         $this->assertSame(
             $hospital->id,
             User::withoutGlobalScopes()->where('email', 'admin@delivery-failure.example')->value('hospital_id'),
