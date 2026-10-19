@@ -8,6 +8,7 @@ use App\Models\Conversation;
 use App\Models\Service;
 use App\Support\DateParser;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use RuntimeException;
@@ -17,6 +18,7 @@ class WhatsAppBookingService
     public function __construct(
         private readonly PearlieServiceV2 $pearlie,
         private readonly MpesaService $mpesa,
+        private readonly DoctorAvailabilityService $availability,
     ) {}
 
     public function handle(string $from, string $message): array
@@ -196,10 +198,31 @@ class WhatsAppBookingService
         }
 
         if ($appointment) {
-            $appointment->update([
-                'status' => AppointmentRequest::STATUS_CANCELLED,
-                'payment_status' => 'unpaid',
-            ]);
+            DB::transaction(function () use ($appointment): void {
+                $lockedAppointment = AppointmentRequest::query()
+                    ->lockForUpdate()
+                    ->find($appointment->id);
+
+                if (! $lockedAppointment || $lockedAppointment->status !== AppointmentRequest::STATUS_PENDING) {
+                    return;
+                }
+
+                $lockedAppointment->update([
+                    'status' => AppointmentRequest::STATUS_CANCELLED,
+                    'payment_status' => 'unpaid',
+                ]);
+                if ($lockedAppointment->doctor_id
+                    && $lockedAppointment->preferred_date
+                    && $lockedAppointment->slot_start_time
+                ) {
+                    $this->availability->releaseSlotCapacity(
+                        (int) $lockedAppointment->hospital_id,
+                        (int) $lockedAppointment->doctor_id,
+                        $lockedAppointment->preferred_date->format('Y-m-d'),
+                        (string) $lockedAppointment->slot_start_time,
+                    );
+                }
+            });
         }
 
         Cache::forget($this->stateCacheKey($normalizedPhone));

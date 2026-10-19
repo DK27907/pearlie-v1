@@ -25,6 +25,8 @@ class MpesaPayment extends Model
 
     public const STATUS_TIMEOUT = 'timeout';
 
+    public const STATUS_LATE_SUCCESS_REFUND_PENDING = 'late_success_refund_pending';
+
     protected $table = 'mpesa_payments';
 
     protected $fillable = [
@@ -47,7 +49,7 @@ class MpesaPayment extends Model
     protected $casts = [
         'amount' => 'float',
         'result_code' => 'integer',
-        'callback_payload' => 'array',
+        'callback_payload' => 'encrypted:array',
         'processed_at' => 'datetime',
         'notified_at' => 'datetime',
     ];

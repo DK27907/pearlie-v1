@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Spatie\Permission\Models\Role;
 use Spatie\Permission\Traits\HasRoles;
 
 #[Fillable([
@@ -106,5 +107,33 @@ class User extends Authenticatable
     public function isSuperAdmin(): bool
     {
         return (bool) $this->is_super_admin || $this->role === 'super_admin';
+    }
+
+    public function syncRolesFromFlags(): void
+    {
+        $roles = [];
+
+        if ($this->is_super_admin) {
+            $roles[] = 'super_admin';
+        }
+        if ($this->is_admin && ! $this->is_super_admin) {
+            $roles[] = 'hospital_admin';
+        }
+        if ($this->is_doctor) {
+            $roles[] = 'doctor';
+        }
+        if ($roles === []) {
+            $roles[] = 'patient';
+        }
+
+        $roleRecords = array_map(
+            static fn (string $role): Role => Role::query()->firstOrCreate([
+                'name' => $role,
+                'guard_name' => 'web',
+            ]),
+            $roles,
+        );
+
+        $this->syncRoles($roleRecords);
     }
 }

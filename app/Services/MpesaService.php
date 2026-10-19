@@ -242,6 +242,7 @@ class MpesaService
                 return null;
             }
 
+            // A tenant callback route identifies the hospital by its public slug.
             $expectedHospital = $hospitalSlug === null
                 ? null
                 : Hospital::withoutGlobalScopes()->where('slug', $hospitalSlug)->first();
@@ -268,6 +269,7 @@ class MpesaService
                 return null;
             }
 
+            // Provider checkout IDs locate callbacks; a supplied route tenant constrains both records.
             $paymentQuery = MpesaPayment::withoutGlobalScope('hospital')
                 ->where('checkout_request_id', $checkoutRequestId);
             $appointmentQuery = AppointmentRequest::withoutGlobalScope('hospital')
@@ -291,6 +293,7 @@ class MpesaService
             }
 
             $hospitalId = $existingPayment?->hospital_id ?? $appointment?->hospital_id;
+            // The payment or appointment row supplies the persisted tenant for callback processing.
             $callbackHospital = Hospital::withoutGlobalScopes()->find($hospitalId);
 
             if (! $callbackHospital) {
@@ -325,7 +328,14 @@ class MpesaService
                     ->where('checkout_request_id', $checkoutRequestId)
                     ->first();
 
-                if ($existingPayment && ! $existingPayment->isPending()) {
+                $isLateSuccessCandidate = $resultCode === 0
+                    && $existingPayment !== null
+                    && in_array($existingPayment->status, [
+                        MpesaPayment::STATUS_FAILED,
+                        MpesaPayment::STATUS_TIMEOUT,
+                    ], true);
+
+                if ($existingPayment && ! $existingPayment->isPending() && ! $isLateSuccessCandidate) {
                     Log::warning('Ignoring an M-Pesa callback for a non-pending payment.', [
                         'checkout_request_id' => $checkoutRequestId,
                         'payment_status' => $existingPayment->status,
@@ -428,7 +438,13 @@ class MpesaService
                         }
                     }
 
-                    if (! $payment->isPending()) {
+                    $isLateSuccessCandidate = $resultCode === 0
+                        && in_array($payment->status, [
+                            MpesaPayment::STATUS_FAILED,
+                            MpesaPayment::STATUS_TIMEOUT,
+                        ], true);
+
+                    if (! $payment->isPending() && ! $isLateSuccessCandidate) {
                         Log::warning('Ignoring an M-Pesa callback for a non-pending payment.', [
                             'checkout_request_id' => $checkoutRequestId,
                             'payment_status' => $payment->status,
@@ -480,6 +496,24 @@ class MpesaService
                                 'checkout_request_id' => $checkoutRequestId,
                             ]);
                         }
+                    }
+
+                    if ($isLateSuccessCandidate) {
+                        if ($failureReason !== null) {
+                            return $payment->load('appointment');
+                        }
+
+                        $this->lifecycle->recordLateSuccess($payment, [
+                            'result_code' => $resultCode,
+                            'result_description' => $callback['ResultDesc']
+                                ?? 'Payment completed successfully.',
+                            'mpesa_receipt' => is_string($receiptNumber) && trim($receiptNumber) !== ''
+                                ? trim($receiptNumber)
+                                : null,
+                            'callback_payload' => $callbackData,
+                        ]);
+
+                        return $payment->fresh()->load('appointment');
                     }
 
                     $payment->save();

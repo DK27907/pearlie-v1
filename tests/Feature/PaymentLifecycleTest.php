@@ -17,6 +17,7 @@ use App\Services\NotificationService;
 use App\Services\PaymentReconciliationService;
 use App\Services\WhatsAppService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
@@ -63,6 +64,40 @@ class PaymentLifecycleTest extends TestCase
         ]);
         $this->assertSame(1, PaymentEvent::query()->where('payment_id', $payment->id)->count());
         Queue::assertPushed(SendPaymentNotification::class, 1);
+    }
+
+    public function test_payment_callback_pii_is_encrypted_in_every_persisted_payload(): void
+    {
+        [$hospital, , $payment] = $this->createPaymentScenario();
+        $payment->forceFill(['phone' => '254748249882'])->save();
+        $this->configureLocalSandbox();
+        Http::preventStrayRequests();
+        Queue::fake([SendPaymentNotification::class]);
+        $payload = $this->callbackPayload($payment, 0);
+        $payload['Body']['stkCallback']['CallbackMetadata']['Item'][0]['Value'] = 500;
+        $payload['Body']['stkCallback']['CallbackMetadata']['Item'][2]['Value'] = 254748249882;
+
+        $this->postJson('/api/mpesa/callback/'.$hospital->slug, $payload)->assertOk();
+
+        $rawInboxPayload = DB::table('mpesa_callback_inbox')->latest('id')->value('payload');
+        $rawPaymentPayload = DB::table('mpesa_payments')->where('id', $payment->id)->value('callback_payload');
+        $rawEventPayload = DB::table('payment_events')->where('payment_id', $payment->id)->value('payload');
+
+        $this->assertStringNotContainsString('254748249882', $rawInboxPayload, 'The raw callback inbox payload must be encrypted.');
+        $this->assertStringNotContainsString('254748249882', $rawPaymentPayload, 'The raw payment callback payload must be encrypted.');
+        $this->assertStringNotContainsString('254748249882', $rawEventPayload, 'The raw payment event payload must be encrypted.');
+        $this->assertSame(
+            254748249882,
+            data_get($payment->fresh()->callback_payload, 'Body.stkCallback.CallbackMetadata.Item.2.Value'),
+        );
+        $this->assertSame(
+            254748249882,
+            data_get(
+                PaymentEvent::query()->where('payment_id', $payment->id)->firstOrFail()->payload,
+                'callback_payload.Body.stkCallback.CallbackMetadata.Item.2.Value',
+            ),
+        );
+        $this->assertSame($payload, MpesaCallbackInbox::query()->latest('id')->firstOrFail()->payload);
     }
 
     public function test_successful_tenant_callback_records_payment_event(): void

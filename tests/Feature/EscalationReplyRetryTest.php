@@ -9,6 +9,7 @@ use App\Models\Hospital;
 use App\Models\User;
 use App\Services\NotificationService;
 use App\Services\WhatsAppService;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Mockery;
@@ -68,6 +69,32 @@ class EscalationReplyRetryTest extends TestCase
         $this->actingAs($admin)
             ->post(route('admin.escalation-replies.retry', $otherReply->id))
             ->assertNotFound();
+    }
+
+    public function test_reply_job_does_not_mutate_a_reply_from_another_hospital(): void
+    {
+        [$hospital] = $this->createTenant('reply-job-owner');
+        [$otherHospital] = $this->createTenant('reply-job-other');
+        $escalation = $this->createEscalation($otherHospital, 'reply-job-other-session');
+        $reply = $this->createReply($otherHospital, $escalation);
+
+        $notifications = Mockery::mock(NotificationService::class);
+        $notifications->shouldNotReceive('sendSms');
+        $whatsApp = Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldNotReceive('sendMessage');
+        $job = new SendEscalationReply($reply->id, $hospital->id);
+        $replyNotFound = false;
+
+        try {
+            $job->handle($notifications, $whatsApp);
+        } catch (ModelNotFoundException) {
+            $replyNotFound = true;
+        }
+
+        $this->assertTrue($replyNotFound);
+        $this->assertSame(EscalationReply::STATUS_PENDING, $reply->fresh()->status);
+        $this->assertSame(0, $reply->fresh()->attempts);
+        $this->assertSame($otherHospital->id, hospital()->id);
     }
 
     /**

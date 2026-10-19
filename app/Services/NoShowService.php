@@ -16,6 +16,7 @@ class NoShowService
     public function __construct(
         private readonly WhatsAppService $whatsApp,
         private readonly HospitalMailService $mail,
+        private readonly DoctorAvailabilityService $availability,
     ) {}
 
     public function markAsNoShow(AppointmentRequest $appointment, ?string $reason = null): AppointmentRequest
@@ -34,6 +35,17 @@ class NoShowService
                 );
 
                 $lockedAppointment->markAsNoShow($reason);
+                if ($lockedAppointment->doctor_id
+                    && $lockedAppointment->preferred_date
+                    && $lockedAppointment->slot_start_time
+                ) {
+                    $this->availability->releaseSlotCapacity(
+                        (int) $lockedAppointment->hospital_id,
+                        (int) $lockedAppointment->doctor_id,
+                        $lockedAppointment->preferred_date->format('Y-m-d'),
+                        (string) $lockedAppointment->slot_start_time,
+                    );
+                }
 
                 return $lockedAppointment->refresh();
             });

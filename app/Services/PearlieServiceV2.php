@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use LogicException;
 
 class PearlieServiceV2
 {
@@ -665,7 +666,12 @@ class PearlieServiceV2
         ?string $requiredSpecialty = null,
     ): array {
         $date = $this->extractRequestedDate($message) ?? CarbonImmutable::today()->toDateString();
-        $doctors = $this->availabilityService->getAllDoctorsWithSlots($date);
+        $hospital = hospital();
+        if ($hospital === null) {
+            throw new LogicException('A hospital context is required to find doctor availability.');
+        }
+
+        $doctors = $this->availabilityService->getAllDoctorsWithSlots($hospital, $date);
 
         if (filled($requiredSpecialty)) {
             $normalizedSpecialty = mb_strtolower(trim($requiredSpecialty));

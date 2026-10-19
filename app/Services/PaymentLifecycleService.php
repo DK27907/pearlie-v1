@@ -10,9 +10,14 @@ use App\Models\PaymentEvent;
 use App\Models\SlotHold;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class PaymentLifecycleService
 {
+    public function __construct(
+        private readonly DoctorAvailabilityService $availability,
+    ) {}
+
     /**
      * @param  array<string, mixed>  $metadata
      */
@@ -103,6 +108,73 @@ class PaymentLifecycleService
         });
     }
 
+    /**
+     * @param  array<string, mixed>  $metadata
+     */
+    public function recordLateSuccess(MpesaPayment $payment, array $metadata): bool
+    {
+        return DB::transaction(function () use ($payment, $metadata): bool {
+            $lockedPayment = MpesaPayment::query()
+                ->whereKey($payment->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $lockedPayment || ! in_array($lockedPayment->status, [
+                MpesaPayment::STATUS_FAILED,
+                MpesaPayment::STATUS_TIMEOUT,
+            ], true)) {
+                return false;
+            }
+
+            $previousStatus = $lockedPayment->status;
+            $lockedPayment->forceFill([
+                'status' => MpesaPayment::STATUS_LATE_SUCCESS_REFUND_PENDING,
+                'result_code' => $metadata['result_code'] ?? 0,
+                'result_description' => $metadata['result_description']
+                    ?? 'Payment succeeded after the payment had already failed or timed out.',
+                'mpesa_receipt' => $metadata['mpesa_receipt'] ?? null,
+                'callback_payload' => $metadata['callback_payload'] ?? null,
+                'processed_at' => now(),
+            ])->save();
+
+            $appointment = $lockedPayment->appointment_request_id === null
+                ? null
+                : AppointmentRequest::query()
+                    ->whereKey($lockedPayment->appointment_request_id)
+                    ->lockForUpdate()
+                    ->first();
+
+            if ($appointment && $appointment->payment_status !== 'paid') {
+                $appointment->forceFill([
+                    'payment_status' => 'refund_pending',
+                    'payment_amount' => $lockedPayment->amount,
+                    'mpesa_result_code' => $metadata['result_code'] ?? 0,
+                    'mpesa_result_description' => $metadata['result_description']
+                        ?? 'Payment succeeded after the payment had already failed or timed out.',
+                    'mpesa_receipt' => $metadata['mpesa_receipt'] ?? null,
+                    'paid_at' => null,
+                ])->save();
+            }
+
+            $eventPayload = [
+                'previous_status' => $previousStatus,
+                'receipt' => $metadata['mpesa_receipt'] ?? null,
+            ];
+            $this->recordEvent($lockedPayment, 'late_success', $eventPayload);
+
+            Log::warning('M-Pesa payment succeeded after failure or timeout; refund or manual review is required.', [
+                'payment_id' => $lockedPayment->id,
+                'hospital_id' => $lockedPayment->hospital_id,
+                'appointment_id' => $lockedPayment->appointment_request_id,
+                'checkout_request_id' => $lockedPayment->checkout_request_id,
+                'previous_status' => $previousStatus,
+                'receipt' => $metadata['mpesa_receipt'] ?? null,
+            ]);
+
+            return true;
+        });
+    }
+
     public function releaseSlot(AppointmentRequest $appointment): void
     {
         SlotHold::query()
@@ -181,6 +253,7 @@ class PaymentLifecycleService
             return;
         }
 
+        // Payment callbacks may run outside the browser request, so bind reads to the appointment tenant.
         $latestConversation = Conversation::withoutGlobalScopes()
             ->where('hospital_id', $appointment->hospital_id)
             ->where('session_id', $appointment->session_id)
@@ -228,6 +301,7 @@ class PaymentLifecycleService
                 'Booking status: '.$bookingStatus,
             ]);
 
+        // The callback receipt is a system event with its tenant copied from the locked appointment.
         Conversation::withoutGlobalScopes()->forceCreate([
             'hospital_id' => $appointment->hospital_id,
             'session_id' => $appointment->session_id,
@@ -266,6 +340,19 @@ class PaymentLifecycleService
             }
 
             $appointment->forceFill($attributes)->save();
+
+            if ($previousStatus === AppointmentRequest::STATUS_PENDING
+                && $appointment->doctor_id
+                && $appointment->preferred_date
+                && $appointment->slot_start_time
+            ) {
+                $this->availability->releaseSlotCapacity(
+                    (int) $appointment->hospital_id,
+                    (int) $appointment->doctor_id,
+                    $appointment->preferred_date->format('Y-m-d'),
+                    (string) $appointment->slot_start_time,
+                );
+            }
 
             $this->releaseSlot($appointment);
 
@@ -308,6 +395,18 @@ class PaymentLifecycleService
                 'status' => AppointmentRequest::STATUS_CANCELLED,
                 'status_updated_at' => now(),
             ])->save();
+
+            if ($appointment->doctor_id
+                && $appointment->preferred_date
+                && $appointment->slot_start_time
+            ) {
+                $this->availability->releaseSlotCapacity(
+                    (int) $appointment->hospital_id,
+                    (int) $appointment->doctor_id,
+                    $appointment->preferred_date->format('Y-m-d'),
+                    (string) $appointment->slot_start_time,
+                );
+            }
 
             $this->releaseSlot($appointment);
         });

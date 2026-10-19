@@ -13,11 +13,13 @@ use App\Services\Chat\ChatResponse;
 use App\Support\CacheLockRunner;
 use App\Support\DateParser;
 use Carbon\CarbonImmutable;
+use Closure;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
@@ -93,10 +95,7 @@ class BookingChatService
         $sessionId = $this->sessionId($channelId, $channel);
 
         return CacheLockRunner::run(
-            Cache::lock(
-                'booking-chat-state:'.hash('sha256', implode(':', [$hospital->id, $channel, $sessionId])),
-                120,
-            ),
+            Cache::lock($this->sessionLockKey($hospital, $channel, $sessionId), 120),
             10,
             fn (): ChatResponse => $this->handleWithinSessionLock(
                 $channelId,
@@ -141,7 +140,10 @@ class BookingChatService
         }
 
         if (in_array($state['state'], [self::STATE_COMPLETED, self::STATE_CANCELLED], true)) {
-            $state = $this->emptyState(language: $state['language']);
+            $state = $this->emptyState(
+                language: $state['language'],
+                stateVersion: $state['state_version'],
+            );
         }
 
         if (trim($message) === '') {
@@ -227,7 +229,10 @@ class BookingChatService
         }
 
         if ($intent === 'reset') {
-            $state = $this->emptyState(language: $state['language']);
+            $state = $this->emptyState(
+                language: $state['language'],
+                stateVersion: $state['state_version'],
+            );
 
             return $this->respond(
                 $sessionId,
@@ -242,7 +247,11 @@ class BookingChatService
         }
 
         if ($intent === 'cancel') {
-            $state = $this->emptyState(self::STATE_CANCELLED, $state['language']);
+            $state = $this->emptyState(
+                self::STATE_CANCELLED,
+                $state['language'],
+                $state['state_version'],
+            );
 
             return $this->respond(
                 $sessionId,
@@ -267,7 +276,10 @@ class BookingChatService
             )
         ) {
             $this->assistant->clearPendingEscalation($sessionId);
-            $state = $this->emptyState(language: $state['language']);
+            $state = $this->emptyState(
+                language: $state['language'],
+                stateVersion: $state['state_version'],
+            );
             $isSwahili = $state['language'] === self::LANGUAGE_SWAHILI;
 
             return $this->respond(
@@ -305,12 +317,6 @@ class BookingChatService
                     "Thank you. Your request has been passed to the %s team. I'm connecting you to a health worker now; someone will reach out shortly.",
                     $hospital->name,
                 );
-            app(EscalationService::class)->createEscalation(
-                $sessionId,
-                $pendingMessage,
-                $escalationResponse,
-                $escalationPhone,
-            );
             $state['patient_phone'] ??= $escalationPhone;
             $state['escalation_pending'] = false;
             $state['pending_escalation_message'] = null;
@@ -324,6 +330,12 @@ class BookingChatService
                 $state,
                 source: 'human_escalation',
                 escalated: true,
+                beforePersist: fn () => app(EscalationService::class)->createEscalation(
+                    $sessionId,
+                    $pendingMessage,
+                    $escalationResponse,
+                    $escalationPhone,
+                ),
             );
         }
 
@@ -374,7 +386,10 @@ class BookingChatService
 
             if ($state['unrecognized_message_count'] >= 3) {
                 $language = $state['language'];
-                $state = $this->emptyState(language: $language);
+                $state = $this->emptyState(
+                    language: $language,
+                    stateVersion: $state['state_version'],
+                );
 
                 return $this->respond(
                     $sessionId,
@@ -673,7 +688,10 @@ class BookingChatService
                 $state['language'] === self::LANGUAGE_SWAHILI
                     ? 'Kuweka miadi mtandaoni hakujajumuishwa kwenye mpango wa hospitali hii. Tafadhali wasiliana na hospitali moja kwa moja kwa msaada.'
                     : 'Online appointment booking is not included in this hospital plan yet. Please contact the hospital directly for assistance.',
-                $this->emptyState(language: $state['language']),
+                $this->emptyState(
+                    language: $state['language'],
+                    stateVersion: $state['state_version'],
+                ),
                 source: 'subscription_feature_unavailable',
             );
         }
@@ -684,7 +702,10 @@ class BookingChatService
             }
 
             if ($intent === 'no') {
-                $state = $this->emptyState(language: $state['language']);
+                $state = $this->emptyState(
+                    language: $state['language'],
+                    stateVersion: $state['state_version'],
+                );
 
                 return $this->respond(
                     $sessionId,
@@ -745,7 +766,10 @@ class BookingChatService
 
             if (! $fieldWasCollected && $state['unrecognized_message_count'] >= 3) {
                 $language = $state['language'];
-                $state = $this->emptyState(language: $language);
+                $state = $this->emptyState(
+                    language: $language,
+                    stateVersion: $state['state_version'],
+                );
 
                 return $this->respond(
                     $sessionId,
@@ -795,7 +819,7 @@ class BookingChatService
      */
     public function getState(string $channelId, string $channel = 'web'): array
     {
-        $conversation = $this->latestConversation($channelId, $channel);
+        $conversation = $this->latestStateConversation($this->sessionId($channelId, $channel), $channel);
         if (! $conversation || ! is_array($conversation->chat_state)) {
             return $this->emptyState();
         }
@@ -805,16 +829,33 @@ class BookingChatService
         );
     }
 
-    public function reset(string $channelId, string $channel = 'web'): void
+    public function reset(string $channelId, string $channel = 'web'): bool
     {
-        $previousState = $this->persistedState($channelId, $channel);
-        $state = $this->emptyState(language: $previousState['language']);
-        $this->persistState(
-            $this->sessionId($channelId, $channel),
-            $channel,
-            '[booking reset]',
-            '',
-            $state,
+        $hospital = hospital();
+        if (! $hospital instanceof Hospital) {
+            throw new RuntimeException('A hospital context is required to reset a booking conversation.');
+        }
+
+        $sessionId = $this->sessionId($channelId, $channel);
+
+        return CacheLockRunner::run(
+            Cache::lock($this->sessionLockKey($hospital, $channel, $sessionId), 120),
+            10,
+            function () use ($channelId, $channel, $sessionId): bool {
+                $previousState = $this->persistedState($channelId, $channel);
+                $state = $this->emptyState(
+                    language: $previousState['language'],
+                    stateVersion: $previousState['state_version'],
+                );
+
+                return $this->persistState(
+                    $sessionId,
+                    $channel,
+                    '[booking reset]',
+                    '',
+                    $state,
+                );
+            },
         );
     }
 
@@ -1149,7 +1190,7 @@ class BookingChatService
 
         $state['state'] = self::STATE_PAYMENT_PENDING;
         $state['appointment_id'] = $appointment->id;
-        $this->persistState(
+        if (! $this->persistState(
             $sessionId,
             $channel,
             $message,
@@ -1158,7 +1199,10 @@ class BookingChatService
                 : 'Starting the M-Pesa payment request.',
             $state,
             $appointment->id,
-        );
+        )) {
+            return $this->retryResponse($sessionId, $channel, $state['language']);
+        }
+        $state['state_version']++;
 
         try {
             $payment = $this->mpesa->initiateStkPush($appointment);
@@ -2002,11 +2046,18 @@ class BookingChatService
                 $state['language'] === self::LANGUAGE_SWAHILI
                     ? 'Sikupata miadi ijayo inayohusishwa na mazungumzo haya ambayo inaweza kubadilishwa. Tafadhali ingia kwenye dashibodi ya wagonjwa kusimamia miadi.'
                     : 'I could not find an upcoming appointment linked to this chat that can be changed. Please sign in to manage appointments in your patient dashboard.',
-                $this->emptyState(language: $state['language']),
+                $this->emptyState(
+                    language: $state['language'],
+                    stateVersion: $state['state_version'],
+                ),
             );
         }
 
-        $state = $this->emptyState(self::STATE_LIFECYCLE_SELECT, $state['language']);
+        $state = $this->emptyState(
+            self::STATE_LIFECYCLE_SELECT,
+            $state['language'],
+            $state['state_version'],
+        );
         $state['lifecycle_action'] = $action;
         $state['appointment_candidates'] = $eligible->pluck('id')->map(fn ($id): int => (int) $id)->all();
 
@@ -2120,7 +2171,10 @@ class BookingChatService
                     $state['language'] === self::LANGUAGE_SWAHILI
                         ? 'Miadi hiyo haiwezi kubadilishwa kulingana na sera ya sasa ya hospitali.'
                         : 'That appointment cannot be changed under the current hospital policy.',
-                    $this->emptyState(language: $state['language']),
+                    $this->emptyState(
+                        language: $state['language'],
+                        stateVersion: $state['state_version'],
+                    ),
                 );
             }
 
@@ -2146,7 +2200,10 @@ class BookingChatService
                 $state['language'] === self::LANGUAGE_SWAHILI
                     ? 'Sikuweza kuthibitisha miadi hiyo kwa mazungumzo haya. Tafadhali ingia kwenye dashibodi yako ya wagonjwa kuisimamia.'
                     : 'I could not verify that appointment for this chat. Please sign in to manage it in your patient dashboard.',
-                $this->emptyState(language: $state['language']),
+                $this->emptyState(
+                    language: $state['language'],
+                    stateVersion: $state['state_version'],
+                ),
             );
         }
 
@@ -2163,7 +2220,10 @@ class BookingChatService
                     $channel,
                     $message,
                     $isSwahili ? 'Sawa, miadi yako haijaghairiwa.' : 'Okay, your appointment has not been cancelled.',
-                    $this->emptyState(language: $state['language']),
+                    $this->emptyState(
+                        language: $state['language'],
+                        stateVersion: $state['state_version'],
+                    ),
                 );
             }
             if (preg_match('/^\s*(?:yes|y|yeah|yep|ok|confirm|book it|proceed|ndiyo|ndio|sawa)\b/iu', $message) !== 1) {
@@ -2189,7 +2249,10 @@ class BookingChatService
                     $channel,
                     $message,
                     $exception->getMessage(),
-                    $this->emptyState(language: $state['language']),
+                    $this->emptyState(
+                        language: $state['language'],
+                        stateVersion: $state['state_version'],
+                    ),
                 );
             }
 
@@ -2211,7 +2274,10 @@ class BookingChatService
                 $channel,
                 $message,
                 $response,
-                $this->emptyState(language: $state['language']),
+                $this->emptyState(
+                    language: $state['language'],
+                    stateVersion: $state['state_version'],
+                ),
                 $appointmentId,
             );
         }
@@ -2302,7 +2368,10 @@ class BookingChatService
                     $channel,
                     $message,
                     $isSwahili ? 'Sawa, miadi yako haijabadilishwa.' : 'Okay, your appointment has not been changed.',
-                    $this->emptyState(language: $state['language']),
+                    $this->emptyState(
+                        language: $state['language'],
+                        stateVersion: $state['state_version'],
+                    ),
                 );
             }
             if (preg_match('/^\s*(?:yes|y|yeah|yep|ok|confirm|book it|proceed|ndiyo|ndio|sawa)\b/iu', $message) !== 1) {
@@ -2333,7 +2402,10 @@ class BookingChatService
                     $channel,
                     $message,
                     $exception->getMessage(),
-                    $this->emptyState(language: $state['language']),
+                    $this->emptyState(
+                        language: $state['language'],
+                        stateVersion: $state['state_version'],
+                    ),
                 );
             }
 
@@ -2342,7 +2414,10 @@ class BookingChatService
                 $channel,
                 $message,
                 $isSwahili ? 'Miadi yako imebadilishwa.' : 'Your appointment has been rescheduled.',
-                $this->emptyState(language: $state['language']),
+                $this->emptyState(
+                    language: $state['language'],
+                    stateVersion: $state['state_version'],
+                ),
                 $appointmentId,
             );
         }
@@ -2354,7 +2429,10 @@ class BookingChatService
             $isSwahili
                 ? 'Sikuweza kuendelea na ombi hilo la miadi. Tafadhali anza tena.'
                 : 'I could not continue that appointment request. Please start again.',
-            $this->emptyState(language: $state['language']),
+            $this->emptyState(
+                language: $state['language'],
+                stateVersion: $state['state_version'],
+            ),
         );
     }
 
@@ -2380,7 +2458,10 @@ class BookingChatService
                 $state['language'] === self::LANGUAGE_SWAHILI
                     ? 'Sikuweza kuthibitisha miadi hiyo kwa mazungumzo haya.'
                     : 'I could not verify that appointment for this chat.',
-                $this->emptyState(language: $state['language']),
+                $this->emptyState(
+                    language: $state['language'],
+                    stateVersion: $state['state_version'],
+                ),
             );
         }
 
@@ -2435,10 +2516,12 @@ class BookingChatService
     private function emptyState(
         string $status = self::STATE_IDLE,
         string $language = self::LANGUAGE_ENGLISH,
+        int $stateVersion = 0,
     ): array {
         return [
             'state' => $status,
             'language' => $language,
+            'state_version' => $stateVersion,
             'service_id' => null,
             'doctor_id' => null,
             'date' => null,
@@ -2520,6 +2603,7 @@ class BookingChatService
         bool $paymentRequired = false,
         ?string $source = null,
         bool $escalated = false,
+        ?Closure $beforePersist = null,
     ): ChatResponse {
         $state['language'] = in_array($state['language'] ?? null, [
             self::LANGUAGE_ENGLISH,
@@ -2527,7 +2611,19 @@ class BookingChatService
         ], true)
             ? $state['language']
             : self::LANGUAGE_ENGLISH;
-        $this->persistState($sessionId, $channel, $userMessage, $response, $state, $appointmentId, $escalated);
+        if (! $this->persistState(
+            $sessionId,
+            $channel,
+            $userMessage,
+            $response,
+            $state,
+            $appointmentId,
+            $escalated,
+            $beforePersist,
+        )) {
+            return $this->retryResponse($sessionId, $channel, $state['language']);
+        }
+        $state['state_version']++;
 
         return new ChatResponse(
             $response,
@@ -2550,19 +2646,139 @@ class BookingChatService
         array $state,
         ?int $appointmentId = null,
         bool $escalated = false,
-    ): void {
+        ?Closure $beforePersist = null,
+    ): bool {
+        $state = $this->validatedState($state, $sessionId, $channel);
+        $hospital = hospital();
+        if (! $hospital instanceof Hospital) {
+            throw new RuntimeException('A hospital context is required to persist booking conversation state.');
+        }
+
+        return DB::transaction(function () use (
+            $hospital,
+            $sessionId,
+            $channel,
+            $userMessage,
+            $response,
+            $state,
+            $escalated,
+            $beforePersist,
+        ): bool {
+            $latestConversation = $this->latestStateConversation($sessionId, $channel, true);
+            if (! $latestConversation) {
+                Hospital::query()->whereKey($hospital->id)->lockForUpdate()->firstOrFail();
+                $latestConversation = $this->latestStateConversation($sessionId, $channel, true);
+            }
+            $latestVersion = (int) data_get($latestConversation?->chat_state, 'state_version', 0);
+
+            if ($latestVersion !== (int) $state['state_version']) {
+                return false;
+            }
+
+            $beforePersist?->__invoke();
+            $state['state_version']++;
+            Conversation::query()->create([
+                'session_id' => $sessionId,
+                'user_message' => $userMessage,
+                'ai_response' => $response,
+                'confidence_score' => 1.0,
+                'channel' => $channel,
+                'escalated' => $escalated,
+                'chat_state' => $state,
+                'chat_state_updated_at' => now(),
+            ]);
+
+            return true;
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private function persistStateOnConversation(
+        Conversation $conversation,
+        array $state,
+        bool $escalated,
+    ): bool {
+        $hospital = hospital();
+        if (! $hospital instanceof Hospital) {
+            throw new RuntimeException('A hospital context is required to persist booking conversation state.');
+        }
+
+        $sessionId = (string) $conversation->session_id;
+        $channel = (string) $conversation->channel;
         $state = $this->validatedState($state, $sessionId, $channel);
 
-        Conversation::query()->create([
-            'session_id' => $sessionId,
-            'user_message' => $userMessage,
-            'ai_response' => $response,
-            'confidence_score' => 1.0,
-            'channel' => $channel,
-            'escalated' => $escalated,
-            'chat_state' => $state,
-            'chat_state_updated_at' => now(),
-        ]);
+        return DB::transaction(function () use (
+            $conversation,
+            $hospital,
+            $sessionId,
+            $channel,
+            $state,
+            $escalated,
+        ): bool {
+            $latestState = $this->latestStateConversation($sessionId, $channel, true);
+            if (! $latestState) {
+                Hospital::query()->whereKey($hospital->id)->lockForUpdate()->firstOrFail();
+                $latestState = $this->latestStateConversation($sessionId, $channel, true);
+            }
+
+            $latestConversation = Conversation::query()
+                ->where('session_id', $sessionId)
+                ->where('channel', $channel)
+                ->where(function ($query): void {
+                    $query->whereNull('chat_state->system_event')
+                        ->orWhere('chat_state->system_event', '!=', 'payment_receipt');
+                })
+                ->latest('id')
+                ->lockForUpdate()
+                ->first();
+
+            if ((int) $latestConversation?->getKey() !== (int) $conversation->getKey()
+                || (int) data_get($latestState?->chat_state, 'state_version', 0) !== (int) $state['state_version']
+            ) {
+                return false;
+            }
+
+            $state['state_version']++;
+            $conversation->forceFill([
+                'chat_state' => $state,
+                'chat_state_updated_at' => now(),
+                'escalated' => $escalated,
+            ])->save();
+
+            return true;
+        });
+    }
+
+    private function retryResponse(string $sessionId, string $channel, string $language): ChatResponse
+    {
+        $conversation = $this->latestStateConversation($sessionId, $channel);
+        $state = $conversation && is_array($conversation->chat_state)
+            ? $this->validatedState($conversation->chat_state, $sessionId, $channel)
+            : $this->emptyState();
+        $language = in_array($language, [self::LANGUAGE_ENGLISH, self::LANGUAGE_SWAHILI], true)
+            ? $language
+            : self::LANGUAGE_ENGLISH;
+
+        return new ChatResponse(
+            $language === self::LANGUAGE_SWAHILI
+                ? 'Mazungumzo yamesasishwa kwenye ombi jingine. Tafadhali jaribu tena.'
+                : 'This chat was updated by another request. Please try again.',
+            $state['state'],
+            $state['appointment_id'] ?? null,
+            collectedFields: $state,
+            source: 'retry',
+        );
+    }
+
+    private function sessionLockKey(Hospital $hospital, string $channel, string $sessionId): string
+    {
+        return 'booking-chat-state:'.hash('sha256', implode(':', [
+            $hospital->id,
+            $channel,
+            $sessionId,
+        ]));
     }
 
     private function delegateToAssistant(
@@ -2600,21 +2816,26 @@ class BookingChatService
             ->first();
 
         if ($conversation) {
-            $conversation->forceFill([
-                'chat_state' => $state,
-                'chat_state_updated_at' => now(),
-                'escalated' => (bool) ($result['escalated'] ?? false),
-            ])->save();
+            if (! $this->persistStateOnConversation(
+                $conversation,
+                $state,
+                (bool) ($result['escalated'] ?? false),
+            )) {
+                return $this->retryResponse($sessionId, $channel, $state['language']);
+            }
         } else {
-            $this->persistState(
+            if (! $this->persistState(
                 $sessionId,
                 $channel,
                 $message,
                 $response,
                 $state,
                 escalated: (bool) ($result['escalated'] ?? false),
-            );
+            )) {
+                return $this->retryResponse($sessionId, $channel, $state['language']);
+            }
         }
+        $state['state_version']++;
 
         return new ChatResponse(
             $response,
@@ -2712,12 +2933,6 @@ class BookingChatService
         if ($state['escalation_pending'] ?? false) {
             if ($phone !== null) {
                 $pendingMessage = (string) ($state['pending_escalation_message'] ?? $message);
-                app(EscalationService::class)->createEscalation(
-                    $sessionId,
-                    $pendingMessage,
-                    $handoffConfirmation,
-                    $phone,
-                );
                 $state['patient_phone'] ??= $phone;
                 $state['escalation_pending'] = false;
                 $state['pending_escalation_message'] = null;
@@ -2733,6 +2948,12 @@ class BookingChatService
                     $state,
                     source: 'human_escalation',
                     escalated: true,
+                    beforePersist: fn () => app(EscalationService::class)->createEscalation(
+                        $sessionId,
+                        $pendingMessage,
+                        $handoffConfirmation,
+                        $phone,
+                    ),
                 );
             }
 
@@ -2749,12 +2970,6 @@ class BookingChatService
         }
 
         if ($phone !== null) {
-            app(EscalationService::class)->createEscalation(
-                $sessionId,
-                $message,
-                $phonePrompt,
-                $phone,
-            );
             $state['patient_phone'] ??= $phone;
             $state['unrecognized_message_count'] = 0;
 
@@ -2771,6 +2986,12 @@ class BookingChatService
                 $state,
                 source: 'human_escalation',
                 escalated: true,
+                beforePersist: fn () => app(EscalationService::class)->createEscalation(
+                    $sessionId,
+                    $message,
+                    $phonePrompt,
+                    $phone,
+                ),
             );
         }
 
@@ -3105,12 +3326,35 @@ class BookingChatService
             ->first();
     }
 
+    private function latestStateConversation(
+        string $sessionId,
+        string $channel,
+        bool $lockForUpdate = false,
+    ): ?Conversation {
+        $query = Conversation::query()
+            ->where('session_id', $sessionId)
+            ->where('channel', $channel)
+            ->whereNotNull('chat_state')
+            ->where(function ($query): void {
+                $query->whereNull('chat_state->system_event')
+                    ->orWhere('chat_state->system_event', '!=', 'payment_receipt');
+            })
+            ->latest('id');
+
+        if ($lockForUpdate) {
+            $query->lockForUpdate();
+        }
+
+        return $query->first();
+    }
+
     /**
      * @return array<string, mixed>
      */
     private function persistedState(string $channelId, string $channel): array
     {
-        $conversation = $this->latestConversation($channelId, $channel);
+        $sessionId = $this->sessionId($channelId, $channel);
+        $conversation = $this->latestStateConversation($sessionId, $channel);
 
         if (! $conversation || ! is_array($conversation->chat_state)) {
             return $this->emptyState();
@@ -3128,6 +3372,7 @@ class BookingChatService
         $allowedKeys = [
             'state',
             'language',
+            'state_version',
             'service_id',
             'doctor_id',
             'date',
@@ -3178,6 +3423,8 @@ class BookingChatService
 
         $isValid = array_diff(array_keys($state), $allowedKeys) === []
             && in_array($state['state'] ?? null, $validStates, true)
+            && (! array_key_exists('state_version', $state)
+                || (is_int($state['state_version']) && $state['state_version'] >= 0))
             && in_array($state['language'] ?? self::LANGUAGE_ENGLISH, [
                 self::LANGUAGE_ENGLISH,
                 self::LANGUAGE_SWAHILI,
@@ -3214,6 +3461,7 @@ class BookingChatService
 
         if ($isValid) {
             $state['language'] ??= self::LANGUAGE_ENGLISH;
+            $state['state_version'] ??= 0;
 
             return $state;
         }
@@ -3224,7 +3472,11 @@ class BookingChatService
             'unknown_keys' => array_values(array_diff(array_keys($state), $allowedKeys)),
         ]);
 
-        return $this->emptyState();
+        return $this->emptyState(
+            stateVersion: is_int($state['state_version'] ?? null) && $state['state_version'] >= 0
+                ? $state['state_version']
+                : 0,
+        );
     }
 
     /**

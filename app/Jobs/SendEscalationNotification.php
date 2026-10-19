@@ -40,49 +40,61 @@ class SendEscalationNotification implements ShouldQueue
 
     public function handle(): void
     {
-        $hospital = Hospital::withoutGlobalScopes()->find($this->hospitalId);
-        if (! $hospital) {
-            throw new \RuntimeException('The escalation hospital no longer exists.');
-        }
-        app()->instance('currentHospital', $hospital);
-        $this->escalation->unsetRelations();
-        $mail = app(HospitalMailService::class);
+        $hadCurrentHospital = app()->bound('currentHospital');
+        $previousHospital = $hadCurrentHospital ? app('currentHospital') : null;
 
-        $recipients = $this->recipient
-            ? [$this->recipient]
-            : array_unique(array_filter(array_merge(
-                [(string) config('pearlie.escalation_email')],
-                config('pearlie.notify_emails', []),
-            )));
+        try {
+            // The queued escalation stores its owning hospital ID for tenant context restoration.
+            $hospital = Hospital::withoutGlobalScopes()->find($this->hospitalId);
+            if (! $hospital) {
+                throw new \RuntimeException('The escalation hospital no longer exists.');
+            }
+            app()->instance('currentHospital', $hospital);
+            $this->escalation->unsetRelations();
+            $mail = app(HospitalMailService::class);
 
-        if ($recipients === []) {
-            Log::warning('Escalation email notification has no configured recipients.', [
-                'escalation_id' => $this->escalation->id,
-                'channel' => 'email',
-            ]);
+            $recipients = $this->recipient
+                ? [$this->recipient]
+                : array_unique(array_filter(array_merge(
+                    [(string) config('pearlie.escalation_email')],
+                    config('pearlie.notify_emails', []),
+                )));
 
-            return;
-        }
-
-        foreach ($recipients as $recipient) {
-            try {
-                Log::info('Attempting escalation email delivery.', [
+            if ($recipients === []) {
+                Log::warning('Escalation email notification has no configured recipients.', [
                     'escalation_id' => $this->escalation->id,
                     'channel' => 'email',
                 ]);
-                $mail->send($recipient, new EscalationNotification($this->escalation, $this->meta));
-                Log::info('Escalation email was handed to the mail transport.', [
-                    'escalation_id' => $this->escalation->id,
-                    'channel' => 'email',
-                ]);
-            } catch (Throwable $exception) {
-                Log::error('Unable to send escalation email.', [
-                    'escalation_id' => $this->escalation->id,
-                    'channel' => 'email',
-                    'exception_class' => $exception::class,
-                ]);
 
-                throw $exception;
+                return;
+            }
+
+            foreach ($recipients as $recipient) {
+                try {
+                    Log::info('Attempting escalation email delivery.', [
+                        'escalation_id' => $this->escalation->id,
+                        'channel' => 'email',
+                    ]);
+                    $mail->send($recipient, new EscalationNotification($this->escalation, $this->meta));
+                    Log::info('Escalation email was handed to the mail transport.', [
+                        'escalation_id' => $this->escalation->id,
+                        'channel' => 'email',
+                    ]);
+                } catch (Throwable $exception) {
+                    Log::error('Unable to send escalation email.', [
+                        'escalation_id' => $this->escalation->id,
+                        'channel' => 'email',
+                        'exception_class' => $exception::class,
+                    ]);
+
+                    throw $exception;
+                }
+            }
+        } finally {
+            if ($hadCurrentHospital) {
+                app()->instance('currentHospital', $previousHospital);
+            } else {
+                app()->forgetInstance('currentHospital');
             }
         }
     }

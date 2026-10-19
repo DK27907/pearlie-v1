@@ -31,6 +31,7 @@ class SendEscalationReply implements ShouldQueue
 
     public function handle(NotificationService $notifications, WhatsAppService $whatsApp): void
     {
+        // Queue workers have no request tenant; restore the serialized hospital before scoped relations.
         $hospital = Hospital::withoutGlobalScopes()->find($this->hospitalId);
         if (! $hospital) {
             throw new RuntimeException('The escalation reply hospital no longer exists.');
@@ -42,7 +43,11 @@ class SendEscalationReply implements ShouldQueue
 
         try {
             CacheLockRunner::run(Cache::lock('escalation-reply:'.$this->replyId, 180), 5, function () use ($notifications, $whatsApp): void {
-                $reply = EscalationReply::withoutGlobalScopes()->with('escalation')->findOrFail($this->replyId);
+                // The explicit hospital predicate keeps this bypass tenant-bound even for a malformed job.
+                $reply = EscalationReply::withoutGlobalScopes()
+                    ->where('hospital_id', $this->hospitalId)
+                    ->with('escalation')
+                    ->findOrFail($this->replyId);
                 if ($reply->status === EscalationReply::STATUS_SENT) {
                     return;
                 }
@@ -115,6 +120,7 @@ class SendEscalationReply implements ShouldQueue
 
     public function failed(Throwable $exception): void
     {
+        // Failed-job cleanup may bypass the scope only while matching both persisted identifiers.
         EscalationReply::withoutGlobalScopes()
             ->whereKey($this->replyId)
             ->where('hospital_id', $this->hospitalId)

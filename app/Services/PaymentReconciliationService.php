@@ -22,6 +22,7 @@ class PaymentReconciliationService
         $previousHospital = $hadCurrentHospital ? app('currentHospital') : null;
 
         try {
+            // Reconciliation is a system task that iterates tenants and binds each before payment reads.
             Hospital::withoutGlobalScopes()
                 ->orderBy('id')
                 ->chunkById(100, function ($hospitals) use (&$processed): void {
@@ -91,7 +92,24 @@ class PaymentReconciliationService
                 ->lockForUpdate()
                 ->first();
 
-            if (! $lockedPayment || ! $lockedPayment->isPending()) {
+            if (! $lockedPayment) {
+                return false;
+            }
+
+            if (! $lockedPayment->isPending()) {
+                if ($resultCode === 0 && in_array($lockedPayment->status, [
+                    MpesaPayment::STATUS_FAILED,
+                    MpesaPayment::STATUS_TIMEOUT,
+                ], true)) {
+                    return $this->lifecycle->recordLateSuccess($lockedPayment, [
+                        'result_code' => 0,
+                        'result_description' => $result['ResultDesc']
+                            ?? 'Payment completed successfully.',
+                        'mpesa_receipt' => $result['TransactionReceipt'] ?? null,
+                        'callback_payload' => $result,
+                    ]);
+                }
+
                 return false;
             }
 

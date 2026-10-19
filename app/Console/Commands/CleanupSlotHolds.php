@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\AppointmentRequest;
 use App\Models\Hospital;
 use App\Models\SlotHold;
+use App\Services\DoctorAvailabilityService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -16,25 +17,26 @@ use Throwable;
 #[Description('Expire abandoned appointment slot holds')]
 class CleanupSlotHolds extends Command
 {
-    public function handle(): int
+    public function handle(DoctorAvailabilityService $availability): int
     {
         $deleted = 0;
         $hadCurrentHospital = app()->bound('currentHospital');
         $previousHospital = $hadCurrentHospital ? app('currentHospital') : null;
 
         try {
+            // Scheduled cleanup visits all tenants, binding each hospital before scoped hold queries.
             Hospital::withoutGlobalScopes()
                 ->orderBy('id')
-                ->chunkById(100, function ($hospitals) use (&$deleted): void {
+                ->chunkById(100, function ($hospitals) use (&$deleted, $availability): void {
                     foreach ($hospitals as $hospital) {
                         app()->instance('currentHospital', $hospital);
 
                         SlotHold::query()
                             ->where('expires_at', '<=', now())
                             ->orderBy('id')
-                            ->chunkById(100, function ($holds) use (&$deleted): void {
+                            ->chunkById(100, function ($holds) use (&$deleted, $availability): void {
                                 foreach ($holds as $staleHold) {
-                                    $deleted += DB::transaction(function () use ($staleHold): int {
+                                    $deleted += DB::transaction(function () use ($staleHold, $availability): int {
                                         $appointment = $staleHold->appointment_request_id === null
                                             ? null
                                             : AppointmentRequest::query()
@@ -59,6 +61,14 @@ class CleanupSlotHolds extends Command
                                         }
 
                                         $hold->delete();
+                                        if ($hold->doctor_id && $hold->slot_start_at) {
+                                            $availability->synchronizeSlotCapacity(
+                                                (int) $hold->hospital_id,
+                                                (int) $hold->doctor_id,
+                                                $hold->slot_start_at->format('Y-m-d'),
+                                                $hold->slot_start_at->format('H:i:s'),
+                                            );
+                                        }
 
                                         return 1;
                                     });
