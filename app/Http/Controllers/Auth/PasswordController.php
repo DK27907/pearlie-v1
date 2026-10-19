@@ -38,7 +38,7 @@ class PasswordController extends Controller
         $user = $request->user();
         abort_unless(
             $user
-                && ($user->isDoctor() || ($user->isAdmin() && ! $user->isSuperAdmin()))
+                && ($user->isSuperAdmin() || $user->isDoctor() || ($user->isAdmin() && ! $user->isSuperAdmin()))
                 && $user->must_change_password,
             404,
         );
@@ -51,7 +51,7 @@ class PasswordController extends Controller
         $user = $request->user();
         abort_unless(
             $user
-                && ($user->isDoctor() || ($user->isAdmin() && ! $user->isSuperAdmin()))
+                && ($user->isSuperAdmin() || $user->isDoctor() || ($user->isAdmin() && ! $user->isSuperAdmin()))
                 && $user->must_change_password,
             404,
         );
@@ -65,7 +65,11 @@ class PasswordController extends Controller
             'must_change_password' => false,
         ])->save();
 
-        $destination = $user->isDoctor() ? 'doctor.dashboard' : 'admin.dashboard';
+        $destination = match (true) {
+            $user->isSuperAdmin() => 'superadmin.dashboard',
+            $user->isDoctor() => 'doctor.dashboard',
+            default => 'admin.dashboard',
+        };
 
         return redirect()->route($destination)->with('status', 'Your password has been changed.');
     }

@@ -81,7 +81,7 @@ class HospitalController extends Controller
         $hospital = $hospitals->createWithAdmin($data);
 
         return redirect()->route('superadmin.hospitals.show', $hospital)
-            ->with('status', "Hospital created. Admin can log in at /h/{$hospital->slug}/login with {$data['admin_email']}.");
+            ->with('status', "Hospital created. Admin can log in at /h/{$hospital->slug}/login with {$data['admin_email']}. Welcome email queued to {$data['admin_email']}.");
     }
 
     public function show(Hospital $hospital): View

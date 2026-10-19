@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\SuperAdmin;
 
+use App\Mail\HospitalAdminWelcomeMail;
 use App\Models\Hospital;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -25,7 +26,23 @@ class HospitalCreateWithAdminTest extends TestCase
         $admin = User::withoutGlobalScopes()->where('email', 'admin@nairobi-medical.test')->firstOrFail();
 
         $response->assertRedirect(route('superadmin.hospitals.show', $hospital))
-            ->assertSessionHas('status', 'Hospital created. Admin can log in at /h/nairobi-medical-centre/login with admin@nairobi-medical.test.');
+            ->assertSessionHas(
+                'status',
+                'Hospital created. Admin can log in at /h/nairobi-medical-centre/login with admin@nairobi-medical.test. Welcome email queued to admin@nairobi-medical.test.',
+            );
+        Mail::assertQueued(HospitalAdminWelcomeMail::class, function (HospitalAdminWelcomeMail $mail) use ($hospital, $admin): bool {
+            if (! $mail->hasTo($admin->email) || $mail->hospital->id !== $hospital->id || $mail->admin->id !== $admin->id) {
+                return false;
+            }
+
+            $serializedMail = serialize($mail);
+            $rendered = $mail->render();
+
+            return str_contains($rendered, 'SecureStart!2026')
+                && str_contains($rendered, 'Change this password immediately on first login')
+                && str_contains($rendered, route('tenant.login', ['hospital' => $hospital->slug]))
+                && ! str_contains($serializedMail, 'SecureStart!2026');
+        });
         $this->assertSame($hospital->id, $admin->hospital_id);
         $this->assertSame('hospital_admin', $admin->role);
         $this->assertTrue($admin->is_admin);
@@ -60,6 +77,23 @@ class HospitalCreateWithAdminTest extends TestCase
         $admin = User::withoutGlobalScopes()->where('email', 'admin@nairobi-medical.test')->firstOrFail();
         $this->assertFalse($admin->must_change_password);
         $this->get(route('admin.dashboard'))->assertOk();
+    }
+
+    public function test_welcome_email_escapes_hospital_and_admin_names(): void
+    {
+        Mail::fake();
+        $superAdmin = $this->superAdmin();
+        $this->actingAs($superAdmin)->post(route('superadmin.hospitals.store'), $this->hospitalPayload([
+            'name' => '<script>alert("hospital")</script>',
+            'admin_name' => '<script>alert("admin")</script>',
+        ]));
+
+        Mail::assertQueued(HospitalAdminWelcomeMail::class, function (HospitalAdminWelcomeMail $mail): bool {
+            $rendered = $mail->render();
+
+            return str_contains($rendered, '&lt;script&gt;')
+                && ! str_contains($rendered, '<script>alert(');
+        });
     }
 
     public function test_duplicate_admin_email_is_rejected_without_creating_hospital(): void
@@ -105,6 +139,7 @@ class HospitalCreateWithAdminTest extends TestCase
 
     public function test_admin_creation_failure_rolls_back_hospital_creation(): void
     {
+        Mail::fake();
         $superAdmin = $this->superAdmin();
         User::creating(function (User $user): void {
             if ($user->email === 'admin@nairobi-medical.test') {
@@ -116,6 +151,7 @@ class HospitalCreateWithAdminTest extends TestCase
 
         $response->assertServerError();
         $this->assertDatabaseMissing('hospitals', ['slug' => 'nairobi-medical-centre']);
+        Mail::assertNothingQueued();
     }
 
     public function test_existing_hospital_invitation_routes_remain_registered(): void

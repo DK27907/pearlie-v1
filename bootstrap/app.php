@@ -33,7 +33,7 @@ $application = Application::configure(basePath: dirname(__DIR__))
             }
 
             return match (true) {
-                $user->must_change_password && ($user->isDoctor() || ($user->isAdmin() && ! $user->isSuperAdmin())) => route('password.force.edit'),
+                $user->must_change_password && ($user->isSuperAdmin() || $user->isDoctor() || ($user->isAdmin() && ! $user->isSuperAdmin())) => route('password.force.edit'),
                 $user->isSuperAdmin() => route('superadmin.dashboard'),
                 $user->isDoctor() => route('doctor.dashboard'),
                 $user->isAdmin() => route('admin.dashboard'),
