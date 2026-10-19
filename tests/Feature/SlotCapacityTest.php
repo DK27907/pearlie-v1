@@ -189,13 +189,6 @@ class SlotCapacityTest extends TestCase
         ]);
     }
 
-    public function test_concurrent_bookings_require_a_multi_connection_database(): void
-    {
-        $this->markTestIncomplete(
-            'Row-level booking concurrency requires independent connections to a database that supports row locks; SQLite cannot exercise that guarantee.',
-        );
-    }
-
     /**
      * @return array{Hospital, User, Service}
      */
