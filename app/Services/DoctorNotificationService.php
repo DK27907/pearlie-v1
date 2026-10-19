@@ -18,6 +18,7 @@ class DoctorNotificationService
     {
         try {
             $previousHospital = hospital();
+            // The notification's doctor record supplies the tenant ID for this scheduled operation.
             $hospital = Hospital::withoutGlobalScopes()->find($doctor->hospital_id);
             if (! $hospital) {
                 throw new \RuntimeException('The doctor is not assigned to a hospital.');
@@ -52,6 +53,7 @@ class DoctorNotificationService
         try {
             $firstFailure = null;
 
+            // This scheduled fan-out is system-wide; each doctor is rebound to their hospital above.
             User::withoutGlobalScope('hospital')
                 ->where('is_doctor', true)
                 ->orderBy('id')

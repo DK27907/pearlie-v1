@@ -138,6 +138,7 @@ class ResolveHospital
             return null;
         }
 
+        // Session identity must be restored before host-based tenant context is available.
         $user = User::withoutGlobalScope('hospital')->find($userId);
         if ($user) {
             $guard->setUser($user);

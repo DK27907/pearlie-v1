@@ -14,7 +14,6 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
-use Spatie\Permission\Models\Role;
 
 class HospitalInvitationController extends Controller
 {
@@ -39,6 +38,7 @@ class HospitalInvitationController extends Controller
         ]);
 
         $user = DB::transaction(function () use ($invite, $data): User {
+            // Resolve the signed invitation without ambient scope, but require its persisted tenant ID.
             $invite = Invite::withoutGlobalScope('hospital')
                 ->whereKey($invite->id)
                 ->where('hospital_id', $invite->hospital_id)
@@ -46,6 +46,7 @@ class HospitalInvitationController extends Controller
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            // The global email lookup prevents cross-tenant account reuse; the following check rejects it.
             $existingUser = User::withoutGlobalScopes()
                 ->where('email', $invite->email)
                 ->lockForUpdate()
@@ -70,8 +71,7 @@ class HospitalInvitationController extends Controller
                 'is_admin' => true,
                 'email_verified_at' => now(),
             ])->save();
-            Role::firstOrCreate(['name' => 'hospital_admin', 'guard_name' => 'web']);
-            $user->assignRole('hospital_admin');
+            $user->syncRolesFromFlags();
             $invite->markUsed($user->id);
 
             return $user;
@@ -86,10 +86,12 @@ class HospitalInvitationController extends Controller
 
     private function findInvite(string $slug, string $token): Invite
     {
+        // The route slug identifies the hospital for this signed public invitation flow.
         $hospital = Hospital::withoutGlobalScopes()
             ->where('slug', $slug)
             ->firstOrFail();
 
+        // Bind the invite lookup to the hospital resolved from the route slug.
         return Invite::withoutGlobalScope('hospital')
             ->where('hospital_id', $hospital->id)
             ->where('token', $token)

@@ -14,6 +14,7 @@ class ApplyHospitalMailSettings
 
     public function handle(object $job, Closure $next): mixed
     {
+        // The middleware receives the trusted hospital ID from the queued mail job.
         $hospital = Hospital::withoutGlobalScopes()->findOrFail($this->hospitalId);
         $credentials = (new HospitalSettings)->for($hospital)->credential('email');
         if (isset($job->mailable) && $job->mailable instanceof Mailable && $credentials) {

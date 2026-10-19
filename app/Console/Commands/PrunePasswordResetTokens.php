@@ -21,6 +21,7 @@ class PrunePasswordResetTokens extends Command
             return self::INVALID;
         }
 
+        // Password reset tokens are application-wide and expire by their creation timestamp.
         $deleted = DB::table('password_reset_tokens')
             ->where('created_at', '<', now()->subMinutes($minutes))
             ->delete();

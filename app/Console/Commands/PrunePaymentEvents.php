@@ -20,6 +20,7 @@ class PrunePaymentEvents extends Command
             return self::INVALID;
         }
 
+        // Retention is global; pending-payment and appointment guards correlate on tenant ID.
         $deleted = DB::table('payment_events')
             ->where('created_at', '<', now()->subDays($days))
             ->whereNotExists(function ($query): void {

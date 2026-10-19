@@ -76,6 +76,7 @@ class MpesaCallbackController extends Controller
         $hospital = null;
         if ($hospitalSlug !== null) {
             abort_unless(is_string($hospitalSlug), 404);
+            // The callback status URL's tenant slug is the trusted scope for its payment lookup.
             $hospital = Hospital::withoutGlobalScopes()
                 ->where('slug', $hospitalSlug)
                 ->first();

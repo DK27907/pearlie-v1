@@ -28,10 +28,11 @@ class DatabaseSeeder extends Seeder
         $this->call(SuperAdminSeeder::class);
         $this->call(AdminUserSeeder::class);
 
-        User::factory()->create([
+        $testUser = User::factory()->create([
             'name' => 'Alex Mwangi',
             'email' => 'test@example.com',
         ]);
+        $testUser->syncRolesFromFlags();
 
         $this->call(DoctorUserSeeder::class);
         $this->call(KnowledgeBaseSeeder::class);

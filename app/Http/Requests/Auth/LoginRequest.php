@@ -44,6 +44,7 @@ class LoginRequest extends FormRequest
         $this->ensureIsNotRateLimited();
 
         $credentials = $this->only('email', 'password');
+        // Resolve credentials globally; tenant-login controllers reject users outside their route hospital.
         $user = User::withoutGlobalScope('hospital')
             ->where('email', $credentials['email'])
             ->first();

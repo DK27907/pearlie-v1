@@ -53,9 +53,7 @@ class AdminUserSeeder extends Seeder
                     'role' => 'hospital_admin',
                 ])->save();
 
-                if (! $user->hasRole('hospital_admin')) {
-                    $user->assignRole('hospital_admin');
-                }
+                $user->syncRolesFromFlags();
                 if (! $user->hasRole('admin')) {
                     $user->assignRole('admin');
                 }

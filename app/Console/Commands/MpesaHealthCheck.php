@@ -87,6 +87,7 @@ class MpesaHealthCheck extends Command
             $failed = $failed || ! $exists;
         }
 
+        // Health monitoring checks configuration for every active tenant.
         $activeHospitals = Hospital::withoutGlobalScopes()
             ->where('is_active', true)
             ->orderBy('id')
@@ -239,6 +240,7 @@ class MpesaHealthCheck extends Command
         }
 
         if (Schema::hasTable('failed_jobs')) {
+            // failed_jobs is an application-wide operational table, not tenant-owned data.
             $recentFailures = DB::table('failed_jobs')
                 ->where('failed_at', '>=', now()->subHour())
                 ->count();

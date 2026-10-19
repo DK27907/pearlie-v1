@@ -31,6 +31,7 @@ class MpesaSimulateCallback extends Command
         }
 
         $checkoutRequestId = (string) $this->argument('checkout_request_id');
+        // This guarded local-only tool resolves the provider's globally unique checkout identifier.
         $payment = MpesaPayment::withoutGlobalScopes()
             ->where('checkout_request_id', $checkoutRequestId)
             ->first();

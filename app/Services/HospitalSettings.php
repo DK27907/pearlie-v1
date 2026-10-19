@@ -213,6 +213,7 @@ class HospitalSettings
 
     private function credentialRelation(): HasMany
     {
+        // This relation is anchored to the Hospital instance already bound by for().
         return $this->boundHospital()
             ->integrationCredentials()
             ->withoutGlobalScope('hospital');

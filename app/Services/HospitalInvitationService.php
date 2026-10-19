@@ -11,7 +11,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-use Spatie\Permission\Models\Role;
 use Throwable;
 
 class HospitalInvitationService
@@ -28,6 +27,7 @@ class HospitalInvitationService
 
     public function create(Hospital $hospital, string $email, int $inviterId): Invite
     {
+        // Email is globally unique; inspect cross-tenant ownership before refusing account reuse.
         $user = User::withoutGlobalScopes()->where('email', $email)->first();
         if ($user && (
             (int) $user->hospital_id !== (int) $hospital->id
@@ -48,10 +48,12 @@ class HospitalInvitationService
             ]);
         }
 
-        Role::firstOrCreate(['name' => 'hospital_admin', 'guard_name' => 'web']);
-        if (! $user->hasRole('hospital_admin')) {
-            $user->assignRole('hospital_admin');
-        }
+        $user->forceFill([
+            'is_admin' => true,
+            'is_super_admin' => false,
+            'is_doctor' => false,
+        ])->save();
+        $user->syncRolesFromFlags();
 
         $hospital->invites()
             ->where('email', $email)

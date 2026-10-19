@@ -71,6 +71,7 @@ class ChatController extends Controller
         ]);
         $sinceId = (int) ($validated['since_id'] ?? 0);
         $sessionId = $this->chatSessionId($request, $hospital);
+        // These reads bypass ambient scopes only because every query binds both resolved tenant and session.
         $latestAppointment = AppointmentRequest::withoutGlobalScopes()
             ->where('hospital_id', $hospital->id)
             ->where('session_id', $sessionId)
@@ -133,7 +134,12 @@ class ChatController extends Controller
         abort_unless($hospital, 404);
 
         $sessionId = $this->chatSessionId($request, $hospital);
-        $this->bookingChat->reset($sessionId, 'web');
+        if (! $this->bookingChat->reset($sessionId, 'web')) {
+            return response()->json([
+                'reset' => false,
+                'retry' => true,
+            ], 409);
+        }
         $this->chatSessionId($request, $hospital, true);
 
         return response()->json(['reset' => true]);

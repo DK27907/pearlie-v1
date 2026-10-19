@@ -13,7 +13,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use Spatie\Permission\Models\Role;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
@@ -56,10 +55,6 @@ class DoctorManagementService
         $temporaryPassword = $useTemporaryPassword ? Str::random(12) : null;
 
         [$doctor, $token, $invite] = DB::transaction(function () use ($attributes, $temporaryPassword): array {
-            $doctorRole = Role::query()->firstOrCreate([
-                'name' => 'doctor',
-                'guard_name' => 'web',
-            ]);
             $doctor = User::query()->create([
                 ...$attributes,
                 'password' => $temporaryPassword ?? Str::random(64),
@@ -70,7 +65,7 @@ class DoctorManagementService
                 'is_active' => true,
                 'must_change_password' => $temporaryPassword !== null,
             ]);
-            $doctor->assignRole($doctorRole);
+            $doctor->syncRolesFromFlags();
 
             if ($temporaryPassword !== null) {
                 return [$doctor, null, null];
