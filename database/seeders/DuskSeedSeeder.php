@@ -186,7 +186,7 @@ class DuskSeedSeeder extends Seeder
      */
     private function user(Hospital $hospital, string $email, array $attributes): User
     {
-        return User::withoutGlobalScopes()->updateOrCreate(
+        $user = User::withoutGlobalScopes()->updateOrCreate(
             ['email' => $email],
             [
                 ...$attributes,
@@ -196,5 +196,8 @@ class DuskSeedSeeder extends Seeder
                 'is_active' => true,
             ],
         );
+        $user->syncRolesFromFlags();
+
+        return $user;
     }
 }

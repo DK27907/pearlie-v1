@@ -124,6 +124,7 @@ class DoctorUserSeeder extends Seeder
                             'role' => 'doctor',
                         ],
                     );
+                    $doctor->syncRolesFromFlags();
 
                     $seededDoctors[] = $doctor;
                 }

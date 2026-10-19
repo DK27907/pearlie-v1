@@ -6,7 +6,6 @@ use App\Models\Hospital;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
-use Spatie\Permission\Models\Role;
 
 class SuperAdminSeeder extends Seeder
 {
@@ -31,9 +30,6 @@ class SuperAdminSeeder extends Seeder
             'is_admin' => false,
         ])->save();
 
-        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
-        if (! $user->hasRole('super_admin')) {
-            $user->assignRole('super_admin');
-        }
+        $user->syncRolesFromFlags();
     }
 }

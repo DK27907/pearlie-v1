@@ -12,6 +12,7 @@ class AppointmentPolicyService
 {
     public function evaluate(AppointmentRequest $appointment, bool $staffOverride = false): PolicyResult
     {
+        // The appointment's persisted hospital_id is the authority for its policy settings.
         $hospital = Hospital::withoutGlobalScopes()
             ->whereKey($appointment->hospital_id)
             ->first();

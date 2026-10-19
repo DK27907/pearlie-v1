@@ -20,6 +20,7 @@ class PruneConversations extends Command
             return self::INVALID;
         }
 
+        // Retention is global; the correlated active-work checks include each row's hospital ID.
         $deleted = DB::table('conversations')
             ->where('created_at', '<', now()->subDays($days))
             ->whereNotExists(function ($query): void {

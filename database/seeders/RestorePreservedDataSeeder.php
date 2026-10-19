@@ -38,6 +38,7 @@ class RestorePreservedDataSeeder extends Seeder
                     'is_doctor' => false,
                 ],
             );
+            $patient->syncRolesFromFlags();
             $doctorOne = $hospital->users()->where('email', 'doctor1@pearl.test')->firstOrFail();
             $doctorTwo = $hospital->users()->where('email', 'doctor2@pearl.test')->firstOrFail();
             $dentalService = $hospital->services()

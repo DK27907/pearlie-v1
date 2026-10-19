@@ -36,6 +36,7 @@ class SendPaymentNotification implements ShouldQueue
         $hadCurrentHospital = app()->bound('currentHospital');
         $previousHospital = $hadCurrentHospital ? app('currentHospital') : null;
         try {
+            // Restore the tenant carried by the job before using tenant-scoped payment relations.
             $hospital = Hospital::withoutGlobalScopes()->findOrFail($this->hospitalId);
             app()->instance('currentHospital', $hospital);
 

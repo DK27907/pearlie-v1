@@ -34,6 +34,7 @@ class SendAppointmentLifecycleNotifications implements ShouldQueue
         $previousHospital = $hadCurrentHospital ? app('currentHospital') : null;
 
         try {
+            // Restore the tenant carried by the job before resolving its appointment and recipients.
             $hospital = Hospital::withoutGlobalScopes()->findOrFail($this->hospitalId);
             app()->instance('currentHospital', $hospital);
 

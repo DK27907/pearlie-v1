@@ -68,6 +68,7 @@ class HospitalMailService
      */
     public function runForHospital(int $hospitalId, callable $callback): mixed
     {
+        // The caller supplies the persisted tenant ID whose mail configuration must be restored.
         $hospital = Hospital::withoutGlobalScopes()->findOrFail($hospitalId);
         $hadCurrentHospital = app()->bound('currentHospital');
         $previousHospital = $hadCurrentHospital ? app('currentHospital') : null;

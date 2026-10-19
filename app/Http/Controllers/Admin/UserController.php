@@ -13,7 +13,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
-use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
@@ -91,10 +90,6 @@ class UserController extends Controller
                 abort(422, 'The hospital must retain at least one active hospital administrator.');
             }
 
-            $roleRecord = Role::query()->firstOrCreate([
-                'name' => $role,
-                'guard_name' => 'web',
-            ]);
             $lockedUser->forceFill([
                 'name' => $attributes['name'],
                 'email' => $attributes['email'],
@@ -112,7 +107,7 @@ class UserController extends Controller
             }
 
             $lockedUser->save();
-            $lockedUser->syncRoles([$roleRecord]);
+            $lockedUser->syncRolesFromFlags();
         });
 
         return redirect()->route('admin.users.index')->with('status', 'User details updated.');

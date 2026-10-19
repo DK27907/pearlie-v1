@@ -141,6 +141,25 @@ class UserManagementTest extends TestCase
         $this->assertFalse($patient->hasRole('patient'));
     }
 
+    public function test_user_role_sync_replaces_spatie_roles_using_legacy_flags(): void
+    {
+        $user = User::factory()->create([
+            'hospital_id' => $this->hospital->id,
+            'role' => 'doctor',
+            'is_doctor' => true,
+            'is_admin' => false,
+            'is_super_admin' => false,
+        ]);
+        Role::query()->firstOrCreate(['name' => 'hospital_admin', 'guard_name' => 'web']);
+        $user->assignRole('hospital_admin');
+
+        $user->syncRolesFromFlags();
+        $user->refresh();
+
+        $this->assertTrue($user->hasRole('doctor'));
+        $this->assertFalse($user->hasRole('hospital_admin'));
+    }
+
     public function test_admin_cannot_delete_or_demote_the_last_hospital_admin(): void
     {
         $admin = $this->createHospitalAdmin();

@@ -14,6 +14,7 @@ trait BelongsToHospital
             if ($hospital) {
                 $model->hospital_id = $hospital->id;
             } elseif (! $model->hospital_id) {
+                // Bootstrap and seed writes may need a tenant before request context exists.
                 $hospital = Hospital::withoutGlobalScopes()
                     ->where('slug', config('pearlie.default_hospital_slug', 'pearl'))
                     ->first();

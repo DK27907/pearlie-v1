@@ -62,6 +62,7 @@ class RegisteredUserController extends Controller
             'email' => $request->email,
             'password' => Hash::make($request->password),
         ]);
+        $user->syncRolesFromFlags();
 
         if (! $allow) {
             $invite->markUsed($user->id);
