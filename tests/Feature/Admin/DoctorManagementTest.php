@@ -92,7 +92,7 @@ class DoctorManagementTest extends TestCase
         Mail::assertNothingOutgoing();
 
         $this->post(route('logout'));
-        $this->post('/login', [
+        $this->post(route('tenant.login', ['hospital' => 'pearl']), [
             'email' => $doctor->email,
             'password' => $temporaryPassword,
         ])->assertRedirect(route('password.force.edit'));
@@ -130,7 +130,7 @@ class DoctorManagementTest extends TestCase
             'must_change_password' => false,
         ]);
 
-        $this->post('/login', [
+        $this->post(route('tenant.login', ['hospital' => 'pearl']), [
             'email' => $doctor->email,
             'password' => 'password',
         ])->assertRedirect(route('doctor.dashboard'));

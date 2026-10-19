@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\Hospital;
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Contracts\Mail\Factory as MailFactory;
@@ -95,13 +96,15 @@ class PasswordResetTest extends TestCase
     {
         Notification::fake();
 
+        $hospital = Hospital::query()->where('slug', 'pearl')->firstOrFail();
         $user = User::factory()->create([
             'password' => Hash::make('old-password'),
+            'hospital_id' => $hospital->id,
         ]);
 
         $this->post('/forgot-password', ['email' => $user->email]);
 
-        Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($user) {
+        Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($hospital, $user) {
             $response = $this->post('/reset-password', [
                 'token' => $notification->token,
                 'email' => $user->email,
@@ -115,13 +118,13 @@ class PasswordResetTest extends TestCase
             $this->assertDatabaseMissing('password_reset_tokens', ['email' => $user->email]);
 
             $this->assertFalse(Hash::check('old-password', $user->fresh()->password));
-            $this->post('/login', [
+            $this->post("/h/{$hospital->slug}/login", [
                 'email' => $user->email,
                 'password' => 'old-password',
             ])->assertSessionHasErrors('email');
             $this->assertGuest();
 
-            $this->post('/login', [
+            $this->post("/h/{$hospital->slug}/login", [
                 'email' => $user->email,
                 'password' => 'new-password',
             ])->assertRedirect(route('dashboard', absolute: false));

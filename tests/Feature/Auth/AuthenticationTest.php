@@ -73,11 +73,15 @@ class AuthenticationTest extends TestCase
 
     public function test_users_can_authenticate_using_the_login_screen(): void
     {
-        $user = User::factory()->create();
-        $this->get('/login');
+        $hospital = Hospital::factory()->create();
+        $user = User::factory()->create([
+            'hospital_id' => $hospital->id,
+            'role' => 'patient',
+        ]);
+        $this->get("/h/{$hospital->slug}/login");
         $sessionIdBeforeLogin = session()->getId();
 
-        $response = $this->post('/login', [
+        $response = $this->post("/h/{$hospital->slug}/login", [
             'email' => $user->email,
             'password' => 'password',
         ]);
@@ -197,7 +201,9 @@ class AuthenticationTest extends TestCase
 
     public function test_patient_login_ignores_an_intended_admin_route(): void
     {
+        $hospital = Hospital::factory()->create();
         $patient = User::factory()->create([
+            'hospital_id' => $hospital->id,
             'role' => 'patient',
             'is_admin' => false,
             'is_super_admin' => false,
@@ -206,7 +212,7 @@ class AuthenticationTest extends TestCase
         $this->get(route('admin.dashboard'))
             ->assertRedirect(route('login'));
 
-        $this->post('/login', [
+        $this->post("/h/{$hospital->slug}/login", [
             'email' => $patient->email,
             'password' => 'password',
         ])->assertRedirect(route('dashboard', absolute: false));
@@ -230,7 +236,7 @@ class AuthenticationTest extends TestCase
         $this->get(route('admin.appointments.index'))
             ->assertRedirect(route('login'));
 
-        $this->post('/login', [
+        $this->post("/h/{$hospital->slug}/login", [
             'email' => $admin->email,
             'password' => 'password',
         ])->assertRedirect(route('admin.appointments.index'));
@@ -252,7 +258,7 @@ class AuthenticationTest extends TestCase
             'role' => 'doctor',
         ]);
 
-        $this->post('/login', [
+        $this->post("/h/{$hospital->slug}/login", [
             'email' => $doctor->email,
             'password' => 'password',
         ])->assertRedirect(route('doctor.dashboard'));
@@ -274,7 +280,7 @@ class AuthenticationTest extends TestCase
             'role' => 'hospital_admin',
         ]);
 
-        $this->post('/login', [
+        $this->post("/h/{$hospital->slug}/login", [
             'email' => $admin->email,
             'password' => 'password',
         ])->assertRedirect(route('admin.dashboard'));
@@ -297,7 +303,7 @@ class AuthenticationTest extends TestCase
             'role' => 'hospital_admin',
         ]);
 
-        $this->post('/login', [
+        $this->post("/h/{$hospital->slug}/login", [
             'email' => $admin->email,
             'password' => 'password',
         ])->assertRedirect(route('admin.dashboard'));
@@ -327,9 +333,13 @@ class AuthenticationTest extends TestCase
 
     public function test_deactivated_user_cannot_log_in(): void
     {
-        $user = User::factory()->create(['is_active' => false]);
+        $hospital = Hospital::factory()->create();
+        $user = User::factory()->create([
+            'hospital_id' => $hospital->id,
+            'is_active' => false,
+        ]);
 
-        $this->post('/login', [
+        $this->post("/h/{$hospital->slug}/login", [
             'email' => $user->email,
             'password' => 'password',
         ])->assertSessionHasErrors(['email' => trans('auth.failed')]);
@@ -352,7 +362,7 @@ class AuthenticationTest extends TestCase
             'role' => 'hospital_admin',
         ]);
 
-        $this->post('/login', [
+        $this->post("/h/{$hospital->slug}/login", [
             'email' => $admin->email,
             'password' => 'password',
         ])->assertSessionHasErrors(['email' => trans('auth.failed')]);
@@ -362,9 +372,10 @@ class AuthenticationTest extends TestCase
 
     public function test_users_can_not_authenticate_with_invalid_password(): void
     {
-        $user = User::factory()->create();
+        $hospital = Hospital::factory()->create();
+        $user = User::factory()->create(['hospital_id' => $hospital->id]);
 
-        $this->post('/login', [
+        $this->post("/h/{$hospital->slug}/login", [
             'email' => $user->email,
             'password' => 'wrong-password',
         ])->assertSessionHasErrors(['email' => trans('auth.failed')]);
