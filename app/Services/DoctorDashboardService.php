@@ -15,6 +15,10 @@ use Throwable;
 
 class DoctorDashboardService
 {
+    public function __construct(
+        private readonly DoctorAvailabilityService $availability,
+    ) {}
+
     /**
      * @return array{today_count: int, week_count: int, upcoming_count: int, escalation_count: int, recent_appointments: Collection, today_appointments: Collection}
      */
@@ -170,6 +174,17 @@ class DoctorDashboardService
                 abort_unless($appointment->status === AppointmentRequest::STATUS_CONFIRMED, 422, 'Only confirmed appointments can be completed.');
 
                 $appointment->update(['status' => AppointmentRequest::STATUS_COMPLETED]);
+                if ($appointment->doctor_id
+                    && $appointment->preferred_date
+                    && $appointment->slot_start_time
+                ) {
+                    $this->availability->releaseSlotCapacity(
+                        (int) $appointment->hospital_id,
+                        (int) $appointment->doctor_id,
+                        $appointment->preferred_date->format('Y-m-d'),
+                        (string) $appointment->slot_start_time,
+                    );
+                }
 
                 return $appointment->refresh();
             });

@@ -13,6 +13,7 @@ use App\Support\CacheLockRunner;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use RuntimeException;
@@ -46,44 +47,60 @@ class EscalationService
             $phoneVariants = $patientPhone ? $this->phoneVariants($identity) : [];
             $lock = Cache::lock('escalation-rate-limit:'.hash('sha256', $identity), 10);
 
-            $escalation = CacheLockRunner::run($lock, 5, function () use ($sessionId, $userMessage, $aiResponse, $identity, $phoneVariants, $patientPhone): Escalation {
-                $recent = Escalation::query()
-                    ->where('created_at', '>=', now()->subMinutes(5))
-                    ->where(function ($query) use ($sessionId, $identity, $phoneVariants): void {
-                        $query->where('session_id', $sessionId);
-                        if ($identity !== $sessionId) {
-                            $matchingSessions = AppointmentRequest::query()
-                                ->where(function ($appointments) use ($phoneVariants): void {
-                                    $appointments->whereIn('phone', $phoneVariants)
-                                        ->orWhereIn('mpesa_phone', $phoneVariants);
-                                })
-                                ->select('session_id');
+            $escalation = CacheLockRunner::run($lock, 5, function () use (
+                $sessionId,
+                $userMessage,
+                $aiResponse,
+                $identity,
+                $phoneVariants,
+                $patientPhone,
+            ): Escalation {
+                return DB::transaction(function () use (
+                    $sessionId,
+                    $userMessage,
+                    $aiResponse,
+                    $identity,
+                    $phoneVariants,
+                    $patientPhone,
+                ): Escalation {
+                    $recent = Escalation::query()
+                        ->where('created_at', '>=', now()->subMinutes(5))
+                        ->where(function ($query) use ($sessionId, $identity, $phoneVariants): void {
+                            $query->where('session_id', $sessionId);
+                            if ($identity !== $sessionId) {
+                                $matchingSessions = AppointmentRequest::query()
+                                    ->where(function ($appointments) use ($phoneVariants): void {
+                                        $appointments->whereIn('phone', $phoneVariants)
+                                            ->orWhereIn('mpesa_phone', $phoneVariants);
+                                    })
+                                    ->select('session_id');
 
-                            $query->orWhereIn('session_id', $matchingSessions);
+                                $query->orWhereIn('session_id', $matchingSessions);
+                            }
+                        })
+                        ->latest('id')
+                        ->first();
+
+                    if ($recent) {
+                        if ($patientPhone && blank($recent->user_phone)) {
+                            $recent->forceFill(['user_phone' => $patientPhone])->save();
                         }
-                    })
-                    ->latest('id')
-                    ->first();
 
-                if ($recent) {
-                    return $recent;
-                }
+                        return $recent;
+                    }
 
-                return Escalation::query()->create([
-                    'session_id' => $sessionId,
-                    'user_message' => $userMessage,
-                    'user_phone' => $patientPhone,
-                    'ai_response' => $aiResponse,
-                    'status' => Escalation::STATUS_PENDING,
-                ]);
+                    return Escalation::query()->create([
+                        'session_id' => $sessionId,
+                        'user_message' => $userMessage,
+                        'user_phone' => $patientPhone,
+                        'ai_response' => $aiResponse,
+                        'status' => Escalation::STATUS_PENDING,
+                    ]);
+                });
             });
 
-            if ($patientPhone && blank($escalation->user_phone)) {
-                $escalation->forceFill(['user_phone' => $patientPhone])->save();
-            }
-
             if ($escalation->wasRecentlyCreated) {
-                $this->notifications->notifyHealthWorkers($escalation);
+                DB::afterCommit(fn () => $this->notifications->notifyHealthWorkers($escalation));
             }
 
             return $escalation;

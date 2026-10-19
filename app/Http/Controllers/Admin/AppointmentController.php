@@ -5,11 +5,16 @@ namespace App\Http\Controllers\Admin;
 use App\Exceptions\AppointmentLifecycleException;
 use App\Http\Controllers\Controller;
 use App\Models\AppointmentRequest;
+use App\Models\DoctorAvailability;
+use App\Models\Hospital;
 use App\Services\AppointmentLifecycleService;
+use App\Services\DoctorAvailabilityService;
 use App\Services\NoShowService;
 use App\Services\NotificationService;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
@@ -115,6 +120,7 @@ class AppointmentController extends Controller
         Request $request,
         int $id,
         AppointmentLifecycleService $lifecycle,
+        DoctorAvailabilityService $availability,
     ): RedirectResponse {
         $validated = $request->validate([
             'status' => ['required', 'string', Rule::in(array_diff(
@@ -140,15 +146,87 @@ class AppointmentController extends Controller
 
             return redirect()->route('admin.appointments.show', $appt->id)->with('status', 'Appointment cancelled by hospital staff.');
         }
-        if ($appt->status === AppointmentRequest::STATUS_CANCELLED
-            && $validated['status'] !== AppointmentRequest::STATUS_CANCELLED
-        ) {
-            return back()->withErrors(['status' => 'Cancelled appointments cannot be reactivated.']);
-        }
+        try {
+            [$appt, $wasConfirmed] = DB::transaction(function () use (
+                $id,
+                $validated,
+                $availability,
+            ): array {
+                $appointment = AppointmentRequest::query()
+                    ->lockForUpdate()
+                    ->findOrFail($id);
+                if ($appointment->status === AppointmentRequest::STATUS_CANCELLED
+                    && $validated['status'] !== AppointmentRequest::STATUS_CANCELLED
+                ) {
+                    throw new AppointmentLifecycleException('Cancelled appointments cannot be reactivated.');
+                }
 
-        $wasConfirmed = $appt->status === AppointmentRequest::STATUS_CONFIRMED;
-        $appt->status = $validated['status'];
-        $appt->save();
+                $wasConfirmed = $appointment->status === AppointmentRequest::STATUS_CONFIRMED;
+                $wasCapacityActive = in_array($appointment->status, [
+                    AppointmentRequest::STATUS_PENDING,
+                    AppointmentRequest::STATUS_CONFIRMED,
+                ], true);
+                $willCapacityBeActive = in_array($validated['status'], [
+                    AppointmentRequest::STATUS_PENDING,
+                    AppointmentRequest::STATUS_CONFIRMED,
+                ], true);
+
+                if (! $wasCapacityActive && $willCapacityBeActive) {
+                    if (! $appointment->doctor_id
+                        || ! $appointment->preferred_date
+                        || ! $appointment->slot_start_time
+                    ) {
+                        throw new AppointmentLifecycleException('This appointment has no assigned slot to reactivate.');
+                    }
+
+                    $date = CarbonImmutable::parse($appointment->preferred_date);
+                    $doctorAvailability = DoctorAvailability::query()
+                        ->where('hospital_id', $appointment->hospital_id)
+                        ->where('doctor_id', $appointment->doctor_id)
+                        ->where('day_of_week', $date->dayOfWeek)
+                        ->where('is_active', true)
+                        ->lockForUpdate()
+                        ->get()
+                        ->first(fn (DoctorAvailability $record): bool => collect($record->generateSlots())
+                            ->contains(fn (array $slot): bool => $slot['start'] === CarbonImmutable::parse(
+                                (string) $appointment->slot_start_time,
+                            )->format('H:i')));
+                    if (! $doctorAvailability) {
+                        throw new AppointmentLifecycleException('The appointment slot is no longer available.');
+                    }
+
+                    $slotCapacity = $availability->reserveSlotCapacity(
+                        Hospital::query()->findOrFail($appointment->hospital_id),
+                        (int) $appointment->doctor_id,
+                        $date,
+                        (string) $appointment->slot_start_time,
+                        (int) $doctorAvailability->max_patients_per_slot,
+                    );
+                    if (! $slotCapacity) {
+                        throw new AppointmentLifecycleException('The appointment slot is at capacity.');
+                    }
+                }
+
+                $appointment->status = $validated['status'];
+                $appointment->save();
+                if ($wasCapacityActive && ! $willCapacityBeActive
+                    && $appointment->doctor_id
+                    && $appointment->preferred_date
+                    && $appointment->slot_start_time
+                ) {
+                    $availability->releaseSlotCapacity(
+                        (int) $appointment->hospital_id,
+                        (int) $appointment->doctor_id,
+                        $appointment->preferred_date->format('Y-m-d'),
+                        (string) $appointment->slot_start_time,
+                    );
+                }
+
+                return [$appointment, $wasConfirmed];
+            });
+        } catch (AppointmentLifecycleException $exception) {
+            return back()->withErrors(['status' => $exception->getMessage()]);
+        }
 
         $statusMessage = 'Appointment status updated.';
         $flashType = 'status';

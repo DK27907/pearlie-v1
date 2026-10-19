@@ -18,7 +18,7 @@ class PaymentEvent extends Model
     ];
 
     protected $casts = [
-        'payload' => 'array',
+        'payload' => 'encrypted:array',
     ];
 
     public function payment(): BelongsTo

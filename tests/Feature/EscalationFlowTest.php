@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\SendEscalationNotification;
 use App\Models\AppointmentRequest;
 use App\Models\Conversation;
 use App\Models\Escalation;
@@ -103,6 +104,30 @@ class EscalationFlowTest extends TestCase
             route('doctor.escalations.show', $notification->data['escalation_id']),
             $notification->data['url'],
         );
+    }
+
+    public function test_escalation_notification_restores_the_previous_hospital_context(): void
+    {
+        Mail::fake();
+        $previousHospital = Hospital::query()->where('slug', 'pearl')->firstOrFail();
+        $jobHospital = Hospital::factory()->create(['slug' => 'notification-job-tenant']);
+        app()->instance('currentHospital', $jobHospital);
+        $escalation = Escalation::query()->create([
+            'session_id' => 'notification-job-context',
+            'user_message' => 'Please ask a health worker to contact me.',
+            'user_phone' => '254748249882',
+            'status' => Escalation::STATUS_PENDING,
+        ]);
+        app()->instance('currentHospital', $previousHospital);
+
+        (new SendEscalationNotification($escalation, [], 'notification@example.test'))->handle();
+
+        $this->assertSame($previousHospital->id, hospital()->id);
+
+        app()->forgetInstance('currentHospital');
+        (new SendEscalationNotification($escalation, [], 'notification@example.test'))->handle();
+
+        $this->assertFalse(app()->bound('currentHospital'));
     }
 
     public function test_escalation_triggers_on_urgent_medical_keywords(): void

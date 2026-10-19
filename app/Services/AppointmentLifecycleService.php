@@ -118,6 +118,17 @@ class AppointmentLifecycleService
                         : $appointment->payment_status),
             ])->save();
 
+            if ($appointment->doctor_id
+                && $appointment->preferred_date
+                && $appointment->slot_start_time
+            ) {
+                $this->availability->releaseSlotCapacity(
+                    $hospitalId,
+                    (int) $appointment->doctor_id,
+                    $appointment->preferred_date->format('Y-m-d'),
+                    (string) $appointment->slot_start_time,
+                );
+            }
             $this->payments->releaseSlot($appointment);
             $this->recordHistory(
                 appointment: $appointment,
@@ -248,16 +259,34 @@ class AppointmentLifecycleService
                 }
             }
 
-            $matchingSlot = $availabilityRecords
+            $matchingAvailability = $availabilityRecords
                 ->where('is_active', true)
-                ->flatMap(fn ($availability) => $availability->generateSlots())
-                ->first(fn (array $slot): bool => $slot['start'] === $newStartTime);
+                ->first(fn (DoctorAvailability $availability): bool => collect($availability->generateSlots())
+                    ->contains(fn (array $slot): bool => $slot['start'] === $newStartTime));
+            $matchingSlot = $matchingAvailability
+                ? collect($matchingAvailability->generateSlots())
+                    ->first(fn (array $slot): bool => $slot['start'] === $newStartTime)
+                : null;
             $isUnchangedSlot = (int) $appointment->doctor_id === (int) $doctor->id
                 && $appointment->preferred_date?->format('Y-m-d') === $date->toDateString()
                 && CarbonImmutable::parse((string) $appointment->slot_start_time)->format('H:i') === $newStartTime;
             if (! $matchingSlot || (! $isUnchangedSlot
                 && ! $this->availability->isSlotAvailable($doctor->id, $newDate, $newStartTime))) {
                 throw new AppointmentLifecycleException('That slot is no longer available. Choose another date or time.');
+            }
+
+            $hospital = Hospital::query()->findOrFail($hospitalId);
+            if (! $isUnchangedSlot) {
+                $slotCapacity = $this->availability->reserveSlotCapacity(
+                    $hospital,
+                    (int) $doctor->id,
+                    $date,
+                    $newStartTime,
+                    (int) $matchingAvailability->max_patients_per_slot,
+                );
+                if (! $slotCapacity) {
+                    throw new AppointmentLifecycleException('That slot is no longer available. Choose another date or time.');
+                }
             }
 
             $oldDate = $appointment->preferred_date?->format('Y-m-d');
@@ -274,6 +303,15 @@ class AppointmentLifecycleService
                 'slot_start_time' => $matchingSlot['start'],
                 'slot_end_time' => $matchingSlot['end'],
             ])->save();
+
+            if (! $isUnchangedSlot && $oldDate && $oldDoctorId && $oldStartTime) {
+                $this->availability->releaseSlotCapacity(
+                    $hospitalId,
+                    (int) $oldDoctorId,
+                    $oldDate,
+                    (string) $oldStartTime,
+                );
+            }
 
             if ($appointment->payment_status !== 'paid') {
                 SlotHold::query()->create([
@@ -349,6 +387,7 @@ class AppointmentLifecycleService
             throw new AppointmentLifecycleException('The current hospital context does not match this appointment.');
         }
 
+        // The caller has already matched the appointment's persisted tenant to the active context.
         Hospital::withoutGlobalScopes()->whereKey($hospitalId)->firstOrFail();
     }
 

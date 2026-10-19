@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Patient;
 use App\Exceptions\AppointmentLifecycleException;
 use App\Http\Controllers\Controller;
 use App\Models\AppointmentRequest;
+use App\Models\Hospital;
 use App\Models\User;
 use App\Services\AppointmentLifecycleService;
 use App\Services\AppointmentPolicyService;
@@ -30,7 +31,8 @@ class AppointmentRescheduleController extends Controller
         $validated = validator(['date' => $date], [
             'date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today', 'before_or_equal:'.now()->addYear()->toDateString()],
         ])->validate();
-        $doctorSlots = $availability->getAllDoctorsWithSlots($validated['date']);
+        $hospital = Hospital::query()->findOrFail($request->user()->hospital_id);
+        $doctorSlots = $availability->getAllDoctorsWithSlots($hospital, $validated['date']);
         $requiredSpecialty = $appointment->service?->requires_specialty;
         if (filled($requiredSpecialty)) {
             $matchingDoctorSlots = collect($doctorSlots)

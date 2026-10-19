@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Models\AppointmentRequest;
 use App\Models\DoctorAvailability;
 use App\Models\DoctorUnavailableDate;
+use App\Models\Hospital;
 use App\Models\Service;
+use App\Models\SlotCapacity;
 use App\Models\SlotHold;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -67,6 +69,14 @@ class DoctorAvailabilityService
                 ->map(fn (string $slotStart): string => CarbonImmutable::parse($slotStart)->format('H:i'))
                 ->countBy();
 
+            $slotCapacities = SlotCapacity::query()
+                ->where('doctor_id', $doctorId)
+                ->whereDate('slot_date', $requestedDate->toDateString())
+                ->get()
+                ->keyBy(fn (SlotCapacity $slotCapacity): string => CarbonImmutable::parse(
+                    (string) $slotCapacity->slot_time,
+                )->format('H:i'));
+
             $slots = [];
             $isUnavailable = $this->dateIsUnavailable($doctorId, $requestedDate);
 
@@ -75,10 +85,14 @@ class DoctorAvailabilityService
                     $isInPast = $requestedDate->isToday()
                         && CarbonImmutable::parse($slot['start'])->lessThanOrEqualTo(CarbonImmutable::now());
 
+                    $slotCapacity = $slotCapacities->get($slot['start']);
+                    $bookedCount = $slotCapacity?->booked_count
+                        ?? ($bookedCounts[$slot['start']] ?? 0) + ($heldCounts[$slot['start']] ?? 0);
+                    $capacity = $availability->max_patients_per_slot;
+
                     $slots[$slot['start']] = ! $isUnavailable
                         && ! $isInPast
-                        && ($bookedCounts[$slot['start']] ?? 0) + ($heldCounts[$slot['start']] ?? 0)
-                            < $availability->max_patients_per_slot;
+                        && $bookedCount < $capacity;
                 }
             }
 
@@ -94,11 +108,17 @@ class DoctorAvailabilityService
         }
     }
 
-    public function findDoctorForSlot(string $date, string $time, ?int $preferredDoctorId = null): ?User
-    {
+    public function findDoctorForSlot(
+        Hospital $hospital,
+        string $date,
+        string $time,
+        ?int $preferredDoctorId = null,
+    ): ?User {
         try {
             $normalizedTime = CarbonImmutable::parse($time)->format('H:i');
-            $doctors = User::query()
+            // Discovery accepts a required hospital object, so the explicit FK preserves tenant scope.
+            $doctors = User::withoutGlobalScope('hospital')
+                ->where('hospital_id', $hospital->id)
                 ->where('is_doctor', true)
                 ->when(
                     $preferredDoctorId !== null,
@@ -131,10 +151,12 @@ class DoctorAvailabilityService
     /**
      * @return array<int, array{doctor: User, slots: array<string, bool>}>
      */
-    public function getAllDoctorsWithSlots(string $date): array
+    public function getAllDoctorsWithSlots(Hospital $hospital, string $date): array
     {
         try {
-            return User::query()
+            // Availability is requested for this explicit tenant, independently of ambient request context.
+            return User::withoutGlobalScope('hospital')
+                ->where('hospital_id', $hospital->id)
                 ->where('is_doctor', true)
                 ->where('is_active', true)
                 ->orderBy('name')
@@ -285,34 +307,14 @@ class DoctorAvailabilityService
                                 continue;
                             }
 
-                            $bookedCount = AppointmentRequest::query()
-                                ->where('doctor_id', $doctor->id)
-                                ->whereDate('preferred_date', $requestedDate->toDateString())
-                                ->whereTime(
-                                    'slot_start_time',
-                                    CarbonImmutable::parse($slot['start'])->format('H:i:s'),
-                                )
-                                ->whereIn('status', [
-                                    AppointmentRequest::STATUS_PENDING,
-                                    AppointmentRequest::STATUS_CONFIRMED,
-                                ])
-                                ->count();
-
-                            $activeHoldCount = SlotHold::query()
-                                ->active()
-                                ->where('doctor_id', $doctor->id)
-                                ->whereNull('appointment_request_id')
-                                ->whereBetween('slot_start_at', [
-                                    $requestedDate->toDateString().' 00:00:00',
-                                    $requestedDate->toDateString().' 23:59:59',
-                                ])
-                                ->whereTime(
-                                    'slot_start_at',
-                                    CarbonImmutable::parse($slot['start'])->format('H:i:s'),
-                                )
-                                ->count();
-
-                            if ($bookedCount + $activeHoldCount >= $availability->max_patients_per_slot) {
+                            $slotCapacity = $this->reserveSlotCapacity(
+                                $currentHospital,
+                                (int) $doctor->id,
+                                $requestedDate,
+                                $slot['start'],
+                                (int) $availability->max_patients_per_slot,
+                            );
+                            if (! $slotCapacity) {
                                 continue;
                             }
 
@@ -373,6 +375,126 @@ class DoctorAvailabilityService
 
             throw $exception;
         }
+    }
+
+    public function reserveSlotCapacity(
+        Hospital $hospital,
+        int $doctorId,
+        CarbonImmutable $date,
+        string $startTime,
+        int $capacity,
+    ): ?SlotCapacity {
+        $slotTime = CarbonImmutable::parse($startTime)->format('H:i:s');
+        $slotCapacity = SlotCapacity::query()
+            ->where('hospital_id', $hospital->id)
+            ->where('doctor_id', $doctorId)
+            ->whereDate('slot_date', $date->toDateString())
+            ->whereTime('slot_time', $slotTime)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $slotCapacity) {
+            $bookedCount = AppointmentRequest::query()
+                ->where('hospital_id', $hospital->id)
+                ->where('doctor_id', $doctorId)
+                ->whereDate('preferred_date', $date->toDateString())
+                ->whereTime('slot_start_time', $slotTime)
+                ->whereIn('status', [
+                    AppointmentRequest::STATUS_PENDING,
+                    AppointmentRequest::STATUS_CONFIRMED,
+                ])
+                ->count();
+            $unassignedHoldCount = SlotHold::query()
+                ->active()
+                ->where('hospital_id', $hospital->id)
+                ->where('doctor_id', $doctorId)
+                ->whereNull('appointment_request_id')
+                ->whereDate('slot_start_at', $date->toDateString())
+                ->whereTime('slot_start_at', $slotTime)
+                ->count();
+
+            $slotCapacity = SlotCapacity::query()->create([
+                'hospital_id' => $hospital->id,
+                'doctor_id' => $doctorId,
+                'slot_date' => $date->toDateString(),
+                'slot_time' => $slotTime,
+                'capacity' => $capacity,
+                'booked_count' => $bookedCount + $unassignedHoldCount,
+            ]);
+        } elseif ($slotCapacity->capacity !== $capacity) {
+            $slotCapacity->forceFill(['capacity' => $capacity])->save();
+        }
+
+        if ($slotCapacity->booked_count >= $slotCapacity->capacity) {
+            return null;
+        }
+
+        $slotCapacity->increment('booked_count');
+
+        return $slotCapacity;
+    }
+
+    public function releaseSlotCapacity(
+        int $hospitalId,
+        int $doctorId,
+        string $date,
+        string $startTime,
+    ): void {
+        $slotCapacity = SlotCapacity::query()
+            ->where('hospital_id', $hospitalId)
+            ->where('doctor_id', $doctorId)
+            ->whereDate('slot_date', CarbonImmutable::parse($date)->toDateString())
+            ->whereTime('slot_time', CarbonImmutable::parse($startTime)->format('H:i:s'))
+            ->lockForUpdate()
+            ->first();
+
+        if ($slotCapacity && $slotCapacity->booked_count > 0) {
+            $slotCapacity->decrement('booked_count');
+        }
+    }
+
+    public function synchronizeSlotCapacity(
+        int $hospitalId,
+        int $doctorId,
+        string $date,
+        string $startTime,
+    ): void {
+        $slotDate = CarbonImmutable::parse($date)->toDateString();
+        $slotTime = CarbonImmutable::parse($startTime)->format('H:i:s');
+        $slotCapacity = SlotCapacity::query()
+            ->where('hospital_id', $hospitalId)
+            ->where('doctor_id', $doctorId)
+            ->whereDate('slot_date', $slotDate)
+            ->whereTime('slot_time', $slotTime)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $slotCapacity) {
+            return;
+        }
+
+        $bookedCount = AppointmentRequest::query()
+            ->where('hospital_id', $hospitalId)
+            ->where('doctor_id', $doctorId)
+            ->whereDate('preferred_date', $slotDate)
+            ->whereTime('slot_start_time', $slotTime)
+            ->whereIn('status', [
+                AppointmentRequest::STATUS_PENDING,
+                AppointmentRequest::STATUS_CONFIRMED,
+            ])
+            ->count();
+        $unassignedHoldCount = SlotHold::query()
+            ->active()
+            ->where('hospital_id', $hospitalId)
+            ->where('doctor_id', $doctorId)
+            ->whereNull('appointment_request_id')
+            ->whereDate('slot_start_at', $slotDate)
+            ->whereTime('slot_start_at', $slotTime)
+            ->count();
+
+        $slotCapacity->forceFill([
+            'booked_count' => $bookedCount + $unassignedHoldCount,
+        ])->save();
     }
 
     /**

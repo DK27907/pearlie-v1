@@ -18,6 +18,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
@@ -632,6 +633,36 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame('COLLECTING', $continued->state);
         $this->assertSame($services[0]->id, $continued->collectedFields['service_id']);
         $this->assertStringContainsString('What date would you prefer', $continued->message);
+    }
+
+    public function test_handoff_and_booking_state_roll_back_together_when_state_persistence_fails(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $sessionId = 'booking-handoff-atomicity';
+        $chat->handle($sessionId, 'Book Dental Cleaning', 'web');
+        $chat->handle($sessionId, 'I need a human', 'web');
+        $stateBeforeHandoff = $chat->getState($sessionId);
+
+        Event::listen('eloquent.creating: '.Conversation::class, function (Conversation $conversation): void {
+            if ($conversation->user_message === 'My phone is 254748249882') {
+                throw new \RuntimeException('Simulated conversation persistence failure.');
+            }
+        });
+
+        $failed = false;
+        try {
+            $chat->handle($sessionId, 'My phone is 254748249882', 'web');
+        } catch (\RuntimeException $exception) {
+            $failed = $exception->getMessage() === 'Simulated conversation persistence failure.';
+        }
+
+        $this->assertTrue($failed);
+        $this->assertDatabaseCount('escalations', 0);
+        $this->assertSame($stateBeforeHandoff, $chat->getState($sessionId));
+        $this->assertSame('COLLECTING', $stateBeforeHandoff['state']);
+        $this->assertNull($stateBeforeHandoff['patient_phone']);
+        $this->assertTrue($stateBeforeHandoff['escalation_pending']);
     }
 
     public function test_swahili_handoff_preserves_booking_fields_and_language(): void
