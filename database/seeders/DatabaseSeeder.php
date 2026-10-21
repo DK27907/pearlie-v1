@@ -25,6 +25,7 @@ class DatabaseSeeder extends Seeder
             return;
         }
 
+        $this->call(NairobiHospitalDemoSeeder::class);
         $this->call(SuperAdminSeeder::class);
         $this->call(AdminUserSeeder::class);
 
