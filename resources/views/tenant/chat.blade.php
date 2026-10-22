@@ -114,6 +114,12 @@
             display: block;
         }
 
+        .message a {
+            color: #0369a1;
+            font-weight: 600;
+            text-decoration: underline;
+        }
+
         /* ── Typing Indicator ── */
         .typing-indicator {
             display: none;

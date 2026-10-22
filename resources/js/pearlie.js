@@ -44,7 +44,29 @@ function appendMessage(text, type) {
 
     const div = document.createElement('div');
     div.className = `message ${type}`;
-    div.innerText = text;
+    const receiptLinkPattern = /\[Download Receipt \(PDF\)\]\((https?:\/\/[^\s)]+)\)/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = receiptLinkPattern.exec(text)) !== null) {
+        div.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+
+        const url = new URL(match[1], window.location.href);
+        if (url.origin === window.location.origin && url.pathname.startsWith('/receipts/')) {
+            const link = document.createElement('a');
+            link.href = url.href;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = 'Download Receipt (PDF)';
+            div.appendChild(link);
+        } else {
+            div.appendChild(document.createTextNode(match[0]));
+        }
+
+        lastIndex = match.index + match[0].length;
+    }
+
+    div.appendChild(document.createTextNode(text.slice(lastIndex)));
     messagesEl.appendChild(div);
     messagesEl.scrollTop = messagesEl.scrollHeight;
 }

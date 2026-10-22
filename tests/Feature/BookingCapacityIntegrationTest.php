@@ -55,7 +55,8 @@ class BookingCapacityIntegrationTest extends TestCase
         $chat->handle($sessionId, 'Capacity Test Patient', 'web');
         $chat->handle($sessionId, '254748249882', 'web');
         $summary = $chat->handle($sessionId, '09:00', 'web');
-        $response = $chat->handle($sessionId, 'yes', 'web');
+        $chat->handle($sessionId, 'yes', 'web');
+        $response = $chat->handle($sessionId, 'Pay at hospital', 'web');
         $appointment = AppointmentRequest::query()
             ->where('session_id', $sessionId)
             ->firstOrFail();

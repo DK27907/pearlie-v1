@@ -11,6 +11,7 @@
             'sms' => 'SMS',
             'email' => 'Email',
             'branding' => 'Branding',
+            'receipts' => 'Receipts',
         ];
         $days = [
             'monday' => 'Monday',
@@ -155,6 +156,17 @@
                         </fieldset>
                         <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save general settings</button>
                     </form>
+                    <fieldset class="space-y-4 rounded-xl border border-slate-200 p-4">
+                        <legend class="px-2 text-sm font-bold text-slate-900">Appointment reminders</legend>
+                        <label class="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                            <input type="checkbox" name="reminder_enabled" value="1" @checked(old('reminder_enabled', $hospital->reminder_enabled))>
+                            Send an SMS reminder approximately 24 hours before confirmed appointments
+                        </label>
+                        <label class="block text-sm font-semibold text-slate-700">Reminder message
+                            <textarea class="{{ $inputClass }}" name="reminder_message_template" rows="3" maxlength="1000">{{ old('reminder_message_template', $hospital->reminder_message_template) }}</textarea>
+                            <span class="mt-1 block text-xs font-normal text-slate-500">Available placeholders: {patient_name}, {doctor_name}, {appointment_time}.</span>
+                        </label>
+                    </fieldset>
                 </section>
             @elseif ($activeTab === 'mpesa')
                 <section role="tabpanel" class="space-y-6 p-5 sm:p-7">
@@ -298,6 +310,8 @@
                     </form>
                     @include('admin.settings.partials.clear-credentials', ['provider' => 'email'])
                 </section>
+            @elseif ($activeTab === 'receipts')
+                @include('admin.settings.receipts', ['hospital' => $hospital])
             @else
                 <section role="tabpanel" class="space-y-6 p-5 sm:p-7">
                     <div>

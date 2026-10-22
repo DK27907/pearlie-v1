@@ -58,6 +58,11 @@ class AppointmentRequest extends Model
         'cancelled_by_id',
         'cancellation_reason',
         'forfeited_amount',
+        'payment_method',
+        'payment_due_at',
+        'paid_by_user_id',
+        'payment_collected_amount',
+        'payment_notes',
     ];
 
     protected $casts = [
@@ -71,11 +76,27 @@ class AppointmentRequest extends Model
         'marked_no_show_at' => 'datetime',
         'cancelled_at' => 'datetime',
         'forfeited_amount' => 'decimal:2',
+        'payment_collected_amount' => 'decimal:2',
     ];
 
     public function mpesaPayment(): HasOne
     {
         return $this->hasOne(MpesaPayment::class)->latestOfMany();
+    }
+
+    public function receipt(): HasOne
+    {
+        return $this->hasOne(Receipt::class);
+    }
+
+    public function paidBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'paid_by_user_id');
+    }
+
+    public function isPendingPayment(): bool
+    {
+        return $this->payment_status === 'pending';
     }
 
     public function doctor(): BelongsTo

@@ -34,6 +34,8 @@ class UpdateGeneralSettingsRequest extends FormRequest
             'rescheduling_cutoff_hours' => ['sometimes', 'integer', 'between:0,8760'],
             'late_cancellation_fee' => ['sometimes', 'numeric', 'min:0', 'max:1000000'],
             'deposits_refundable' => ['sometimes', 'boolean'],
+            'reminder_enabled' => ['sometimes', 'boolean'],
+            'reminder_message_template' => ['sometimes', 'string', 'max:1000'],
             'business_hours' => ['nullable', 'array'],
             'business_hours.*.open' => ['required_with:business_hours', 'regex:/^\d{2}:\d{2}$/'],
             'business_hours.*.close' => ['required_with:business_hours', 'regex:/^\d{2}:\d{2}$/'],

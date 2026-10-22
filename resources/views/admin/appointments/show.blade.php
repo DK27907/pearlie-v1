@@ -68,6 +68,12 @@
                         <dt class="text-slate-500">Paid at</dt>
                         <dd class="mt-1 font-medium text-slate-900">{{ $appt->paid_at?->format('M j, Y g:i a') ?? 'Not paid' }}</dd>
                     </div>
+                    @if ($appt->payment_method)
+                        <div>
+                            <dt class="text-slate-500">Payment method</dt>
+                            <dd class="mt-1 font-medium capitalize text-slate-900">{{ str_replace('_', ' ', $appt->payment_method) }}</dd>
+                        </div>
+                    @endif
                     @if ($paymentReceipt)
                         <div class="sm:col-span-2">
                             <dt class="text-slate-500">M-Pesa receipt</dt>
@@ -86,6 +92,29 @@
                         >Verify Payment</button>
                         <p id="mpesa-verification-result" role="status" aria-live="polite" class="text-sm text-slate-600"></p>
                     </div>
+                @endif
+                @if ($paymentStatus === 'pending' && $appt->payment_due_at === 'at_hospital' && in_array($appt->status, ['pending', 'confirmed'], true))
+                    <form method="POST" action="{{ route('admin.appointments.mark-paid', $appt->id) }}" class="mt-5 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
+                        @csrf
+                        <label class="block text-sm font-semibold text-slate-700">Amount received (KES)
+                            <input class="mt-1 block w-full rounded-lg border-slate-300 text-sm" type="number" name="amount" min="0.01" max="10000000" step="0.01" required value="{{ old('amount', $paymentAmount ?? 0) }}">
+                            <span class="mt-1 block text-xs font-normal text-slate-500">Enter the full outstanding amount; partial or excess payments are not supported.</span>
+                        </label>
+                        <label class="block text-sm font-semibold text-slate-700">Payment method
+                            <select class="mt-1 block w-full rounded-lg border-slate-300 text-sm" name="payment_method" required>
+                                @foreach (['cash' => 'Cash', 'card' => 'Card', 'bank' => 'Bank transfer', 'other' => 'Other'] as $value => $label)
+                                    <option value="{{ $value }}" @selected(old('payment_method', 'cash') === $value)>{{ $label }}</option>
+                                @endforeach
+                            </select>
+                        </label>
+                        <label class="block text-sm font-semibold text-slate-700">Notes (optional)
+                            <input class="mt-1 block w-full rounded-lg border-slate-300 text-sm" name="notes" maxlength="1000" value="{{ old('notes') }}">
+                        </label>
+                        <button type="submit" class="rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-800 sm:col-span-3 sm:justify-self-start">Mark as paid and generate receipt</button>
+                    </form>
+                @endif
+                @if ($appt->receipt)
+                    <a href="{{ $appt->receipt->signedDownloadUrl() }}" class="mt-4 inline-flex rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Download receipt PDF</a>
                 @endif
             </section>
 

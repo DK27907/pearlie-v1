@@ -41,7 +41,7 @@ class SettingsController extends Controller
         $hospital = $this->currentHospital();
         $settings->for($hospital);
         $activeTab = $request->query('tab', 'general');
-        if (! in_array($activeTab, ['general', ...self::PROVIDERS, 'branding'], true)) {
+        if (! in_array($activeTab, ['general', ...self::PROVIDERS, 'branding', 'receipts'], true)) {
             $activeTab = 'general';
         }
 
@@ -100,6 +100,10 @@ class SettingsController extends Controller
             'late_cancellation_fee',
             'deposits_refundable',
         ]));
+        $hospitalFields['reminder_enabled'] = (bool) ($data['reminder_enabled'] ?? false);
+        if (array_key_exists('reminder_message_template', $data)) {
+            $hospitalFields['reminder_message_template'] = $data['reminder_message_template'];
+        }
         if ($hospitalFields !== []) {
             $hospital->fill($hospitalFields)->save();
         }

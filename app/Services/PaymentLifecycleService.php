@@ -5,8 +5,10 @@ namespace App\Services;
 use App\Jobs\SendPaymentNotification;
 use App\Models\AppointmentRequest;
 use App\Models\Conversation;
+use App\Models\Hospital;
 use App\Models\MpesaPayment;
 use App\Models\PaymentEvent;
+use App\Models\Receipt;
 use App\Models\SlotHold;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +18,8 @@ class PaymentLifecycleService
 {
     public function __construct(
         private readonly DoctorAvailabilityService $availability,
+        private readonly ReceiptService $receipts,
+        private readonly EtimsService $etims,
     ) {}
 
     /**
@@ -23,7 +27,7 @@ class PaymentLifecycleService
      */
     public function markCompleted(MpesaPayment $payment, array $metadata): bool
     {
-        return DB::transaction(function () use ($payment, $metadata): bool {
+        $completed = DB::transaction(function () use ($payment, $metadata): bool {
             $lockedPayment = MpesaPayment::query()
                 ->whereKey($payment->id)
                 ->lockForUpdate()
@@ -42,6 +46,50 @@ class PaymentLifecycleService
 
             return true;
         });
+
+        if (! $completed || $payment->appointment_request_id === null) {
+            return $completed;
+        }
+
+        $appointment = AppointmentRequest::withoutGlobalScope('hospital')
+            ->where('hospital_id', $payment->hospital_id)
+            ->whereKey($payment->appointment_request_id)
+            ->first();
+        if (! $appointment || $appointment->payment_status !== 'paid') {
+            return true;
+        }
+
+        $mpesaPayment = MpesaPayment::withoutGlobalScope('hospital')
+            ->where('hospital_id', $payment->hospital_id)
+            ->whereKey($payment->id)
+            ->firstOrFail();
+
+        try {
+            $receipt = $this->receipts->generateForAppointment($appointment, $mpesaPayment);
+        } catch (\Throwable $exception) {
+            $receipt = Receipt::query()
+                ->where('hospital_id', $payment->hospital_id)
+                ->where('appointment_request_id', $appointment->id)
+                ->first();
+            Log::error('Payment completed but receipt PDF generation failed.', [
+                'payment_id' => $payment->id,
+                'appointment_id' => $appointment->id,
+                'hospital_id' => $payment->hospital_id,
+                'exception' => $exception,
+            ]);
+            if (! $receipt) {
+                throw $exception;
+            }
+        }
+
+        $hospital = Hospital::query()->findOrFail($appointment->hospital_id);
+        if ($this->etims->isEnabled($hospital)) {
+            $this->etims->submitReceipt($receipt);
+        }
+
+        app(BookingChatService::class)->appendReceiptLink($appointment, $receipt);
+
+        return true;
     }
 
     /**
@@ -208,6 +256,9 @@ class PaymentLifecycleService
             $attributes = [
                 'payment_status' => $slotExpired ? 'refund_pending' : 'paid',
                 'payment_amount' => $payment->amount,
+                'payment_method' => 'mpesa',
+                'payment_due_at' => 'online',
+                'payment_collected_amount' => $slotExpired ? null : $payment->amount,
                 'paid_at' => now(),
             ];
 

@@ -7,7 +7,9 @@ use App\Exceptions\MissingProviderCredentialsException;
 use App\Models\AppointmentRequest;
 use App\Models\Conversation;
 use App\Models\Hospital;
+use App\Models\Receipt;
 use App\Models\Service;
+use App\Models\SlotHold;
 use App\Models\User;
 use App\Services\Chat\ChatResponse;
 use App\Support\CacheLockRunner;
@@ -33,6 +35,8 @@ class BookingChatService
     private const STATE_COLLECTING = 'COLLECTING';
 
     private const STATE_CONFIRMING = 'CONFIRMING';
+
+    private const STATE_PAYMENT_CHOICE = 'PAYMENT_CHOICE';
 
     private const STATE_PAYMENT_PENDING = 'PAYMENT_PENDING';
 
@@ -105,6 +109,57 @@ class BookingChatService
                 $hospital,
             ),
         );
+    }
+
+    public function appendReceiptLink(AppointmentRequest $appointment, Receipt $receipt): void
+    {
+        if (! is_string($appointment->session_id) || $appointment->session_id === '') {
+            return;
+        }
+
+        $conversationExists = Conversation::withoutGlobalScopes()
+            ->where('hospital_id', $appointment->hospital_id)
+            ->where('session_id', $appointment->session_id)
+            ->where('channel', 'web')
+            ->exists();
+        if (! $conversationExists) {
+            return;
+        }
+
+        $receiptMessage = Conversation::withoutGlobalScopes()
+            ->where('hospital_id', $appointment->hospital_id)
+            ->where('session_id', $appointment->session_id)
+            ->where('channel', 'web')
+            ->where('chat_state->system_event', 'payment_receipt')
+            ->where('chat_state->appointment_id', $appointment->id)
+            ->latest('id')
+            ->first();
+        $downloadLink = '[Download Receipt (PDF)]('.$receipt->signedDownloadUrl().')';
+
+        if ($receiptMessage) {
+            $response = (string) $receiptMessage->ai_response;
+            if (! str_contains($response, $downloadLink)) {
+                $receiptMessage->forceFill([
+                    'ai_response' => rtrim($response)."\n".$downloadLink,
+                ])->save();
+            }
+
+            return;
+        }
+
+        Conversation::withoutGlobalScopes()->forceCreate([
+            'hospital_id' => $appointment->hospital_id,
+            'session_id' => $appointment->session_id,
+            'user_message' => '',
+            'ai_response' => 'Your receipt is ready: '.$downloadLink,
+            'confidence_score' => 1.0,
+            'channel' => 'web',
+            'chat_state' => [
+                'system_event' => 'receipt_ready',
+                'appointment_id' => $appointment->id,
+            ],
+            'chat_state_updated_at' => now(),
+        ]);
     }
 
     private function handleWithinSessionLock(
@@ -226,6 +281,27 @@ class BookingChatService
                 $state['appointment_id'],
                 true,
             );
+        }
+
+        if ($state['state'] === self::STATE_PAYMENT_CHOICE) {
+            $lowerMessage = mb_strtolower($message);
+            $paymentMethod = preg_match('/\b(cash|at the hospital|at hospital|pay later|later|hospitalini|lipa hospitalini)\b/u', $lowerMessage) === 1
+                ? 'cash'
+                : (preg_match('/\b(mpesa|m-pesa|pay now|online|lipa sasa)\b/u', $lowerMessage) === 1
+                    ? 'mpesa'
+                    : null);
+
+            if ($paymentMethod === null) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    'Please choose “Pay now via M-Pesa” or “Pay at the hospital”.',
+                    $state,
+                );
+            }
+
+            return $this->confirmBooking($sessionId, $channel, $message, $hospital, $state, $paymentMethod);
         }
 
         if ($intent === 'reset') {
@@ -1213,7 +1289,36 @@ class BookingChatService
         string $message,
         Hospital $hospital,
         array $state,
+        ?string $paymentMethod = null,
     ): ChatResponse {
+        if ($paymentMethod === null) {
+            $service = $this->serviceById((int) $state['service_id'], $hospital);
+            $amount = (float) $service->price;
+            if ($amount <= 0) {
+                $paymentMethod = 'none';
+            } else {
+                $state['state'] = self::STATE_PAYMENT_CHOICE;
+
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    'Would you like to pay now via M-Pesa, or pay at the hospital on your appointment date?',
+                    $state,
+                );
+            }
+        }
+
+        if ($paymentMethod === 'mpesa' && ! $hospital->hasFeature('mpesa')) {
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                'M-Pesa is not enabled for this hospital. Please choose payment at the hospital.',
+                $state,
+            );
+        }
+
         $service = $this->serviceById((int) $state['service_id'], $hospital);
         $appointment = $this->availability->bookAppointment(
             (string) $state['date'],
@@ -1235,6 +1340,34 @@ class BookingChatService
         }
 
         $amount = (float) ($appointment->payment_amount ?? $service->price);
+        if ($paymentMethod === 'cash') {
+            $appointment->forceFill([
+                'status' => AppointmentRequest::STATUS_CONFIRMED,
+                'status_updated_at' => now(),
+                'payment_status' => 'pending',
+                'payment_method' => 'cash',
+                'payment_due_at' => 'at_hospital',
+            ])->save();
+            SlotHold::query()
+                ->where('hospital_id', $appointment->hospital_id)
+                ->where('appointment_request_id', $appointment->id)
+                ->delete();
+            $state['state'] = self::STATE_COMPLETED;
+            $state['appointment_id'] = $appointment->id;
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                sprintf(
+                    'Your appointment is confirmed. Payment of KES %s is due at the hospital on your appointment date.',
+                    number_format($amount, 2),
+                ),
+                $state,
+                $appointment->id,
+            );
+        }
+
         if (! $hospital->hasFeature('mpesa') || $amount <= 0) {
             $state['state'] = self::STATE_COMPLETED;
             $state['appointment_id'] = $appointment->id;
@@ -1251,6 +1384,10 @@ class BookingChatService
             );
         }
 
+        $appointment->forceFill([
+            'payment_method' => 'mpesa',
+            'payment_due_at' => 'online',
+        ])->save();
         $state['state'] = self::STATE_PAYMENT_PENDING;
         $state['appointment_id'] = $appointment->id;
         if (! $this->persistState(
@@ -2795,7 +2932,7 @@ class BookingChatService
                 ->where('channel', $channel)
                 ->where(function ($query): void {
                     $query->whereNull('chat_state->system_event')
-                        ->orWhere('chat_state->system_event', '!=', 'payment_receipt');
+                        ->orWhereNotIn('chat_state->system_event', ['payment_receipt', 'receipt_ready']);
                 })
                 ->latest('id')
                 ->lockForUpdate()
@@ -3387,7 +3524,7 @@ class BookingChatService
             ->where('channel', $channel)
             ->where(function ($query): void {
                 $query->whereNull('chat_state->system_event')
-                    ->orWhere('chat_state->system_event', '!=', 'payment_receipt');
+                    ->orWhereNotIn('chat_state->system_event', ['payment_receipt', 'receipt_ready']);
             })
             ->latest('id')
             ->first();
@@ -3404,7 +3541,7 @@ class BookingChatService
             ->whereNotNull('chat_state')
             ->where(function ($query): void {
                 $query->whereNull('chat_state->system_event')
-                    ->orWhere('chat_state->system_event', '!=', 'payment_receipt');
+                    ->orWhereNotIn('chat_state->system_event', ['payment_receipt', 'receipt_ready']);
             })
             ->latest('id');
 
@@ -3463,6 +3600,7 @@ class BookingChatService
             self::STATE_IDENTIFYING,
             self::STATE_COLLECTING,
             self::STATE_CONFIRMING,
+            self::STATE_PAYMENT_CHOICE,
             self::STATE_PAYMENT_PENDING,
             self::STATE_COMPLETED,
             self::STATE_CANCELLED,
