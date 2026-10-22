@@ -26,8 +26,8 @@ return new class extends Migration
                 $table->unsignedInteger('recipients_count')->default(0);
                 $table->string('status')->default('draft');
                 $table->timestamps();
-                $table->index(['hospital_id', 'status', 'scheduled_for']);
-                $table->index(['hospital_id', 'type', 'created_at']);
+                $table->index(['hospital_id', 'status', 'scheduled_for'], 'ann_hosp_status_sched_idx');
+                $table->index(['hospital_id', 'type', 'created_at'], 'ann_hosp_type_created_idx');
             });
         }
 
@@ -43,8 +43,8 @@ return new class extends Migration
                 $table->string('delivery_status')->default('queued');
                 $table->string('provider_message_id')->nullable();
                 $table->timestamps();
-                $table->unique(['announcement_id', 'appointment_request_id']);
-                $table->index(['announcement_id', 'delivery_status']);
+                $table->unique(['announcement_id', 'appointment_request_id'], 'ann_recipient_appointment_unique');
+                $table->index(['announcement_id', 'delivery_status'], 'ann_recipient_delivery_status_idx');
             });
         }
 
@@ -78,10 +78,14 @@ return new class extends Migration
             'updated_at',
         ]);
 
-        $this->ensureIndex('announcements', ['hospital_id', 'status', 'scheduled_for']);
-        $this->ensureIndex('announcements', ['hospital_id', 'type', 'created_at']);
+        $this->ensureIndex('announcements', ['hospital_id', 'status', 'scheduled_for'], 'ann_hosp_status_sched_idx');
+        $this->ensureIndex('announcements', ['hospital_id', 'type', 'created_at'], 'ann_hosp_type_created_idx');
         $this->ensureRecipientUniqueIndex();
-        $this->ensureIndex('announcement_recipients', ['announcement_id', 'delivery_status']);
+        $this->ensureIndex(
+            'announcement_recipients',
+            ['announcement_id', 'delivery_status'],
+            'ann_recipient_delivery_status_idx',
+        );
     }
 
     /**
@@ -112,14 +116,14 @@ return new class extends Migration
     /**
      * @param  array<int, string>  $columns
      */
-    private function ensureIndex(string $table, array $columns): void
+    private function ensureIndex(string $table, array $columns, string $name): void
     {
         if (Schema::hasIndex($table, $columns)) {
             return;
         }
 
-        Schema::table($table, function (Blueprint $blueprint) use ($columns): void {
-            $blueprint->index($columns);
+        Schema::table($table, function (Blueprint $blueprint) use ($columns, $name): void {
+            $blueprint->index($columns, $name);
         });
     }
 
@@ -145,7 +149,7 @@ return new class extends Migration
         }
 
         Schema::table('announcement_recipients', function (Blueprint $table) use ($columns): void {
-            $table->unique($columns);
+            $table->unique($columns, 'ann_recipient_appointment_unique');
         });
     }
 };

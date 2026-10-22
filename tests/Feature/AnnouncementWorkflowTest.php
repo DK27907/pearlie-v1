@@ -289,8 +289,8 @@ class AnnouncementWorkflowTest extends TestCase
     public function test_migration_repairs_missing_indexes_on_existing_announcement_tables(): void
     {
         Schema::table('announcement_recipients', function (Blueprint $table): void {
-            $table->dropUnique('announcement_recipients_announcement_id_appointment_request_id_unique');
-            $table->dropIndex('announcement_recipients_announcement_id_delivery_status_index');
+            $table->dropUnique('ann_recipient_appointment_unique');
+            $table->dropIndex('ann_recipient_delivery_status_idx');
         });
 
         $migration = require database_path('migrations/2026_10_22_211329_create_announcements_tables.php');
@@ -305,5 +305,13 @@ class AnnouncementWorkflowTest extends TestCase
             'announcement_recipients',
             ['announcement_id', 'delivery_status'],
         ));
+        $this->assertContains(
+            'ann_recipient_appointment_unique',
+            Schema::getIndexListing('announcement_recipients'),
+        );
+        $this->assertContains(
+            'ann_recipient_delivery_status_idx',
+            Schema::getIndexListing('announcement_recipients'),
+        );
     }
 }
