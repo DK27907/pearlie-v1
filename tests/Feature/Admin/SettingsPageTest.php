@@ -72,6 +72,8 @@ class SettingsPageTest extends TestCase
             'deposit_amount' => 750,
             'slot_duration_minutes' => 45,
             'auto_confirm_paid_appointments' => '1',
+            'reminder_enabled' => '1',
+            'reminder_message_template' => 'Hello {patient_name}, your appointment is tomorrow.',
             'business_hours' => [
                 'monday' => ['open' => '08:00', 'close' => '17:00', 'closed' => '0'],
             ],
@@ -82,7 +84,12 @@ class SettingsPageTest extends TestCase
             'deposit_amount' => '750.00',
             'slot_duration_minutes' => 45,
             'auto_confirm_paid_appointments' => true,
+            'reminder_enabled' => true,
         ]);
+        $this->assertSame(
+            'Hello {patient_name}, your appointment is tomorrow.',
+            $hospital->fresh()->reminder_message_template,
+        );
         $this->assertSame('08:00', $hospital->fresh()->business_hours['monday']['open']);
     }
 

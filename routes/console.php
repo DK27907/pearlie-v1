@@ -11,6 +11,8 @@ use App\Console\Commands\PrunePasswordResetTokens;
 use App\Console\Commands\PrunePaymentEvents;
 use App\Console\Commands\ReconcileMpesaPayments;
 use App\Console\Commands\RefreshMpesaCaBundle;
+use App\Console\Commands\SendAppointmentReminders;
+use App\Console\Commands\SendScheduledAnnouncements;
 use Illuminate\Console\Application as ArtisanApplication;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -29,6 +31,8 @@ ArtisanApplication::starting(static function ($artisan): void {
         PrunePasswordResetTokens::class,
         PruneConversations::class,
         PrunePaymentEvents::class,
+        SendAppointmentReminders::class,
+        SendScheduledAnnouncements::class,
     ]);
 });
 
@@ -96,3 +100,11 @@ Schedule::command('app:prune-payment-events --days=365')
     ->onOneServer()
     ->runInBackground()
     ->onSuccess(static fn (): bool => MpesaHealthCheck::recordSchedulerHeartbeat('app:prune-payment-events --days=365'));
+Schedule::command('appointments:send-reminders')
+    ->everyMinute()
+    ->withoutOverlapping(5)
+    ->onOneServer();
+Schedule::command('app:send-scheduled-announcements')
+    ->everyMinute()
+    ->withoutOverlapping(5)
+    ->onOneServer();
