@@ -76,6 +76,7 @@ class NairobiHospitalDemoBookingTest extends TestCase
             '254748249882',
             '10:30 AM',
             'yes',
+            'Pay now',
         ] as $message) {
             $responses[] = $this->postJson('/h/'.$hospital->slug.'/chat', [
                 'message' => $message,
@@ -86,7 +87,8 @@ class NairobiHospitalDemoBookingTest extends TestCase
         $responses[1]->assertJsonPath('collected_fields.service_id', $service->id);
         $responses[5]->assertJsonPath('collected_fields.patient_phone', '254748249882');
         $this->assertStringContainsString('KSh 1.00', $responses[5]->json('response'));
-        $this->assertStringContainsString('We sent an M-Pesa prompt to 254748249882', $responses[6]->json('response'));
+        $responses[6]->assertJsonPath('state', 'PAYMENT_CHOICE');
+        $this->assertStringContainsString('We sent an M-Pesa prompt to 254748249882', $responses[7]->json('response'));
 
         Http::assertSent(fn ($request): bool => str_contains($request->url(), '/mpesa/stkpush/v1/processrequest')
             && $request['Amount'] === 1

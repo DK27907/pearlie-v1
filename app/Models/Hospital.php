@@ -66,6 +66,20 @@ class Hospital extends Model
         'trial_ends_at',
         'is_active',
         'settings',
+        'receipt_letterhead_path',
+        'receipt_footer_path',
+        'receipt_footer_text',
+        'receipt_signature_path',
+        'receipt_prefix',
+        'receipt_title',
+        'receipt_show_kra_pin',
+        'receipt_kra_pin',
+        'etims_enabled',
+        'etims_kra_pin',
+        'etims_environment',
+        'etims_device_id',
+        'reminder_enabled',
+        'reminder_message_template',
     ];
 
     protected function casts(): array
@@ -91,6 +105,9 @@ class Hospital extends Model
             'settings' => 'array',
             'trial_ends_at' => 'datetime',
             'is_active' => 'boolean',
+            'receipt_show_kra_pin' => 'boolean',
+            'etims_enabled' => 'boolean',
+            'reminder_enabled' => 'boolean',
         ];
     }
 
@@ -137,6 +154,16 @@ class Hospital extends Model
     public function appointments(): HasMany
     {
         return $this->hasMany(AppointmentRequest::class);
+    }
+
+    public function receipts(): HasMany
+    {
+        return $this->hasMany(Receipt::class);
+    }
+
+    public function announcements(): HasMany
+    {
+        return $this->hasMany(Announcement::class);
     }
 
     public function shouldAutoConfirmPaidAppointments(): bool

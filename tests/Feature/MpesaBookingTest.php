@@ -254,6 +254,7 @@ class MpesaBookingTest extends TestCase
         $this->assertStringContainsString('QWE123', $receipt);
         $this->assertStringContainsString($bookingStatus, $receipt);
         $this->assertStringContainsString('10:30 AM', $receipt);
+        $this->assertStringContainsString('[Download Receipt (PDF)](http', $receipt);
         $this->assertDatabaseHas('conversations', [
             'hospital_id' => hospital()->id,
             'session_id' => $appointment->session_id,

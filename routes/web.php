@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\Admin\AnnouncementController;
 use App\Http\Controllers\Admin\AppointmentLifecycleController as AdminAppointmentLifecycleController;
 use App\Http\Controllers\Admin\DoctorController;
+use App\Http\Controllers\Admin\ReceiptSettingsController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
@@ -21,6 +23,7 @@ use App\Http\Controllers\Patient\AppointmentController as PatientAppointmentCont
 use App\Http\Controllers\Patient\AppointmentRescheduleController;
 use App\Http\Controllers\PaymentStatusController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
 use App\Http\Controllers\SuperAdmin\HospitalController as SuperAdminHospitalController;
 use App\Http\Controllers\TenantHomeController;
@@ -72,6 +75,10 @@ Route::get('/hospital/{slug}/invitation/{token}', [HospitalInvitationController:
 Route::post('/hospital/{slug}/invitation/{token}', [HospitalInvitationController::class, 'store'])
     ->middleware(['signed', 'throttle:6,1'])
     ->name('hospital.invitation.store');
+Route::get('/receipts/{receipt}', [ReceiptController::class, 'download'])
+    ->whereNumber('receipt')
+    ->middleware('signed')
+    ->name('receipts.download');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/doctor/setup/{token}', [DoctorSetupController::class, 'show'])
@@ -228,6 +235,8 @@ Route::middleware(['auth', 'hospital.admin', 'password.changed'])
         Route::put('settings', [HospitalOnboardingController::class, 'update'])->name('settings.update');
         Route::prefix('integration-settings')->name('integration-settings.')->group(function (): void {
             Route::get('/', [SettingsController::class, 'edit'])->name('edit');
+            Route::put('/receipts', [ReceiptSettingsController::class, 'update'])->name('receipts.update');
+            Route::get('/receipt-assets/{kind}', [ReceiptSettingsController::class, 'asset'])->name('receipts.asset');
             Route::put('/general', [SettingsController::class, 'updateGeneral'])->name('general.update');
             Route::put('/mpesa', [SettingsController::class, 'updateMpesa'])->name('mpesa.update');
             Route::put('/whatsapp', [SettingsController::class, 'updateWhatsApp'])->name('whatsapp.update');
@@ -236,6 +245,15 @@ Route::middleware(['auth', 'hospital.admin', 'password.changed'])
             Route::put('/branding', [SettingsController::class, 'updateBranding'])->name('branding.update');
             Route::delete('/credentials/{provider}', [SettingsController::class, 'clearCredential'])->name('credentials.clear');
         });
+        Route::get('announcements', [AnnouncementController::class, 'index'])->name('announcements.index');
+        Route::get('announcements/create', [AnnouncementController::class, 'create'])->name('announcements.create');
+        Route::post('announcements/preview', [AnnouncementController::class, 'preview'])
+            ->middleware('throttle:10,1')
+            ->name('announcements.preview');
+        Route::post('announcements', [AnnouncementController::class, 'store'])
+            ->middleware('throttle:10,1')
+            ->name('announcements.store');
+        Route::get('announcements/{announcement}', [AnnouncementController::class, 'show'])->name('announcements.show');
 
         // Escalations
         Route::get('escalations', [EscalationController::class, 'index'])->middleware('feature:escalation')->name('escalations.index');
@@ -274,6 +292,7 @@ Route::middleware(['auth', 'hospital.admin', 'password.changed'])
         Route::get('appointments/{id}', [AppointmentController::class, 'show'])->middleware('feature:booking')->name('appointments.show');
         Route::post('appointments/{id}/status', [AppointmentController::class, 'updateStatus'])->middleware('feature:booking')->name('appointments.updateStatus');
         Route::post('appointments/{id}/confirm', [AppointmentController::class, 'confirm'])->middleware('feature:booking')->name('appointments.confirm');
+        Route::post('appointments/{id}/mark-paid', [AppointmentController::class, 'markPaid'])->middleware('feature:booking')->name('appointments.mark-paid');
         Route::post('appointments/{id}/no-show', [AppointmentController::class, 'markNoShow'])->middleware('feature:booking')->name('appointments.no-show');
         Route::post('appointments/{id}/cancel', [AdminAppointmentLifecycleController::class, 'cancel'])->whereNumber('id')->middleware('feature:booking')->name('appointments.cancel');
         Route::post('appointments/{id}/reschedule', [AdminAppointmentLifecycleController::class, 'reschedule'])->whereNumber('id')->middleware('feature:booking')->name('appointments.reschedule');

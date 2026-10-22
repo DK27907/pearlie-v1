@@ -9,14 +9,17 @@ use App\Models\DoctorAvailability;
 use App\Models\Hospital;
 use App\Services\AppointmentLifecycleService;
 use App\Services\DoctorAvailabilityService;
+use App\Services\EtimsService;
 use App\Services\NoShowService;
 use App\Services\NotificationService;
+use App\Services\ReceiptService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class AppointmentController extends Controller
 {
@@ -90,7 +93,7 @@ class AppointmentController extends Controller
 
     public function show(int $id)
     {
-        $appt = AppointmentRequest::findOrFail($id);
+        $appt = AppointmentRequest::query()->with(['receipt', 'paidBy'])->findOrFail($id);
 
         return view('admin.appointments.show', [
             'appt' => $appt,
@@ -100,6 +103,65 @@ class AppointmentController extends Controller
                 AppointmentRequest::getNoShowCount((string) $appt->phone) - ($appt->isNoShow() ? 1 : 0),
             ),
         ]);
+    }
+
+    public function markPaid(
+        Request $request,
+        int $id,
+        ReceiptService $receipts,
+        EtimsService $etims,
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'amount' => ['required', 'numeric', 'gt:0', 'max:10000000'],
+            'payment_method' => ['required', 'string', Rule::in(['cash', 'card', 'bank', 'other'])],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $appointment = DB::transaction(function () use ($id, $validated, $request): AppointmentRequest {
+            $appointment = AppointmentRequest::query()->lockForUpdate()->findOrFail($id);
+            abort_unless(
+                $appointment->payment_due_at === 'at_hospital',
+                422,
+                'Only appointments payable at the hospital can be marked paid here.',
+            );
+            abort_if($appointment->payment_status === 'paid', 422, 'This appointment is already marked as paid.');
+            abort_if(in_array($appointment->status, [
+                AppointmentRequest::STATUS_CANCELLED,
+                AppointmentRequest::STATUS_EXPIRED,
+            ], true), 422, 'Cancelled or expired appointments cannot be marked as paid.');
+            $amountDue = round((float) ($appointment->payment_amount ?? $appointment->booking_fee), 2);
+            if (round((float) $validated['amount'], 2) !== $amountDue) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Amount received must equal the full outstanding amount. Partial and excess payments are not supported.',
+                ]);
+            }
+
+            $wasPending = $appointment->status === AppointmentRequest::STATUS_PENDING;
+            $appointment->forceFill([
+                'payment_status' => 'paid',
+                'payment_method' => $validated['payment_method'],
+                'payment_due_at' => 'at_hospital',
+                'payment_collected_amount' => $validated['amount'],
+                'payment_notes' => $validated['notes'] ?? null,
+                'paid_by_user_id' => $request->user()->id,
+                'payment_amount' => $validated['amount'],
+                'paid_at' => now(),
+                'status' => $wasPending ? AppointmentRequest::STATUS_CONFIRMED : $appointment->status,
+                'status_updated_at' => $wasPending ? now() : $appointment->status_updated_at,
+            ])->save();
+
+            return $appointment;
+        });
+
+        $receipt = $receipts->generateForAppointment($appointment, cashier: $request->user());
+        $receiptHospital = Hospital::query()->findOrFail($appointment->hospital_id);
+        if ($etims->isEnabled($receiptHospital)) {
+            $etims->submitReceipt($receipt);
+        }
+
+        return redirect()
+            ->route('admin.appointments.show', $appointment->id)
+            ->with('status', "Marked as paid, receipt #{$receipt->receipt_number} generated.");
     }
 
     public function markNoShow(Request $request, int $id, NoShowService $noShowService): RedirectResponse

@@ -1138,7 +1138,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertDatabaseCount('appointment_requests', 0);
     }
 
-    public function test_confirmation_yes_creates_appointment_and_starts_payment(): void
+    public function test_confirmation_yes_asks_for_payment_method_before_stk_push(): void
     {
         [$hospital] = $this->createContext(price: 1, mpesaEnabled: true);
         $this->configureMpesaFakes();
@@ -1152,13 +1152,43 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame('CONFIRMING', $summary->state);
         $this->assertStringContainsString('M-Pesa amount: KSh 1.00', $summary->message);
 
-        $response = $chat->handle('state-confirm-yes', 'yes', 'web');
+        $paymentChoice = $chat->handle('state-confirm-yes', 'yes', 'web');
 
+        $this->assertSame('PAYMENT_CHOICE', $paymentChoice->state);
+        $this->assertStringContainsString('pay now via M-Pesa', $paymentChoice->message);
+        $this->assertDatabaseCount('appointment_requests', 0);
+
+        $response = $chat->handle('state-confirm-yes', 'Pay now', 'web');
         $this->assertSame('PAYMENT_PENDING', $response->state);
         $this->assertSame(1, AppointmentRequest::query()->where('id', $response->appointmentId)->count());
         $this->assertTrue($response->paymentRequired);
         $this->assertStringNotContainsString('KSh', $response->message);
         Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/mpesa/stkpush/v1/processrequest'));
+    }
+
+    public function test_patient_can_pay_at_hospital_without_triggering_mpesa(): void
+    {
+        [$hospital] = $this->createContext(price: 1, mpesaEnabled: true);
+        Http::preventStrayRequests();
+        $chat = app(BookingChatService::class);
+        $chat->handle(
+            'state-pay-at-hospital',
+            'Book Dental Cleaning with Dr. Amina Njeri tomorrow at 9am. My name is Test Patient, phone 254748249882.',
+            'web',
+        );
+        $choice = $chat->handle('state-pay-at-hospital', 'yes', 'web');
+
+        $response = $chat->handle('state-pay-at-hospital', 'Pay at hospital', 'web');
+        $appointment = AppointmentRequest::query()->where('session_id', 'state-pay-at-hospital')->firstOrFail();
+
+        $this->assertSame('PAYMENT_CHOICE', $choice->state);
+        $this->assertSame('COMPLETED', $response->state);
+        $this->assertSame(AppointmentRequest::STATUS_CONFIRMED, $appointment->status);
+        $this->assertSame('pending', $appointment->payment_status);
+        $this->assertSame('cash', $appointment->payment_method);
+        $this->assertSame('at_hospital', $appointment->payment_due_at);
+        $this->assertStringContainsString('Payment of KES 1.00 is due at the hospital', $response->message);
+        $this->assertDatabaseCount('mpesa_payments', 0);
     }
 
     public function test_invalid_early_time_offers_available_slots_before_confirmation(): void
@@ -1267,7 +1297,8 @@ class BookingChatServiceTest extends TestCase
         );
         $confirmation = $chat->handle('alternative-booking-success', '09:30', 'web');
 
-        $response = $chat->handle('alternative-booking-success', 'yes', 'web');
+        $chat->handle('alternative-booking-success', 'yes', 'web');
+        $response = $chat->handle('alternative-booking-success', 'Pay at hospital', 'web');
         $appointment = AppointmentRequest::query()
             ->where('session_id', 'alternative-booking-success')
             ->firstOrFail();
@@ -1328,7 +1359,8 @@ class BookingChatServiceTest extends TestCase
             'Dr. Brian Otieno tomorrow at 9am. My name is Test Patient, phone 254748249882, email patient@test.com.',
             'web',
         );
-        $booking = app(BookingChatService::class)->handle('specialty-fallback', 'yes', 'web');
+        app(BookingChatService::class)->handle('specialty-fallback', 'yes', 'web');
+        $booking = app(BookingChatService::class)->handle('specialty-fallback', 'Pay at hospital', 'web');
         $appointment = AppointmentRequest::query()
             ->where('session_id', 'specialty-fallback')
             ->firstOrFail();
@@ -1411,7 +1443,8 @@ class BookingChatServiceTest extends TestCase
             'Book Dental Cleaning with Dr. Amina Njeri tomorrow at 9am. My name is Test Patient, phone 254748249882, email patient@test.com.',
             'web',
         );
-        $paymentStarted = $chat->handle('state-payment-pending', 'yes', 'web');
+        $chat->handle('state-payment-pending', 'yes', 'web');
+        $paymentStarted = $chat->handle('state-payment-pending', 'Pay now', 'web');
 
         $waiting = $chat->handle('state-payment-pending', 'hello', 'web');
         $payment = MpesaPayment::query()
@@ -1632,7 +1665,8 @@ class BookingChatServiceTest extends TestCase
         $chat->handle($sessionId, 'Test Patient', 'web');
         $chat->handle($sessionId, '0748249882', 'web');
         $chat->handle($sessionId, '9 asubuhi', 'web');
-        $response = $chat->handle($sessionId, 'ndiyo', 'web');
+        $chat->handle($sessionId, 'ndiyo', 'web');
+        $response = $chat->handle($sessionId, 'M-Pesa', 'web');
         $appointment = AppointmentRequest::withoutGlobalScopes()
             ->where('session_id', $sessionId)
             ->first();

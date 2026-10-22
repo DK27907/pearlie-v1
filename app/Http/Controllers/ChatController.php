@@ -86,16 +86,19 @@ class ChatController extends Controller
             ->limit(100)
             ->get(['id', 'user_message', 'ai_response']);
         if ($latestAppointment?->payment_status === 'paid') {
-            $receipt = Conversation::withoutGlobalScopes()
+            $receiptMessages = Conversation::withoutGlobalScopes()
                 ->where('hospital_id', $hospital->id)
                 ->where('session_id', $sessionId)
                 ->where('channel', 'web')
-                ->where('chat_state->system_event', 'payment_receipt')
+                ->whereIn('chat_state->system_event', ['payment_receipt', 'receipt_ready'])
                 ->where('chat_state->appointment_id', $latestAppointment->id)
-                ->first(['id', 'user_message', 'ai_response']);
+                ->orderBy('id')
+                ->get(['id', 'user_message', 'ai_response']);
 
-            if ($receipt && ! $conversations->contains('id', $receipt->id)) {
-                $conversations->push($receipt);
+            foreach ($receiptMessages as $receiptMessage) {
+                if (! $conversations->contains('id', $receiptMessage->id)) {
+                    $conversations->push($receiptMessage);
+                }
             }
         }
         $conversations = $conversations->sortBy('id')->values();
