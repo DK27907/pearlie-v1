@@ -9,8 +9,10 @@ use App\Models\Service;
 use App\Models\User;
 use App\Services\AnnouncementService;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class AnnouncementWorkflowTest extends TestCase
@@ -282,5 +284,26 @@ class AnnouncementWorkflowTest extends TestCase
             'hospital_id' => $disabledHospital->id,
             'type' => 'reminder',
         ]);
+    }
+
+    public function test_migration_repairs_missing_indexes_on_existing_announcement_tables(): void
+    {
+        Schema::table('announcement_recipients', function (Blueprint $table): void {
+            $table->dropUnique('announcement_recipients_announcement_id_appointment_request_id_unique');
+            $table->dropIndex('announcement_recipients_announcement_id_delivery_status_index');
+        });
+
+        $migration = require database_path('migrations/2026_10_22_211329_create_announcements_tables.php');
+        $migration->up();
+
+        $this->assertTrue(Schema::hasIndex(
+            'announcement_recipients',
+            ['announcement_id', 'appointment_request_id'],
+            'unique',
+        ));
+        $this->assertTrue(Schema::hasIndex(
+            'announcement_recipients',
+            ['announcement_id', 'delivery_status'],
+        ));
     }
 }
