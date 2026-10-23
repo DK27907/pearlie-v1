@@ -1647,7 +1647,9 @@ class BookingChatServiceTest extends TestCase
         );
 
         $this->assertSame('COLLECTING', $response->state);
+        $this->assertStringStartsWith('Sawa, naweza kukusaidia kupanga miadi', $response->message);
         $this->assertStringContainsString('Unahitaji huduma gani?', $response->message);
+        $this->assertStringNotContainsString('Sikuweza kutambua huduma hiyo.', $response->message);
         $this->assertSame('sw', $response->collectedFields['language']);
     }
 

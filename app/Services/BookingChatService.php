@@ -1510,7 +1510,10 @@ class BookingChatService
     {
         $trimmed = trim($message);
 
-        return preg_match('/^(?:i\s+want\s+to\s+book\s+an\s+appointment|i\s+need\s+an\s+appointment|i\s+need\s+a\s+booking|book(?:ing)?(?:\s+an\s+appointment)?|appointment|schedule(?:\s+an\s+appointment)?|reserve(?:\s+an\s+appointment)?)$/iu', $trimmed) === 1;
+        return preg_match(
+            '/^(?:i\s+want\s+to\s+book\s+an\s+appointment|i\s+need\s+an\s+appointment|i\s+need\s+a\s+booking|book(?:ing)?(?:\s+an\s+appointment)?|appointment|schedule(?:\s+an\s+appointment)?|reserve(?:\s+an\s+appointment)?|(?:(?:ni)?nataka|naomba)\s+(?:kuweka|kupata|kuomba)\s+miadi|weka\s+miadi)$/iu',
+            $trimmed,
+        ) === 1;
     }
 
     private function hasExplicitHumanPhrase(string $message): bool
