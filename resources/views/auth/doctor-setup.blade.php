@@ -7,14 +7,12 @@
     <form method="POST" action="{{ route('doctor.setup.store', ['token' => $token, 'hospital' => $invite->doctor->hospital?->slug]) }}" class="space-y-4">
         @csrf
         <div>
-            <x-input-label for="password" :value="__('Password')" />
-            <x-text-input id="password" class="mt-1 block w-full" type="password" name="password" required autocomplete="new-password" />
+            <x-password-input id="password" name="password" :label="__('Password')" label-class="block text-sm font-medium text-gray-700" class="block w-full" required autocomplete="new-password" />
             <p class="mt-1 text-xs text-slate-500">Use at least 12 characters, including letters and numbers.</p>
             <x-input-error :messages="$errors->get('password')" class="mt-2" />
         </div>
         <div>
-            <x-input-label for="password_confirmation" :value="__('Confirm password')" />
-            <x-text-input id="password_confirmation" class="mt-1 block w-full" type="password" name="password_confirmation" required autocomplete="new-password" />
+            <x-password-input id="password_confirmation" name="password_confirmation" :label="__('Confirm password')" label-class="block text-sm font-medium text-gray-700" class="block w-full" required autocomplete="new-password" />
             <x-input-error :messages="$errors->get('password_confirmation')" class="mt-2" />
         </div>
         <div class="flex justify-end">

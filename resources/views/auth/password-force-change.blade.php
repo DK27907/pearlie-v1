@@ -7,14 +7,12 @@
         @method('PUT')
 
         <div>
-            <x-input-label for="password" :value="__('New password')" />
-            <x-text-input id="password" class="mt-1 block w-full" type="password" name="password" required autocomplete="new-password" />
+            <x-password-input id="password" name="password" :label="__('New password')" label-class="block text-sm font-medium text-gray-700" class="block w-full" required autocomplete="new-password" />
             <x-input-error :messages="$errors->get('password')" class="mt-2" />
         </div>
 
         <div>
-            <x-input-label for="password_confirmation" :value="__('Confirm new password')" />
-            <x-text-input id="password_confirmation" class="mt-1 block w-full" type="password" name="password_confirmation" required autocomplete="new-password" />
+            <x-password-input id="password_confirmation" name="password_confirmation" :label="__('Confirm new password')" label-class="block text-sm font-medium text-gray-700" class="block w-full" required autocomplete="new-password" />
             <x-input-error :messages="$errors->get('password_confirmation')" class="mt-2" />
         </div>
 

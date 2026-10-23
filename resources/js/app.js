@@ -49,6 +49,15 @@ Alpine.data('escalationQueue', () => ({
     },
 }));
 
+Alpine.data('passwordInput', () => ({
+    visible: false,
+
+    toggleVisibility() {
+        this.visible = ! this.visible;
+        this.$refs.password.type = this.visible ? 'text' : 'password';
+    },
+}));
+
 Alpine.start();
 
 document.addEventListener('submit', (event) => {

@@ -51,15 +51,13 @@
             <h2 class="text-lg font-semibold text-slate-900">Change password</h2>
             <p class="text-sm text-slate-600">Leave both password fields blank to keep the current password.</p>
             <div class="grid gap-5 sm:grid-cols-2">
-                <div>
-                    <label for="password" class="mb-1 block text-sm font-medium text-slate-700">New password</label>
-                    <input id="password" name="password" type="password" autocomplete="new-password" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-cyan-600 focus:ring-cyan-600">
-                    @error('password')<p class="mt-1 text-sm text-rose-700">{{ $message }}</p>@enderror
-                </div>
-                <div>
-                    <label for="password_confirmation" class="mb-1 block text-sm font-medium text-slate-700">Confirm new password</label>
-                    <input id="password_confirmation" name="password_confirmation" type="password" autocomplete="new-password" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-cyan-600 focus:ring-cyan-600">
-                </div>
+            <div class="space-y-1">
+                <x-password-input id="password" name="password" label="New password" label-class="block text-sm font-medium text-slate-700" autocomplete="new-password" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-cyan-600 focus:ring-cyan-600" />
+                @error('password')<p class="mt-1 text-sm text-rose-700">{{ $message }}</p>@enderror
+            </div>
+            <div class="space-y-1">
+                <x-password-input id="password_confirmation" name="password_confirmation" label="Confirm new password" label-class="block text-sm font-medium text-slate-700" autocomplete="new-password" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-cyan-600 focus:ring-cyan-600" />
+            </div>
             </div>
             <label for="must_change_password" class="flex items-start gap-3">
                 <input type="hidden" name="must_change_password" value="0">

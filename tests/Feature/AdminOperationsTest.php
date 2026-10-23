@@ -8,7 +8,10 @@ use App\Models\Hospital;
 use App\Models\KnowledgeBase;
 use App\Models\MpesaPayment;
 use App\Models\User;
+use App\Services\BookingChatService;
+use App\Services\HospitalSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class AdminOperationsTest extends TestCase
@@ -26,6 +29,17 @@ class AdminOperationsTest extends TestCase
         [$hospital, $admin] = $this->createAdminTenant('content-admin');
 
         $this->actingAs($admin)
+            ->get(route('admin.knowledge-base.create'))
+            ->assertOk()
+            ->assertSee('name="category"', false)
+            ->assertSee('<option value="general_info"', false)
+            ->assertSee('<option value="insurance"', false)
+            ->assertSee('name="language"', false)
+            ->assertSee('<option value="en"', false)
+            ->assertSee('<option value="sw"', false)
+            ->assertSee('<option value="both"', false);
+
+        $this->actingAs($admin)
             ->post(route('admin.knowledge-services.store'), [
                 'subcategory' => 'cardiology',
                 'keywords' => "heart, cardiac\nheart care",
@@ -40,18 +54,20 @@ class AdminOperationsTest extends TestCase
 
         $this->actingAs($admin)
             ->post(route('admin.knowledge-base.store'), [
-                'category' => 'visiting',
-                'subcategory' => 'visiting-hours',
-                'keywords' => 'visitor hours, visiting',
-                'question' => 'When can visitors come?',
-                'answer' => 'Call the hospital for current visiting hours.',
+                'category' => 'general_info',
+                'language' => 'sw',
+                'subcategory' => 'visiting-hours-sw',
+                'keywords' => 'saa za wageni, kutembelea',
+                'question' => 'Wageni wanaweza kutembelea saa ngapi?',
+                'answer' => 'Wasiliana na hospitali kwa saa za sasa za kutembelea.',
             ])
             ->assertRedirect(route('admin.knowledge-base.index'));
 
         $this->assertDatabaseHas('knowledge_bases', [
             'hospital_id' => $hospital->id,
-            'category' => 'visiting',
-            'subcategory' => 'visiting-hours',
+            'category' => 'general_info',
+            'language' => 'sw',
+            'subcategory' => 'visiting-hours-sw',
         ]);
     }
 
@@ -205,6 +221,48 @@ class AdminOperationsTest extends TestCase
         $this->assertDatabaseMissing('knowledge_bases', ['id' => $knowledgeEntry->id]);
     }
 
+    public function test_admin_can_edit_a_localized_knowledge_answer_used_by_chat(): void
+    {
+        [$hospital, $admin] = $this->createAdminTenant('localized-knowledge-admin');
+        $entry = $this->createKnowledgeEntry($hospital, [
+            'category' => 'general_info',
+            'language' => 'en',
+            'subcategory' => 'clinic-hours',
+            'keywords' => ['opening hours', 'hours'],
+            'question' => 'What are your opening hours?',
+            'answer' => 'Initial hours.',
+        ]);
+
+        $this->actingAs($admin)
+            ->put(route('admin.knowledge-base.update', $entry), [
+                'category' => 'hours',
+                'language' => 'en',
+                'subcategory' => 'clinic-hours',
+                'keywords' => 'opening hours, hours',
+                'question' => 'What are your opening hours?',
+                'answer' => 'Updated hours: Monday to Friday, 8am to 6pm.',
+            ])
+            ->assertRedirect(route('admin.knowledge-base.index'));
+
+        $this->assertDatabaseHas('knowledge_bases', [
+            'id' => $entry->id,
+            'category' => 'hours',
+            'language' => 'en',
+            'answer' => 'Updated hours: Monday to Friday, 8am to 6pm.',
+        ]);
+        app()->instance('currentHospital', $hospital);
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'localized-knowledge-hours',
+            'What are your opening hours?',
+            'web',
+        );
+
+        $this->assertSame('Updated hours: Monday to Friday, 8am to 6pm.', $response->message);
+        $this->assertSame('knowledge_base', $response->source);
+    }
+
     public function test_admin_conversations_and_payments_are_scoped_to_their_tenant(): void
     {
         [$hospital, $admin] = $this->createAdminTenant('records-admin');
@@ -281,6 +339,36 @@ class AdminOperationsTest extends TestCase
         $this->assertSame(45, $hospital->slot_duration_minutes);
         $this->assertSame('preserve', $hospital->settings['existing_setting']);
         $this->assertSame('Use concise, welcoming language.', $hospital->settings['ai_instructions']);
+    }
+
+    public function test_admin_settings_do_not_render_saved_integration_secrets(): void
+    {
+        [$hospital, $admin] = $this->createAdminTenant('secret-settings-admin');
+        $secret = 'stored-secret-sentinel';
+        $settings = app(HospitalSettings::class)->for($hospital);
+        $settings->setCredential('mpesa', [
+            'consumer_key' => $secret,
+            'consumer_secret' => $secret,
+            'passkey' => $secret,
+        ]);
+        $settings->setCredential('whatsapp', [
+            'access_token' => $secret,
+            'verify_token' => $secret,
+            'app_secret' => $secret,
+        ]);
+        $settings->setCredential('sms', [
+            'api_key' => $secret,
+            'auth_token' => $secret,
+        ]);
+        $settings->setCredential('email', [
+            'resend_api_key' => $secret,
+            'smtp_password' => $secret,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.settings'))
+            ->assertOk()
+            ->assertDontSee($secret, false);
     }
 
     public function test_reports_show_tenant_metrics_and_export_formula_safe_csv(): void

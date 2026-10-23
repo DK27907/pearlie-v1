@@ -6,6 +6,7 @@ use App\Models\Hospital;
 use App\Models\KnowledgeBase;
 use App\Services\KnowledgeBaseService;
 use Database\Seeders\KnowledgeBaseSeeder;
+use Database\Seeders\NairobiHospitalDemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -181,6 +182,20 @@ class KnowledgeBaseServiceTest extends TestCase
                 ->where('subcategory', 'services_overview')
                 ->count(),
         );
+    }
+
+    public function test_nairobi_demo_knowledge_answers_general_questions_in_english_and_swahili(): void
+    {
+        $this->seed(NairobiHospitalDemoSeeder::class);
+        $hospital = Hospital::withoutGlobalScopes()->where('slug', 'nairobi-hospital')->firstOrFail();
+        app()->instance('currentHospital', $hospital);
+        $knowledgeBase = app(KnowledgeBaseService::class);
+
+        $this->assertStringContainsString('Monday', (string) $knowledgeBase->search('What are your opening hours?'));
+        $this->assertStringContainsString('NHIF', (string) $knowledgeBase->search('Do you accept NHIF?'));
+        $this->assertStringContainsString('parking', strtolower((string) $knowledgeBase->search('Do you have parking?')));
+        $this->assertStringContainsString('Argwings Kodhek', (string) $knowledgeBase->search('Where are you located?'));
+        $this->assertStringContainsString('inatoa huduma', (string) $knowledgeBase->search('Habari, mnatoa huduma gani?'));
     }
 
     private function hospitalName(): string

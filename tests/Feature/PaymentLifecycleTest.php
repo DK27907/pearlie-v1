@@ -66,6 +66,34 @@ class PaymentLifecycleTest extends TestCase
         Queue::assertPushed(SendPaymentNotification::class, 1);
     }
 
+    public function test_neutral_callback_route_alias_processes_tenant_payment(): void
+    {
+        [$hospital, , $payment] = $this->createPaymentScenario();
+        $otherHospital = Hospital::factory()->create();
+        $hospital->update(['settings' => ['auto_confirm_paid_appointments' => true]]);
+        $payment->forceFill(['phone' => '0712345678'])->save();
+        $this->configureLocalSandbox();
+        Http::preventStrayRequests();
+        Queue::fake([SendPaymentNotification::class]);
+
+        $this->postJson(
+            '/api/payments/confirm/'.$hospital->slug.'?hospital='.$otherHospital->slug,
+            $this->callbackPayload($payment, 0),
+        )
+            ->assertOk()
+            ->assertExactJson(['ResultCode' => 0, 'ResultDesc' => 'Accepted']);
+
+        $this->assertDatabaseHas('mpesa_callback_inbox', [
+            'checkout_request_id' => $payment->checkout_request_id,
+            'hospital_slug' => $hospital->slug,
+            'status' => MpesaCallbackInbox::STATUS_PROCESSED,
+        ]);
+        $this->assertDatabaseHas('mpesa_payments', [
+            'id' => $payment->id,
+            'status' => MpesaPayment::STATUS_COMPLETED,
+        ]);
+    }
+
     public function test_payment_callback_pii_is_encrypted_in_every_persisted_payload(): void
     {
         [$hospital, , $payment] = $this->createPaymentScenario();
@@ -266,6 +294,7 @@ class PaymentLifecycleTest extends TestCase
             ->with(
                 '254712345678',
                 'Payment received. Your appointment is being reviewed and you will receive a confirmation shortly.',
+                $appointment->id,
             )
             ->andReturn(true);
         $notifications->shouldReceive('sendSms')
@@ -276,6 +305,7 @@ class PaymentLifecycleTest extends TestCase
                     'Paid appointment #%d is awaiting confirmation. Please review it in the admin dashboard.',
                     $appointment->id,
                 ),
+                $appointment->id,
             )
             ->andReturn(true);
         $whatsapp = \Mockery::mock(WhatsAppService::class);

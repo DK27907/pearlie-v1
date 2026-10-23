@@ -36,9 +36,9 @@
                 <div class="grid gap-5 sm:grid-cols-2">
                     <label class="space-y-1 text-sm font-semibold text-slate-700">M-Pesa shortcode<input name="mpesa_shortcode" value="{{ old('mpesa_shortcode', $hospital->mpesa_shortcode) }}" class="w-full rounded-xl border-slate-300 font-normal"></label>
                     <label class="space-y-1 text-sm font-semibold text-slate-700">Appointment deposit (KSh)<input type="number" min="0" step="1" name="deposit_amount" value="{{ old('deposit_amount', $hospital->deposit_amount) }}" required class="w-full rounded-xl border-slate-300 font-normal"></label>
-                    <label class="space-y-1 text-sm font-semibold text-slate-700">Daraja consumer key<input type="password" name="mpesa_consumer_key" autocomplete="new-password" class="w-full rounded-xl border-slate-300 font-normal"></label>
-                    <label class="space-y-1 text-sm font-semibold text-slate-700">Daraja consumer secret<input type="password" name="mpesa_consumer_secret" autocomplete="new-password" class="w-full rounded-xl border-slate-300 font-normal"></label>
-                    <label class="space-y-1 text-sm font-semibold text-slate-700 sm:col-span-2">Daraja passkey<input type="password" name="mpesa_passkey" autocomplete="new-password" class="w-full rounded-xl border-slate-300 font-normal"></label>
+                    <x-password-input name="mpesa_consumer_key" label="Daraja consumer key" autocomplete="new-password" class="w-full rounded-xl border-slate-300 font-normal"></x-password-input>
+                    <x-password-input name="mpesa_consumer_secret" label="Daraja consumer secret" autocomplete="new-password" class="w-full rounded-xl border-slate-300 font-normal"></x-password-input>
+                    <x-password-input name="mpesa_passkey" label="Daraja passkey" autocomplete="new-password" wrapper-class="sm:col-span-2" class="w-full rounded-xl border-slate-300 font-normal" />
                 </div>
             </section>
             <section class="space-y-4 border-t border-slate-100 pt-6">
@@ -46,9 +46,9 @@
                     <div class="grid gap-5 sm:grid-cols-2">
                         <label class="space-y-1 text-sm font-semibold text-slate-700">Business phone number ID<input name="whatsapp_phone_number_id" value="{{ old('whatsapp_phone_number_id', $hospital->whatsapp_phone_number_id) }}" class="w-full rounded-xl border-slate-300 font-normal"></label>
                         <label class="space-y-1 text-sm font-semibold text-slate-700">Graph API version<input name="whatsapp_api_version" value="{{ old('whatsapp_api_version', $hospital->whatsapp_api_version ?: 'v20.0') }}" required class="w-full rounded-xl border-slate-300 font-normal"></label>
-                        <label class="space-y-1 text-sm font-semibold text-slate-700">Access token<input type="password" name="whatsapp_access_token" autocomplete="new-password" class="w-full rounded-xl border-slate-300 font-normal"></label>
-                        <label class="space-y-1 text-sm font-semibold text-slate-700">App secret<input type="password" name="whatsapp_app_secret" autocomplete="new-password" class="w-full rounded-xl border-slate-300 font-normal"></label>
-                        <label class="space-y-1 text-sm font-semibold text-slate-700 sm:col-span-2">Webhook verify token<input type="password" name="whatsapp_verify_token" autocomplete="new-password" class="w-full rounded-xl border-slate-300 font-normal"></label>
+                        <x-password-input name="whatsapp_access_token" label="Access token" autocomplete="new-password" class="w-full rounded-xl border-slate-300 font-normal"></x-password-input>
+                        <x-password-input name="whatsapp_app_secret" label="App secret" autocomplete="new-password" class="w-full rounded-xl border-slate-300 font-normal"></x-password-input>
+                        <x-password-input name="whatsapp_verify_token" label="Webhook verify token" autocomplete="new-password" wrapper-class="sm:col-span-2" class="w-full rounded-xl border-slate-300 font-normal" />
                     </div>
             </section>
             @if ($errors->any())<div role="alert" class="rounded-xl bg-rose-50 p-4 text-sm text-rose-800"><ul class="list-inside list-disc">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif

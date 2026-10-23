@@ -79,6 +79,10 @@ Route::get('/receipts/{receipt}', [ReceiptController::class, 'download'])
     ->whereNumber('receipt')
     ->middleware('signed')
     ->name('receipts.download');
+Route::get('/receipts/{receipt}/print', [ReceiptController::class, 'print'])
+    ->whereNumber('receipt')
+    ->middleware('signed')
+    ->name('receipts.print');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/doctor/setup/{token}', [DoctorSetupController::class, 'show'])
@@ -173,6 +177,7 @@ Route::middleware(['auth', 'superadmin', 'password.changed'])
 require __DIR__.'/auth.php';
 
 use App\Http\Controllers\Admin\AppointmentController;
+use App\Http\Controllers\Admin\AuditController;
 use App\Http\Controllers\Admin\ConversationController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\EscalationController;
@@ -202,6 +207,7 @@ Route::middleware(['auth', 'hospital.admin', 'password.changed'])
     ->name('admin.')
     ->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+        Route::get('/audit', [AuditController::class, 'index'])->name('audit.index');
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::get('/users/{user}/edit', [UserController::class, 'edit'])->whereNumber('user')->name('users.edit');
         Route::put('/users/{user}', [UserController::class, 'update'])->whereNumber('user')->name('users.update');

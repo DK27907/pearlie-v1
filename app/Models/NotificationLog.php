@@ -23,6 +23,7 @@ class NotificationLog extends Model
 
     protected $fillable = [
         'hospital_id',
+        'appointment_request_id',
         'channel',
         'provider',
         'status',
@@ -108,5 +109,10 @@ class NotificationLog extends Model
     public function hospital(): BelongsTo
     {
         return $this->belongsTo(Hospital::class);
+    }
+
+    public function appointment(): BelongsTo
+    {
+        return $this->belongsTo(AppointmentRequest::class, 'appointment_request_id');
     }
 }

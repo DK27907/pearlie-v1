@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\KnowledgeBase;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -122,12 +123,33 @@ class KnowledgeBaseController extends Controller
     }
 
     /**
-     * @return array{category: string, subcategory: string, keywords: array<int, string>, question: string, answer: string, source: ?string, last_updated: string}
+     * @return array{category: string, language: string, subcategory: string, keywords: array<int, string>, question: string, answer: string, source: ?string, last_updated: string}
      */
     private function validatedEntry(Request $request, bool $serviceOnly = false): array
     {
         $data = $request->validate([
-            'category' => [$serviceOnly ? 'nullable' : 'required', 'string', 'max:100'],
+            'category' => [
+                $serviceOnly ? 'nullable' : 'required',
+                Rule::in([
+                    'service',
+                    'services',
+                    'general_info',
+                    'policy',
+                    'insurance',
+                    'location',
+                    'hours',
+                    'emergency',
+                    'payment',
+                    'appointments',
+                    'doctors',
+                    'visiting',
+                    'amenities',
+                    'resources',
+                    'greeting',
+                    'general',
+                ]),
+            ],
+            'language' => ['sometimes', 'string', Rule::in(['en', 'sw', 'both'])],
             'subcategory' => ['required', 'string', 'max:100'],
             'keywords' => ['required', 'string', 'max:2000'],
             'question' => ['required', 'string', 'max:1000'],
@@ -150,6 +172,7 @@ class KnowledgeBaseController extends Controller
 
         return [
             'category' => $serviceOnly ? 'services' : $data['category'],
+            'language' => $data['language'] ?? 'both',
             'subcategory' => $data['subcategory'],
             'keywords' => $keywords,
             'question' => $data['question'],

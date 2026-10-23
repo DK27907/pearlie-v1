@@ -77,7 +77,7 @@ class SendAppointmentLifecycleNotifications implements ShouldQueue
                 $appointment->slot_start_time ? substr((string) $appointment->slot_start_time, 0, 5) : 'a new time',
             );
             foreach ($recipients->pluck('phone')->filter()->unique() as $phone) {
-                if (! $notifications->sendSms((string) $phone, $message)) {
+                if (! $notifications->sendSms((string) $phone, $message, $appointment->id)) {
                     Log::warning('Appointment lifecycle SMS notification was not accepted by a provider.', [
                         'appointment_id' => $appointment->id,
                         'hospital_id' => $this->hospitalId,

@@ -691,6 +691,20 @@ class BookingChatService
             return $this->respond($sessionId, $channel, $message, $response, $state, source: 'hospital_doctors');
         }
 
+        if (in_array($intent, ['hours', 'location'], true)) {
+            $knowledgeBaseAnswer = $this->knowledgeBase->search($message);
+            if ($knowledgeBaseAnswer !== null) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $knowledgeBaseAnswer,
+                    $state,
+                    source: 'knowledge_base',
+                );
+            }
+        }
+
         if (in_array($intent, ['hours', 'location', 'contact'], true)) {
             if ($intent === 'hours') {
                 $businessHours = collect($hospital->business_hours ?? [])

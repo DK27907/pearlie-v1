@@ -863,8 +863,19 @@ class MpesaService
         }
         $callbackUrl = (string) ($config['callback_url'] ?? '');
         if ($callbackUrl !== '') {
-            $separator = str_contains($callbackUrl, '?') ? '&' : '?';
-            $config['callback_url'] = $callbackUrl.$separator.http_build_query(['hospital' => $hospital->slug]);
+            $hasTenantPlaceholder = str_contains($callbackUrl, '{slug}')
+                || str_contains($callbackUrl, '{hospitalSlug}');
+
+            if ($hasTenantPlaceholder) {
+                $config['callback_url'] = str_replace(
+                    ['{slug}', '{hospitalSlug}'],
+                    $hospital->slug,
+                    $callbackUrl,
+                );
+            } else {
+                $separator = str_contains($callbackUrl, '?') ? '&' : '?';
+                $config['callback_url'] = $callbackUrl.$separator.http_build_query(['hospital' => $hospital->slug]);
+            }
         }
 
         return $config;

@@ -17,7 +17,35 @@
 
             @unless ($serviceOnly)
                 <label class="block space-y-1 text-sm font-semibold text-slate-700">Category
-                    <input name="category" value="{{ old('category', $entry->category) }}" maxlength="100" required class="w-full rounded-xl border-slate-300 font-normal">
+                    <select name="category" required class="w-full rounded-xl border-slate-300 font-normal">
+                        @foreach ([
+                            'service' => 'Service',
+                            'services' => 'Services (legacy)',
+                            'general_info' => 'General Information',
+                            'policy' => 'Policy',
+                            'insurance' => 'Insurance',
+                            'location' => 'Location',
+                            'hours' => 'Hours',
+                            'emergency' => 'Emergency',
+                            'payment' => 'Payment',
+                            'appointments' => 'Appointments',
+                            'doctors' => 'Doctors',
+                            'visiting' => 'Visiting',
+                            'amenities' => 'Amenities',
+                            'resources' => 'Resources',
+                            'greeting' => 'Greeting',
+                            'general' => 'General (legacy)',
+                        ] as $category => $label)
+                            <option value="{{ $category }}" @selected(old('category', $entry->category ?: 'general_info') === $category)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </label>
+                <label class="block space-y-1 text-sm font-semibold text-slate-700">Language
+                    <select name="language" required class="w-full rounded-xl border-slate-300 font-normal">
+                        @foreach (['en' => 'English', 'sw' => 'Swahili', 'both' => 'Both'] as $language => $label)
+                            <option value="{{ $language }}" @selected(old('language', $entry->language ?: 'both') === $language)>{{ $label }}</option>
+                        @endforeach
+                    </select>
                 </label>
             @endunless
 

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\MissingProviderCredentialsException;
 use App\Models\AppointmentRequest;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
@@ -24,10 +25,14 @@ class WhatsAppService
     /**
      * @return array{success: bool, message: string}
      */
-    public function sendMessage(string $to, string $message): array
+    public function sendMessage(string $to, string $message, ?int $appointmentRequestId = null): array
     {
         try {
-            if (! $this->notifications->sendWhatsApp($this->formatPhone($to), $message)) {
+            if (! $this->notifications->sendWhatsApp(
+                $this->formatPhone($to),
+                $message,
+                $appointmentRequestId,
+            )) {
                 return ['success' => false, 'message' => 'WhatsApp message was not accepted for delivery.'];
             }
 
@@ -113,6 +118,18 @@ class WhatsAppService
         return $digits;
     }
 
+    public function isConfigured(): bool
+    {
+        try {
+            $config = $this->whatsappConfig();
+        } catch (MissingProviderCredentialsException) {
+            return false;
+        }
+
+        return filled($config['phone_number_id'] ?? null)
+            && filled($config['access_token'] ?? null);
+    }
+
     public function sendAppointmentConfirmation(AppointmentRequest $appointment): bool
     {
         try {
@@ -133,7 +150,7 @@ class WhatsAppService
                 $appointment->mpesa_receipt ? ' '.$appointment->mpesa_receipt : '',
             );
 
-            return $this->sendMessage($phone, $message)['success'];
+            return $this->sendMessage($phone, $message, $appointment->id)['success'];
         } catch (Throwable $exception) {
             Log::error('Unable to send the appointment WhatsApp confirmation.', [
                 'appointment_id' => $appointment->id,

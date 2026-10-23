@@ -27,6 +27,9 @@ Route::post('/mpesa/callback', [MpesaCallbackController::class, 'handleConfirmat
 Route::post('/mpesa/callback/{hospitalSlug}', [MpesaCallbackController::class, 'handleConfirmation'])
     ->name('tenant.mpesa.callback')
     ->middleware(['throttle:120,1', 'safaricom.ip']);
+Route::post('/payments/confirm/{hospitalSlug}', [MpesaCallbackController::class, 'handleConfirmation'])
+    ->name('payments.confirm')
+    ->middleware(['throttle:120,1', 'safaricom.ip']);
 Route::get('/mpesa/status/{checkoutRequestId}', [MpesaCallbackController::class, 'checkStatus'])
     ->name('mpesa.status')
     ->middleware(['throttle:10,1', 'feature:mpesa']);

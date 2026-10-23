@@ -19,7 +19,7 @@ class NotificationService
             ?? new ProviderCredentialResolver(new HospitalSettings);
     }
 
-    public function sendSms(string $to, string $message): bool
+    public function sendSms(string $to, string $message, ?int $appointmentRequestId = null): bool
     {
         $this->ensureTenantContext();
 
@@ -35,7 +35,15 @@ class NotificationService
                 : 'twilio'
         ));
         if (! in_array($provider, ['africastalking', 'twilio'], true)) {
-            $this->recordDelivery('sms', $provider, 'not_configured', null, null, 'unsupported_provider');
+            $this->recordDelivery(
+                'sms',
+                $provider,
+                'not_configured',
+                null,
+                null,
+                'unsupported_provider',
+                appointmentRequestId: $appointmentRequestId,
+            );
 
             return false;
         }
@@ -46,7 +54,15 @@ class NotificationService
         $atKey = $provider === 'africastalking' ? ($smsConfig['api_key'] ?? null) : null;
         $atFrom = $provider === 'africastalking' ? ($smsConfig['sender_id'] ?? null) : null;
         if ($provider === 'africastalking' && (blank($atUser) || blank($atKey))) {
-            $this->recordDelivery('sms', $provider, 'not_configured', null, null, 'credentials_missing');
+            $this->recordDelivery(
+                'sms',
+                $provider,
+                'not_configured',
+                null,
+                null,
+                'credentials_missing',
+                appointmentRequestId: $appointmentRequestId,
+            );
 
             return false;
         }
@@ -85,6 +101,7 @@ class NotificationService
                                 'sent',
                                 $httpStatus,
                                 $this->responseMessageId($providerResponse, 'SMSMessageData.Recipients.0.messageId'),
+                                appointmentRequestId: $appointmentRequestId,
                             );
 
                             return true;
@@ -151,7 +168,15 @@ class NotificationService
             || blank($from)
             || (! filled($token) && (! filled($apiKey) || ! filled($apiSecret)))
         )) {
-            $this->recordDelivery('sms', $provider, 'not_configured', null, null, 'credentials_missing');
+            $this->recordDelivery(
+                'sms',
+                $provider,
+                'not_configured',
+                null,
+                null,
+                'credentials_missing',
+                appointmentRequestId: $appointmentRequestId,
+            );
 
             return false;
         }
@@ -190,6 +215,7 @@ class NotificationService
                                 'sent',
                                 $httpStatus,
                                 $this->responseMessageId($providerResponse, 'sid'),
+                                appointmentRequestId: $appointmentRequestId,
                             );
 
                             return true;
@@ -252,12 +278,13 @@ class NotificationService
             null,
             $failureCode,
             $providerResponse,
+            $appointmentRequestId,
         );
 
         return false;
     }
 
-    public function sendWhatsApp(string $to, string $message): bool
+    public function sendWhatsApp(string $to, string $message, ?int $appointmentRequestId = null): bool
     {
         $this->ensureTenantContext();
 
@@ -301,6 +328,7 @@ class NotificationService
                                 'sent',
                                 $httpStatus,
                                 $this->responseMessageId($providerResponse, 'messages.0.id'),
+                                appointmentRequestId: $appointmentRequestId,
                             );
 
                             return true;
@@ -361,6 +389,7 @@ class NotificationService
                 null,
                 $failureCode,
                 $providerResponse,
+                $appointmentRequestId,
             );
         } else {
             $this->recordDelivery(
@@ -370,6 +399,7 @@ class NotificationService
                 null,
                 null,
                 'credentials_missing',
+                appointmentRequestId: $appointmentRequestId,
             );
             Log::info('No WhatsApp credentials configured; skipping the message.');
         }
@@ -385,11 +415,13 @@ class NotificationService
         ?string $providerMessageId = null,
         ?string $failureCode = null,
         ?string $providerResponse = null,
+        ?int $appointmentRequestId = null,
     ): void {
         $this->ensureTenantContext();
 
         NotificationLog::query()->create([
             'hospital_id' => hospital()->id,
+            'appointment_request_id' => $appointmentRequestId,
             'channel' => $channel,
             'provider' => $provider,
             'status' => $status,

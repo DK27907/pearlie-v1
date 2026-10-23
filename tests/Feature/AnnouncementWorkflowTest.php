@@ -12,6 +12,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
@@ -279,11 +280,54 @@ class AnnouncementWorkflowTest extends TestCase
                 ->where('slot_start_time', '08:00:00')
                 ->value('id'),
         ]);
-        $this->assertDatabaseCount('announcements', 1);
+        $this->assertDatabaseCount('announcements', 2);
         $this->assertDatabaseMissing('announcements', [
             'hospital_id' => $disabledHospital->id,
             'type' => 'reminder',
         ]);
+    }
+
+    public function test_combined_announcement_falls_back_to_sms_when_whatsapp_is_not_configured(): void
+    {
+        config(['integrations.allow_global_fallback' => false]);
+        $hospital = Hospital::factory()->create();
+        app()->instance('currentHospital', $hospital);
+        $admin = User::factory()->for($hospital, 'hospital')->create([
+            'is_admin' => true,
+            'role' => 'hospital_admin',
+        ]);
+        $appointment = AppointmentRequest::factory()->for($hospital)->create([
+            'preferred_date' => today()->addDay(),
+            'status' => AppointmentRequest::STATUS_CONFIRMED,
+        ]);
+        $announcement = Announcement::query()->create([
+            'hospital_id' => $hospital->id,
+            'sent_by_user_id' => $admin->id,
+            'type' => 'announcement',
+            'message' => 'Hello {patient_name}.',
+            'audience_filter' => ['appointment_date' => 'tomorrow'],
+            'channel' => 'both',
+            'status' => 'draft',
+        ]);
+        Log::spy();
+
+        app(AnnouncementService::class)->sendAnnouncement($announcement);
+
+        $this->assertDatabaseHas('announcements', [
+            'id' => $announcement->id,
+            'status' => 'sent',
+            'recipients_count' => 1,
+        ]);
+        $this->assertDatabaseHas('announcement_recipients', [
+            'announcement_id' => $announcement->id,
+            'appointment_request_id' => $appointment->id,
+            'delivery_status' => 'sent',
+        ]);
+        Log::shouldHaveReceived('info')
+            ->with('WhatsApp not configured; announcement was delivered via SMS only.', \Mockery::on(
+                fn (array $context): bool => $context['announcement_id'] === $announcement->id,
+            ))
+            ->once();
     }
 
     public function test_migration_repairs_missing_indexes_on_existing_announcement_tables(): void

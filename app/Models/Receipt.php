@@ -67,6 +67,15 @@ class Receipt extends Model
         );
     }
 
+    public function signedPrintUrl(): string
+    {
+        return URL::temporarySignedRoute(
+            'receipts.print',
+            now()->addHours(24),
+            ['receipt' => $this->getKey()],
+        );
+    }
+
     public function hasPdf(): bool
     {
         return filled($this->pdf_path) && Storage::exists($this->pdf_path);

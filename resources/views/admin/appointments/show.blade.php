@@ -114,7 +114,10 @@
                     </form>
                 @endif
                 @if ($appt->receipt)
-                    <a href="{{ $appt->receipt->signedDownloadUrl() }}" class="mt-4 inline-flex rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Download receipt PDF</a>
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        <a href="{{ $appt->receipt->signedDownloadUrl() }}" class="inline-flex rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Download receipt PDF</a>
+                        <a href="{{ $appt->receipt->signedPrintUrl() }}" target="_blank" rel="noopener" class="inline-flex rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">Print receipt</a>
+                    </div>
                 @endif
             </section>
 

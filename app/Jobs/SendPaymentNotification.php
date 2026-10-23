@@ -104,6 +104,7 @@ class SendPaymentNotification implements ShouldQueue
                 $sent = $notifications->sendSms(
                     $phone,
                     $message,
+                    $appointment->id,
                 );
             }
 
@@ -166,7 +167,7 @@ class SendPaymentNotification implements ShouldQueue
             );
 
         foreach ($admins as $admin) {
-            if (! $notifications->sendSms((string) $admin->phone, $message)) {
+            if (! $notifications->sendSms((string) $admin->phone, $message, $appointment->id)) {
                 throw new RuntimeException('The hospital-admin payment notification provider did not accept the message.');
             }
         }

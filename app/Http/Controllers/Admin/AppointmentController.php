@@ -318,7 +318,7 @@ class AppointmentController extends Controller
                 $appointment->id,
             );
 
-            return app(NotificationService::class)->sendSms($appointment->phone, $message);
+            return app(NotificationService::class)->sendSms($appointment->phone, $message, $appointment->id);
         } catch (\Throwable $e) {
             Log::error('Failed to notify patient after appointment confirmation.', [
                 'appointment_id' => $appointment->id,

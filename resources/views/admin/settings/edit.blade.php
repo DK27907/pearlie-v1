@@ -160,7 +160,7 @@
                         <legend class="px-2 text-sm font-bold text-slate-900">Appointment reminders</legend>
                         <label class="flex items-center gap-2 text-sm font-semibold text-slate-700">
                             <input type="checkbox" name="reminder_enabled" value="1" @checked(old('reminder_enabled', $hospital->reminder_enabled))>
-                            Send an SMS reminder approximately 24 hours before confirmed appointments
+                            Send an SMS reminder at 8:00 AM on the day before confirmed appointments
                         </label>
                         <label class="block text-sm font-semibold text-slate-700">Reminder message
                             <textarea class="{{ $inputClass }}" name="reminder_message_template" rows="3" maxlength="1000">{{ old('reminder_message_template', $hospital->reminder_message_template) }}</textarea>
@@ -184,10 +184,16 @@
                                 'shortcode' => ['Shortcode', false],
                                 'passkey' => ['Passkey', true],
                             ] as $field => [$label, $secret])
-                                <label class="block text-sm font-semibold text-slate-700">{{ $label }}
-                                    <input class="{{ $inputClass }}" type="{{ $secret ? 'password' : 'text' }}" name="{{ $field }}" @if (! $secret) value="{{ old($field, $credentials['mpesa'][$field] ?? '') }}" @else placeholder="{{ $credentials['mpesa'][$field] ?? '' }}" autocomplete="new-password" @endif>
-                                    @if ($secret)<span class="mt-1 block text-xs font-normal text-slate-500">Leave blank to keep existing.</span>@endif
-                                </label>
+                                @if ($secret)
+                                    <div>
+                                        <x-password-input :name="$field" :label="$label" autocomplete="new-password" :class="$inputClass" />
+                                        <span class="mt-1 block text-xs font-normal text-slate-500">Leave blank to keep existing.</span>
+                                    </div>
+                                @else
+                                    <label class="block text-sm font-semibold text-slate-700">{{ $label }}
+                                        <input class="{{ $inputClass }}" type="text" name="{{ $field }}" value="{{ old($field, $credentials['mpesa'][$field] ?? '') }}">
+                                    </label>
+                                @endif
                             @endforeach
                             <label class="block text-sm font-semibold text-slate-700">Environment
                                 <select class="{{ $inputClass }}" name="environment" required>
@@ -197,7 +203,7 @@
                                 </select>
                             </label>
                             <label class="block text-sm font-semibold text-slate-700">Callback URL
-                                <input class="{{ $inputClass }}" type="url" name="callback_url" required value="{{ old('callback_url', $credentials['mpesa']['callback_url'] ?? url('/api/mpesa/callback')) }}">
+                                <input class="{{ $inputClass }}" type="url" name="callback_url" required value="{{ old('callback_url', $credentials['mpesa']['callback_url'] ?? url('/api/payments/confirm/'.hospital()->slug)) }}">
                             </label>
                         </div>
                         <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save M-Pesa settings</button>
@@ -218,10 +224,10 @@
                                 <input class="{{ $inputClass }}" type="text" name="phone_number_id" required maxlength="64" value="{{ old('phone_number_id', $credentials['whatsapp']['phone_number_id'] ?? '') }}">
                             </label>
                             @foreach (['access_token' => 'Access token', 'verify_token' => 'Verify token', 'app_secret' => 'App secret'] as $field => $label)
-                                <label class="block text-sm font-semibold text-slate-700">{{ $label }}
-                                    <input class="{{ $inputClass }}" type="password" name="{{ $field }}" placeholder="{{ $credentials['whatsapp'][$field] ?? '' }}" autocomplete="new-password">
+                                <div>
+                                    <x-password-input :name="$field" :label="$label" autocomplete="new-password" :class="$inputClass" />
                                     <span class="mt-1 block text-xs font-normal text-slate-500">Leave blank to keep existing.</span>
-                                </label>
+                                </div>
                             @endforeach
                             <label class="block text-sm font-semibold text-slate-700">API version
                                 <input class="{{ $inputClass }}" type="text" name="api_version" required maxlength="10" value="{{ old('api_version', $credentials['whatsapp']['api_version'] ?? 'v21.0') }}">
@@ -256,10 +262,16 @@
                                 'auth_token' => ['Twilio auth token', true],
                                 'from_number' => ['Twilio from number', false],
                             ] as $field => [$label, $secret])
-                                <label class="block text-sm font-semibold text-slate-700">{{ $label }}
-                                    <input class="{{ $inputClass }}" type="{{ $secret ? 'password' : 'text' }}" name="{{ $field }}" @if (! $secret) value="{{ old($field, $credentials['sms'][$field] ?? '') }}" @else placeholder="{{ $credentials['sms'][$field] ?? '' }}" autocomplete="new-password" @endif>
-                                    @if ($secret)<span class="mt-1 block text-xs font-normal text-slate-500">Leave blank to keep existing.</span>@endif
-                                </label>
+                                @if ($secret)
+                                    <div>
+                                        <x-password-input :name="$field" :label="$label" autocomplete="new-password" :class="$inputClass" />
+                                        <span class="mt-1 block text-xs font-normal text-slate-500">Leave blank to keep existing.</span>
+                                    </div>
+                                @else
+                                    <label class="block text-sm font-semibold text-slate-700">{{ $label }}
+                                        <input class="{{ $inputClass }}" type="text" name="{{ $field }}" value="{{ old($field, $credentials['sms'][$field] ?? '') }}">
+                                    </label>
+                                @endif
                             @endforeach
                         </div>
                         <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save SMS settings</button>
@@ -289,10 +301,10 @@
                             <label class="block text-sm font-semibold text-slate-700">From name
                                 <input class="{{ $inputClass }}" type="text" name="from_name" required maxlength="120" value="{{ old('from_name', $credentials['email']['from_name'] ?? '') }}">
                             </label>
-                            <label class="block text-sm font-semibold text-slate-700">Resend API key
-                                <input class="{{ $inputClass }}" type="password" name="resend_api_key" placeholder="{{ $credentials['email']['resend_api_key'] ?? '' }}" autocomplete="new-password">
+                            <div>
+                                <x-password-input name="resend_api_key" label="Resend API key" autocomplete="new-password" :class="$inputClass" />
                                 <span class="mt-1 block text-xs font-normal text-slate-500">Leave blank to keep existing.</span>
-                            </label>
+                            </div>
                             @foreach ([
                                 'smtp_host' => 'SMTP host',
                                 'smtp_port' => 'SMTP port',
@@ -300,10 +312,16 @@
                                 'smtp_password' => 'SMTP password',
                                 'smtp_encryption' => 'SMTP encryption (tls, ssl, or none)',
                             ] as $field => $label)
-                                <label class="block text-sm font-semibold text-slate-700">{{ $label }}
-                                    <input class="{{ $inputClass }}" type="{{ $field === 'smtp_password' ? 'password' : ($field === 'smtp_port' ? 'number' : 'text') }}" name="{{ $field }}" @if ($field === 'smtp_password') placeholder="{{ $credentials['email']['smtp_password'] ?? '' }}" autocomplete="new-password" @else value="{{ old($field, $credentials['email'][$field] ?? '') }}" @endif>
-                                    @if ($field === 'smtp_password')<span class="mt-1 block text-xs font-normal text-slate-500">Leave blank to keep existing.</span>@endif
-                                </label>
+                                @if ($field === 'smtp_password')
+                                    <div>
+                                        <x-password-input :name="$field" :label="$label" autocomplete="new-password" :class="$inputClass" />
+                                        <span class="mt-1 block text-xs font-normal text-slate-500">Leave blank to keep existing.</span>
+                                    </div>
+                                @else
+                                    <label class="block text-sm font-semibold text-slate-700">{{ $label }}
+                                        <input class="{{ $inputClass }}" type="{{ $field === 'smtp_port' ? 'number' : 'text' }}" name="{{ $field }}" value="{{ old($field, $credentials['email'][$field] ?? '') }}">
+                                    </label>
+                                @endif
                             @endforeach
                         </div>
                         <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save email settings</button>

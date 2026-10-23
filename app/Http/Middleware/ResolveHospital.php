@@ -95,15 +95,15 @@ class ResolveHospital
 
     private function tenantSlugFromRequest(Request $request): ?string
     {
-        if ($request->query('hospital')) {
-            return Str::lower($request->string('hospital')->toString());
-        }
-
         $path = $request->path();
         if (preg_match('#^(?:h|chat)/([a-z0-9-]+)(?:/|$)#i', $path, $matches)
-            || preg_match('#^api/(?:whatsapp/webhook|mpesa/callback)/([a-z0-9-]+)(?:/|$)#i', $path, $matches)
+            || preg_match('#^api/(?:whatsapp/webhook|mpesa/callback|payments/confirm)/([a-z0-9-]+)(?:/|$)#i', $path, $matches)
             || preg_match('#^hospital/([a-z0-9-]+)/invitation/#i', $path, $matches)) {
             return Str::lower($matches[1]);
+        }
+
+        if ($request->query('hospital')) {
+            return Str::lower($request->string('hospital')->toString());
         }
 
         $baseDomain = Str::lower((string) config('tenancy.base_domain'));
@@ -167,6 +167,7 @@ class ResolveHospital
     {
         return $request->is('api/mpesa/callback')
             || $request->is('api/mpesa/callback/*')
+            || $request->is('api/payments/confirm/*')
             || $request->is('mpesa/callback');
     }
 }

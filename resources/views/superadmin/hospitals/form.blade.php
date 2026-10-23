@@ -14,8 +14,11 @@
                 @unless ($hospital->exists)
                     <label class="space-y-1 text-sm font-semibold text-slate-700 sm:col-span-2">Hospital administrator name<input type="text" name="admin_name" value="{{ old('admin_name') }}" required maxlength="255" autocomplete="name" class="w-full rounded-xl border-slate-300 font-normal"></label>
                     <label class="space-y-1 text-sm font-semibold text-slate-700 sm:col-span-2">Hospital administrator email<input type="email" name="admin_email" value="{{ old('admin_email') }}" required autocomplete="email" class="w-full rounded-xl border-slate-300 font-normal"></label>
-                    <label class="space-y-1 text-sm font-semibold text-slate-700">Temporary administrator password<input type="password" name="admin_password" required minlength="12" autocomplete="new-password" class="w-full rounded-xl border-slate-300 font-normal"><span class="text-xs font-normal text-slate-500">At least 12 characters. The administrator must change it after logging in.</span></label>
-                    <label class="space-y-1 text-sm font-semibold text-slate-700">Confirm temporary password<input type="password" name="admin_password_confirmation" required minlength="12" autocomplete="new-password" class="w-full rounded-xl border-slate-300 font-normal"></label>
+                    <div>
+                        <x-password-input name="admin_password" label="Temporary administrator password" required minlength="12" autocomplete="new-password" class="w-full rounded-xl border-slate-300 font-normal" />
+                        <span class="mt-1 block text-xs font-normal text-slate-500">At least 12 characters. The administrator must change it after logging in.</span>
+                    </div>
+                    <x-password-input name="admin_password_confirmation" label="Confirm temporary password" required minlength="12" autocomplete="new-password" class="w-full rounded-xl border-slate-300 font-normal" />
                 @endunless
                 <label class="space-y-1 text-sm font-semibold text-slate-700 sm:col-span-2">Address<textarea name="address" rows="2" class="w-full rounded-xl border-slate-300 font-normal">{{ old('address', $hospital->address) }}</textarea></label>
                 @foreach (['emergency_phone' => 'Emergency phone', 'website' => 'Website URL', 'whatsapp_number' => 'WhatsApp number', 'whatsapp_phone_number_id' => 'WhatsApp Business phone number ID', 'mpesa_shortcode' => 'M-Pesa shortcode'] as $field => $label)
@@ -33,7 +36,7 @@
                 <label class="space-y-1 text-sm font-semibold text-slate-700">Secondary color<input type="color" name="secondary_color" value="{{ old('secondary_color', $hospital->secondary_color ?: '#1a5276') }}" class="h-11 w-full rounded-xl border-slate-300"></label>
                 <p class="text-xs text-slate-500 sm:col-span-2">M-Pesa and WhatsApp credentials are encrypted at rest. Leave secret fields blank to keep the existing value.</p>
                 @foreach (['mpesa_consumer_key' => 'Daraja consumer key', 'mpesa_consumer_secret' => 'Daraja consumer secret', 'mpesa_passkey' => 'Daraja passkey', 'whatsapp_access_token' => 'WhatsApp access token', 'whatsapp_app_secret' => 'WhatsApp app secret', 'whatsapp_verify_token' => 'WhatsApp webhook verify token'] as $field => $label)
-                    <label class="space-y-1 text-sm font-semibold text-slate-700">{{ $label }}<input type="password" name="{{ $field }}" autocomplete="new-password" class="w-full rounded-xl border-slate-300 font-normal"></label>
+                    <x-password-input :name="$field" :label="$label" autocomplete="new-password" class="w-full rounded-xl border-slate-300 font-normal" />
                 @endforeach
                 <label class="space-y-1 text-sm font-semibold text-slate-700">WhatsApp Graph API version<input name="whatsapp_api_version" value="{{ old('whatsapp_api_version', $hospital->whatsapp_api_version ?: 'v20.0') }}" required class="w-full rounded-xl border-slate-300 font-normal"></label>
                 @if ($hospital->exists)

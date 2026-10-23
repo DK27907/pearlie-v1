@@ -172,7 +172,7 @@ class NairobiHospitalDemoBookingTest extends TestCase
         $this->assertSame(11, $before['services']);
         $this->assertSame(6, $before['doctors']);
         $this->assertSame(30, $before['availability']);
-        $this->assertSame(11, $before['knowledge']);
+        $this->assertSame(25, $before['knowledge']);
         $this->assertSame($before['services'], Service::withoutGlobalScopes()->where('hospital_id', $hospital->id)->count());
         $this->assertSame(
             $before['doctors'],

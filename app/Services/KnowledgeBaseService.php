@@ -296,7 +296,7 @@ class KnowledgeBaseService
 
     private function isServiceEntry(KnowledgeBase $entry): bool
     {
-        return mb_strtolower((string) $entry->category) === 'services';
+        return in_array(mb_strtolower((string) $entry->category), ['service', 'services'], true);
     }
 
     private function isEmergencyEntry(KnowledgeBase $entry): bool

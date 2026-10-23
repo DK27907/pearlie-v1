@@ -5,7 +5,7 @@ return [
     'consumer_secret' => env('MPESA_CONSUMER_SECRET'),
     'passkey' => env('MPESA_PASSKEY'),
     'shortcode' => env('MPESA_SHORTCODE', '174379'),
-    'callback_url' => env('MPESA_CALLBACK_URL', env('APP_URL').'/api/mpesa/callback'),
+    'callback_url' => env('MPESA_CALLBACK_URL', env('APP_URL').'/api/payments/confirm/{slug}'),
     'environment' => env('MPESA_ENVIRONMENT', 'sandbox'),
     'skip_callback_verification_in_local' => env('MPESA_SKIP_VERIFY_LOCAL', true),
     'auto_confirm_on_payment' => env('MPESA_AUTO_CONFIRM', false),

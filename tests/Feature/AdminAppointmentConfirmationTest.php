@@ -45,7 +45,7 @@ class AdminAppointmentConfirmationTest extends TestCase
             ->once()
             ->with('254748249882', Mockery::on(
                 fn (string $message): bool => str_contains($message, 'appointment request (ID '.$appointment->id.') has been confirmed'),
-            ))
+            ), $appointment->id)
             ->andReturnTrue();
 
         $this->actingAs($admin)

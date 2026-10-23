@@ -75,27 +75,13 @@ class AnnouncementService
     public function scheduleReminderAnnouncements(Hospital $hospital): BaseCollection
     {
         $now = now()->toImmutable();
-        $windowStart = $now->addHours(24)->subMinute();
-        $windowEnd = $now->addHours(24)->addMinutes(2);
-        $appointments = AppointmentRequest::withoutGlobalScope('hospital')
+        $dueAppointments = AppointmentRequest::withoutGlobalScope('hospital')
             ->where('hospital_id', $hospital->id)
             ->where('status', AppointmentRequest::STATUS_CONFIRMED)
             ->whereNotNull('slot_start_time')
-            ->whereBetween('preferred_date', [
-                $windowStart->subDay()->toDateString(),
-                $windowEnd->addDay()->toDateString(),
-            ])
+            ->whereDate('preferred_date', $now->addDay()->toDateString())
             ->orderBy('id')
             ->get();
-        $dueAppointments = $appointments->filter(function (AppointmentRequest $appointment) use ($windowStart, $windowEnd): bool {
-            $scheduledAt = CarbonImmutable::parse(
-                $appointment->preferred_date->format('Y-m-d').' '.$appointment->slot_start_time,
-                config('app.timezone'),
-            );
-
-            return $scheduledAt->greaterThanOrEqualTo($windowStart)
-                && $scheduledAt->lessThan($windowEnd);
-        })->values();
 
         if ($dueAppointments->isEmpty()) {
             return new BaseCollection;
@@ -258,7 +244,15 @@ class AnnouncementService
 
         $whatsAppResult = null;
         if (in_array($announcement->channel, ['whatsapp', 'both'], true)) {
-            $whatsAppResult = $this->whatsApp->sendMessage($phone, $message);
+            if ($announcement->channel === 'both' && ! $this->whatsApp->isConfigured()) {
+                Log::info('WhatsApp not configured; announcement was delivered via SMS only.', [
+                    'announcement_id' => $announcement->id,
+                    'hospital_id' => $announcement->hospital_id,
+                ]);
+                $whatsAppResult = ['success' => true];
+            } else {
+                $whatsAppResult = $this->whatsApp->sendMessage($phone, $message);
+            }
         }
 
         $success = ($smsResult?->success ?? true)

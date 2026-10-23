@@ -101,7 +101,7 @@ Schedule::command('app:prune-payment-events --days=365')
     ->runInBackground()
     ->onSuccess(static fn (): bool => MpesaHealthCheck::recordSchedulerHeartbeat('app:prune-payment-events --days=365'));
 Schedule::command('appointments:send-reminders')
-    ->everyMinute()
+    ->dailyAt('08:00')
     ->withoutOverlapping(5)
     ->onOneServer();
 Schedule::command('app:send-scheduled-announcements')

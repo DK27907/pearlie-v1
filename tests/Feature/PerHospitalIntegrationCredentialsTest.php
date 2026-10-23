@@ -106,6 +106,44 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
             && $request['CallBackURL'] === 'https://example.test/api/mpesa/callback?hospital='.$hospital->slug);
     }
 
+    public function test_mpesa_callback_template_resolves_tenant_in_the_neutral_path(): void
+    {
+        $hospital = Hospital::factory()->create(['subscription_plan' => 'enterprise']);
+        $this->setCurrentHospital($hospital);
+        config([
+            'integrations.allow_global_fallback' => false,
+            'integrations.allow_mpesa_global_fallback' => true,
+            'mpesa.consumer_key' => 'global-test-key',
+            'mpesa.consumer_secret' => 'global-test-secret',
+            'mpesa.shortcode' => '174379',
+            'mpesa.passkey' => 'global-test-passkey',
+            'mpesa.callback_url' => 'https://example.test/api/payments/confirm/{slug}',
+            'mpesa.environment' => 'sandbox',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://sandbox.safaricom.co.ke/oauth/v1/generate*' => Http::response([
+                'access_token' => 'test-oauth-token',
+            ]),
+            'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest' => Http::response([
+                'ResponseCode' => '0',
+                'CheckoutRequestID' => 'checkout-neutral-callback',
+                'MerchantRequestID' => 'merchant-neutral-callback',
+            ]),
+        ]);
+
+        app(MpesaService::class)->stkPush(
+            '0748249882',
+            1,
+            'APT-1',
+            'Appointment booking',
+        );
+
+        Http::assertSent(fn (ClientRequest $request): bool => $request->url()
+            === 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest'
+            && $request['CallBackURL'] === 'https://example.test/api/payments/confirm/'.$hospital->slug);
+    }
+
     public function test_mpesa_service_uses_the_configured_ca_bundle_for_http_requests(): void
     {
         $caBundle = tempnam(sys_get_temp_dir(), 'mpesa-ca-');

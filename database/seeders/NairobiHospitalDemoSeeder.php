@@ -321,6 +321,136 @@ class NairobiHospitalDemoSeeder extends Seeder
                         ],
                     );
                 }
+
+                $generalKnowledge = [
+                    [
+                        'category' => 'hours',
+                        'subcategory' => 'opening-hours-en',
+                        'language' => 'en',
+                        'keywords' => ['opening hours', 'hours', 'open', 'when are you open'],
+                        'question' => 'What are your opening hours?',
+                        'answer' => 'We are open Monday to Friday 8am–6pm, Saturday 8am–2pm, closed Sunday. Emergency services available 24/7.',
+                    ],
+                    [
+                        'category' => 'hours',
+                        'subcategory' => 'opening-hours-sw',
+                        'language' => 'sw',
+                        'keywords' => ['saa za kazi', 'mnafunga saa ngapi', 'mko wazi lini'],
+                        'question' => 'Mnafanya kazi saa ngapi?',
+                        'answer' => 'Tuko wazi Jumatatu hadi Ijumaa saa 2 asubuhi hadi saa 12 jioni, Jumamosi saa 2 asubuhi hadi saa 8 mchana, na tumefungwa Jumapili. Huduma za dharura zinapatikana saa 24.',
+                    ],
+                    [
+                        'category' => 'insurance',
+                        'subcategory' => 'nhif-en',
+                        'language' => 'en',
+                        'keywords' => ['nhif', 'insurance', 'medical cover'],
+                        'question' => 'Do you accept NHIF?',
+                        'answer' => 'Yes, we accept NHIF for most services. Bring your NHIF card.',
+                    ],
+                    [
+                        'category' => 'insurance',
+                        'subcategory' => 'nhif-sw',
+                        'language' => 'sw',
+                        'keywords' => ['nhif', 'bima', 'bima ya afya'],
+                        'question' => 'Je, mnakubali NHIF?',
+                        'answer' => 'Ndiyo, tunakubali NHIF kwa huduma nyingi. Tafadhali leta kadi yako ya NHIF.',
+                    ],
+                    [
+                        'category' => 'amenities',
+                        'subcategory' => 'parking-en',
+                        'language' => 'en',
+                        'keywords' => ['parking', 'park', 'car park'],
+                        'question' => 'Do you have parking?',
+                        'answer' => 'Yes, free parking is available for patients and visitors.',
+                    ],
+                    [
+                        'category' => 'amenities',
+                        'subcategory' => 'parking-sw',
+                        'language' => 'sw',
+                        'keywords' => ['maegesho', 'kuegesha gari'],
+                        'question' => 'Je, mna maegesho?',
+                        'answer' => 'Ndiyo, maegesho ya bila malipo yanapatikana kwa wagonjwa na wageni.',
+                    ],
+                    [
+                        'category' => 'payment',
+                        'subcategory' => 'payment-methods-en',
+                        'language' => 'en',
+                        'keywords' => ['payment methods', 'pay', 'cash', 'mpesa', 'card'],
+                        'question' => 'What payment methods do you accept?',
+                        'answer' => 'We accept cash, M-Pesa, card, and NHIF. M-Pesa payments can be made at reception or online.',
+                    ],
+                    [
+                        'category' => 'payment',
+                        'subcategory' => 'payment-methods-sw',
+                        'language' => 'sw',
+                        'keywords' => ['njia za malipo', 'malipo', 'pesa taslimu', 'mpesa'],
+                        'question' => 'Mnapokea njia gani za malipo?',
+                        'answer' => 'Tunapokea pesa taslimu, M-Pesa, kadi, na NHIF. Malipo ya M-Pesa yanaweza kufanywa mapokezi au mtandaoni.',
+                    ],
+                    [
+                        'category' => 'location',
+                        'subcategory' => 'location-en',
+                        'language' => 'en',
+                        'keywords' => ['where are you located', 'address', 'location', 'directions'],
+                        'question' => 'Where are you located?',
+                        'answer' => 'Argwings Kodhek Road, Nairobi. Landmark: next to the main roundabout.',
+                    ],
+                    [
+                        'category' => 'location',
+                        'subcategory' => 'location-sw',
+                        'language' => 'sw',
+                        'keywords' => ['mko wapi', 'mahali', 'anwani', 'maelekezo'],
+                        'question' => 'Mko wapi?',
+                        'answer' => 'Tuko Argwings Kodhek Road, Nairobi, karibu na mzunguko mkuu.',
+                    ],
+                    [
+                        'category' => 'emergency',
+                        'subcategory' => 'emergency-process-en',
+                        'language' => 'en',
+                        'keywords' => ['emergency process', 'emergency help', 'urgent care'],
+                        'question' => 'What should I do in an emergency?',
+                        'answer' => 'Emergency services are available 24/7. Call '.$hospital->emergency_phone.' or go directly to the hospital emergency department.',
+                    ],
+                    [
+                        'category' => 'emergency',
+                        'subcategory' => 'emergency-process-sw',
+                        'language' => 'sw',
+                        'keywords' => ['dharura', 'msaada wa haraka'],
+                        'question' => 'Nifanye nini wakati wa dharura?',
+                        'answer' => 'Huduma za dharura zinapatikana saa 24. Piga '.$hospital->emergency_phone.' au fika moja kwa moja katika idara ya dharura ya hospitali.',
+                    ],
+                    [
+                        'category' => 'services',
+                        'subcategory' => 'services_overview',
+                        'language' => 'en',
+                        'keywords' => ['services', 'what services do you offer', 'available services'],
+                        'question' => 'What services do you offer?',
+                        'answer' => 'Nairobi Hospital offers general consultation, dental, optical, diagnostic imaging, physiotherapy, maternity, renal dialysis, and oncology services.',
+                    ],
+                    [
+                        'category' => 'services',
+                        'subcategory' => 'complete-service-list-swahili',
+                        'language' => 'sw',
+                        'keywords' => ['huduma', 'mnatoa huduma gani', 'huduma zipi'],
+                        'question' => 'Hospitali inatoa huduma gani?',
+                        'answer' => 'Nairobi Hospital inatoa huduma za ushauri wa daktari, meno, macho, uchunguzi wa picha, tiba ya mazoezi, uzazi, dialysis ya figo, na huduma za saratani.',
+                    ],
+                ];
+
+                foreach ($generalKnowledge as $entry) {
+                    KnowledgeBase::withoutGlobalScopes()->updateOrCreate(
+                        [
+                            'hospital_id' => $hospital->id,
+                            'category' => $entry['category'],
+                            'subcategory' => $entry['subcategory'],
+                        ],
+                        [
+                            ...$entry,
+                            'source' => 'Nairobi Hospital Administration',
+                            'last_updated' => now(),
+                        ],
+                    );
+                }
             });
         } finally {
             if ($hadCurrentHospital) {

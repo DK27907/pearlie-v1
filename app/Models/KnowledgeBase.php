@@ -17,6 +17,7 @@ class KnowledgeBase extends Model
      */
     protected $fillable = [
         'category',
+        'language',
         'subcategory',
         'keywords',
         'question',

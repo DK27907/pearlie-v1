@@ -73,6 +73,19 @@ class ReceiptLifecycleTest extends TestCase
         $this->assertStringNotContainsString('Checkout ID', $html);
 
         $this->get($receipt->signedDownloadUrl())->assertOk();
+
+        $this->actingAs($admin)
+            ->get(route('admin.appointments.show', $appointment->id))
+            ->assertOk()
+            ->assertSee('Print receipt')
+            ->assertSee('/receipts/'.$receipt->id.'/print?', false);
+
+        $printResponse = $this->get($receipt->signedPrintUrl());
+        $printResponse->assertOk();
+        $this->assertSame(
+            'inline; filename="'.$receipt->receipt_number.'.pdf"',
+            $printResponse->headers->get('Content-Disposition'),
+        );
     }
 
     public function test_receipt_download_rejects_unsigned_requests(): void
@@ -85,6 +98,7 @@ class ReceiptLifecycleTest extends TestCase
         $receipt = app(ReceiptService::class)->generateForAppointment($appointment);
 
         $this->get(route('receipts.download', $receipt->id))->assertForbidden();
+        $this->get(route('receipts.print', $receipt->id))->assertForbidden();
     }
 
     public function test_cashier_cannot_mark_a_partial_or_excess_amount_as_paid(): void

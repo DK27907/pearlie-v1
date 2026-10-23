@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AppointmentRequest;
 use App\Models\Hospital;
 use App\Models\HospitalIntegrationCredential;
 use App\Models\NotificationLog;
@@ -21,6 +22,9 @@ class MessagingProviderTest extends TestCase
     public function test_successful_whatsapp_delivery_logs_provider_receipt(): void
     {
         $this->useHospitalWithWhatsAppCredentials();
+        $appointment = AppointmentRequest::factory()->create([
+            'hospital_id' => hospital()->id,
+        ]);
         Http::preventStrayRequests();
         Http::fake([
             'https://graph.facebook.com/*' => Http::response([
@@ -31,6 +35,7 @@ class MessagingProviderTest extends TestCase
         $sent = app(NotificationService::class)->sendWhatsApp(
             '254748249882',
             'Appointment update',
+            $appointment->id,
         );
 
         $this->assertTrue($sent);
@@ -41,6 +46,7 @@ class MessagingProviderTest extends TestCase
             'status' => 'sent',
             'http_status' => 200,
             'provider_message_id' => 'wamid.test-message',
+            'appointment_request_id' => $appointment->id,
         ]);
         Http::assertSent(fn ($request): bool => str_contains($request->url(), 'graph.facebook.com')
             && $request->method() === 'POST');
@@ -134,6 +140,9 @@ class MessagingProviderTest extends TestCase
                 'from_number' => '+15005550006',
             ],
         );
+        $appointment = AppointmentRequest::factory()->create([
+            'hospital_id' => $hospital->id,
+        ]);
         Http::preventStrayRequests();
         Http::fake([
             'https://api.twilio.com/2010-04-01/Accounts/*/Messages.json' => Http::response([
@@ -141,7 +150,11 @@ class MessagingProviderTest extends TestCase
             ], 201),
         ]);
 
-        $sent = app(NotificationService::class)->sendSms('254748249882', 'Appointment update');
+        $sent = app(NotificationService::class)->sendSms(
+            '254748249882',
+            'Appointment update',
+            $appointment->id,
+        );
 
         $this->assertTrue($sent);
         $this->assertDatabaseHas('notification_logs', [
@@ -151,6 +164,7 @@ class MessagingProviderTest extends TestCase
             'status' => 'sent',
             'http_status' => 201,
             'provider_message_id' => 'SM-test-message',
+            'appointment_request_id' => $appointment->id,
         ]);
         Http::assertSent(fn ($request): bool => str_contains($request->url(), 'api.twilio.com')
             && $request->method() === 'POST');
