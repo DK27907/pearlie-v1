@@ -45,9 +45,16 @@
     <h2>Payment</h2>
     <table class="details">
         <tr><td class="label">Amount paid</td><td>KES {{ number_format((float) $receipt->amount, 2) }}</td></tr>
-        <tr><td class="label">Payment method</td><td>{{ strtoupper($receipt->payment_method) }}</td></tr>
-        @if ($mpesa?->mpesa_receipt)
-            <tr><td class="label">M-Pesa receipt</td><td>{{ $mpesa->mpesa_receipt }}</td></tr>
+        @if ($mpesa)
+            <tr><td class="label">Payment Method</td><td>M-Pesa</td></tr>
+            <tr><td class="label">M-Pesa Receipt No.</td><td>{{ $mpesa->mpesa_receipt ?? 'Pending' }}</td></tr>
+            <tr><td class="label">Checkout ID</td><td>{{ $mpesa->checkout_request_id }}</td></tr>
+            <tr><td class="label">Phone</td><td>{{ $mpesa->phone }}</td></tr>
+            <tr><td class="label">Transaction Date</td><td>{{ ($mpesa->processed_at ?? $mpesa->updated_at)->format('d M Y, g:i A') }}</td></tr>
+        @else
+            <tr><td class="label">Payment Method</td><td>Cash at hospital</td></tr>
+            <tr><td class="label">Marked Paid By</td><td>{{ $receipt->issuedBy?->name ?? 'Front desk' }}</td></tr>
+            <tr><td class="label">Payment Date</td><td>{{ $receipt->issued_at->format('d M Y, g:i A') }}</td></tr>
         @endif
         @if ($hospital->receipt_show_kra_pin && $hospital->receipt_kra_pin)
             <tr><td class="label">KRA PIN</td><td>{{ $hospital->receipt_kra_pin }}</td></tr>

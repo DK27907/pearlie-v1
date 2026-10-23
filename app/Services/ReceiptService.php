@@ -63,7 +63,7 @@ class ReceiptService
             return $receipt;
         }
 
-        $receipt->loadMissing(['hospital', 'appointment.doctor', 'appointment.service', 'mpesaPayment']);
+        $receipt->loadMissing(['hospital', 'appointment.doctor', 'appointment.service', 'mpesaPayment', 'issuedBy']);
         $hospital = $receipt->hospital;
         if (! $hospital) {
             throw new RuntimeException('A hospital is required to render a receipt.');

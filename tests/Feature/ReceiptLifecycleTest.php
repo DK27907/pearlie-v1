@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AppointmentRequest;
 use App\Models\Hospital;
+use App\Models\MpesaPayment;
 use App\Models\Receipt;
 use App\Models\User;
 use App\Services\EtimsService;
@@ -52,6 +53,24 @@ class ReceiptLifecycleTest extends TestCase
         $this->assertSame('RCPT-2026-000001', $receipt->receipt_number);
         $this->assertSame('cash', $receipt->payment_method);
         Storage::assertExists($receipt->pdf_path);
+
+        $html = view('receipts.appointment', [
+            'receipt' => $receipt->load('issuedBy'),
+            'hospital' => $hospital,
+            'appointment' => $appointment,
+            'mpesa' => null,
+            'letterheadDataUri' => null,
+            'footerDataUri' => null,
+            'signatureDataUri' => null,
+        ])->render();
+
+        $this->assertStringContainsString('Payment Method', $html);
+        $this->assertStringContainsString('Cash at hospital', $html);
+        $this->assertStringContainsString('Marked Paid By', $html);
+        $this->assertStringContainsString($admin->name, $html);
+        $this->assertStringContainsString('Payment Date', $html);
+        $this->assertStringNotContainsString('M-Pesa Receipt No.', $html);
+        $this->assertStringNotContainsString('Checkout ID', $html);
 
         $this->get($receipt->signedDownloadUrl())->assertOk();
     }
@@ -118,6 +137,54 @@ class ReceiptLifecycleTest extends TestCase
 
         $this->assertSame($firstReceipt->id, $secondReceipt->id);
         $this->assertDatabaseCount('receipts', 1);
+    }
+
+    public function test_mpesa_receipt_pdf_shows_receipt_number_checkout_and_phone(): void
+    {
+        Storage::fake();
+        $hospital = Hospital::factory()->create([
+            'receipt_prefix' => 'TEST',
+            'receipt_title' => 'Payment Receipt',
+        ]);
+        app()->instance('currentHospital', $hospital);
+
+        $appointment = AppointmentRequest::factory()->create([
+            'hospital_id' => $hospital->id,
+            'name' => 'M-Pesa Receipt Patient',
+            'phone' => '254748249882',
+            'payment_status' => 'paid',
+            'payment_method' => 'mpesa',
+            'payment_amount' => 1.00,
+        ]);
+
+        $payment = MpesaPayment::factory()->create([
+            'hospital_id' => $hospital->id,
+            'appointment_request_id' => $appointment->id,
+            'status' => MpesaPayment::STATUS_COMPLETED,
+            'mpesa_receipt' => 'UJ1TESTSAFARICOM',
+            'checkout_request_id' => 'ws_CO_1234567890',
+            'phone' => '254748249882',
+            'amount' => 1.00,
+            'processed_at' => '2026-10-23 09:30:00',
+        ]);
+
+        $receipt = app(ReceiptService::class)->generateForAppointment($appointment, $payment);
+        $html = view('receipts.appointment', [
+            'receipt' => $receipt,
+            'hospital' => $hospital,
+            'appointment' => $appointment,
+            'mpesa' => $payment,
+            'letterheadDataUri' => null,
+            'footerDataUri' => null,
+            'signatureDataUri' => null,
+        ])->render();
+
+        $this->assertStringContainsString('UJ1TESTSAFARICOM', $html);
+        $this->assertStringContainsString('ws_CO_1234567890', $html);
+        $this->assertStringContainsString('254748249882', $html);
+        $this->assertStringContainsString('1.00', $html);
+        $this->assertStringContainsString('M-Pesa', $html);
+        $this->assertStringContainsString('23 Oct 2026, 9:30 AM', $html);
     }
 
     public function test_receipt_uses_tenant_branding_and_escapes_patient_content(): void
