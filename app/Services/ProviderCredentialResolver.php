@@ -25,6 +25,7 @@ class ProviderCredentialResolver
         array $fallbackConfig,
         array $legacyAttributeMap,
         array $requiredCredentials,
+        bool $allowGlobalFallback = false,
     ): array {
         try {
             $tenantCredentials = $this->hospitalSettings
@@ -57,7 +58,10 @@ class ProviderCredentialResolver
             fn (string $key): bool => blank($tenantCredentials[$key] ?? null),
         ));
 
-        if ($missingCredentials !== [] && ! config('integrations.allow_global_fallback', false)) {
+        if ($missingCredentials !== []
+            && ! $allowGlobalFallback
+            && ! config('integrations.allow_global_fallback', false)
+        ) {
             throw MissingProviderCredentialsException::forHospital(
                 $hospital,
                 $provider,

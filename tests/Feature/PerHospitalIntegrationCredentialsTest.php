@@ -51,7 +51,8 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
     public function test_mpesa_service_falls_back_to_env_when_hospital_has_no_credentials(): void
     {
         config([
-            'integrations.allow_global_fallback' => true,
+            'integrations.allow_global_fallback' => false,
+            'integrations.allow_mpesa_global_fallback' => true,
             'mpesa.consumer_key' => 'global-test-key',
             'mpesa.consumer_secret' => 'global-test-secret',
         ]);
@@ -64,6 +65,45 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
             'Authorization',
             'Basic '.base64_encode('global-test-key:global-test-secret'),
         ));
+    }
+
+    public function test_mpesa_fallback_uses_the_platform_callback_url_with_tenant_context(): void
+    {
+        $hospital = Hospital::factory()->create(['subscription_plan' => 'enterprise']);
+        $this->setCurrentHospital($hospital);
+        config([
+            'integrations.allow_global_fallback' => false,
+            'integrations.allow_mpesa_global_fallback' => true,
+            'mpesa.consumer_key' => 'global-test-key',
+            'mpesa.consumer_secret' => 'global-test-secret',
+            'mpesa.shortcode' => '174379',
+            'mpesa.passkey' => 'global-test-passkey',
+            'mpesa.callback_url' => 'https://example.test/api/mpesa/callback',
+            'mpesa.environment' => 'sandbox',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://sandbox.safaricom.co.ke/oauth/v1/generate*' => Http::response([
+                'access_token' => 'test-oauth-token',
+            ]),
+            'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest' => Http::response([
+                'ResponseCode' => '0',
+                'CheckoutRequestID' => 'checkout-platform-fallback',
+                'MerchantRequestID' => 'merchant-platform-fallback',
+            ]),
+        ]);
+
+        $result = app(MpesaService::class)->stkPush(
+            '0748249882',
+            1,
+            'APT-1',
+            'Appointment booking',
+        );
+
+        $this->assertSame('checkout-platform-fallback', $result['checkout_request_id']);
+        Http::assertSent(fn (ClientRequest $request): bool => $request->url()
+            === 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest'
+            && $request['CallBackURL'] === 'https://example.test/api/mpesa/callback?hospital='.$hospital->slug);
     }
 
     public function test_mpesa_service_uses_the_configured_ca_bundle_for_http_requests(): void

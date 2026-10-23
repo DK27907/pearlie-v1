@@ -853,6 +853,7 @@ class MpesaService
                 'passkey' => 'mpesa_passkey',
             ],
             ['consumer_key', 'consumer_secret', 'shortcode', 'passkey'],
+            (bool) config('integrations.allow_mpesa_global_fallback', false),
         );
 
         $config['appointment_deposit'] = (float) $hospital->deposit_amount;
