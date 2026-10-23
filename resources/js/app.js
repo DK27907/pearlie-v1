@@ -136,6 +136,51 @@ if (paymentVerificationButton) {
     });
 }
 
+const announcementForm = document.getElementById('announcement-form');
+const announcementPreviewButton = document.getElementById('preview-announcement');
+const announcementPreview = document.getElementById('announcement-preview');
+
+if (announcementForm && announcementPreviewButton && announcementPreview) {
+    announcementPreviewButton.addEventListener('click', async () => {
+        announcementPreviewButton.disabled = true;
+        announcementPreview.textContent = 'Generating preview…';
+        announcementPreview.classList.remove('hidden');
+
+        try {
+            const csrfToken = announcementForm.querySelector('input[name="_token"]')?.value;
+
+            if (!csrfToken || !announcementForm.dataset.previewUrl) {
+                throw new Error('Announcement preview configuration is missing.');
+            }
+
+            const response = await fetch(announcementForm.dataset.previewUrl, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify(Object.fromEntries(new FormData(announcementForm))),
+            });
+            const result = await response.json().catch(() => ({}));
+
+            if (!response.ok || typeof result.preview !== 'string') {
+                throw new Error('Preview could not be generated.');
+            }
+
+            announcementPreview.textContent = result.recipient_found === false
+                ? `No matching appointment was found; this is a sample preview.\n\n${result.preview}`
+                : result.preview;
+        } catch (error) {
+            console.error('Announcement preview failed.', error);
+            announcementPreview.textContent = 'Preview could not be generated. Please try again.';
+        } finally {
+            announcementPreviewButton.disabled = false;
+        }
+    });
+}
+
 let activeModalTrigger = null;
 const focusableSelector = "a, button, input:not([type='hidden']), textarea, select, details, [tabindex]:not([tabindex='-1'])";
 

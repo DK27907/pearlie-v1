@@ -63,23 +63,4 @@
             <div id="announcement-preview" class="hidden rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-slate-800" aria-live="polite"></div>
         </form>
     </div>
-
-    <script>
-        document.getElementById('preview-announcement').addEventListener('click', async () => {
-            const form = document.getElementById('announcement-form');
-            const preview = document.getElementById('announcement-preview');
-            const response = await fetch(form.dataset.previewUrl, {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': form.querySelector('input[name="_token"]').value,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(Object.fromEntries(new FormData(form))),
-            });
-            const result = await response.json();
-            preview.textContent = response.ok ? result.preview : (result.message || 'Preview could not be generated.');
-            preview.classList.remove('hidden');
-        });
-    </script>
 @endsection
