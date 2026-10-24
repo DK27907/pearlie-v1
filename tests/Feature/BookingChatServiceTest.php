@@ -90,6 +90,43 @@ class BookingChatServiceTest extends TestCase
         $this->assertStringNotContainsString('phone number', mb_strtolower($response->message));
     }
 
+    public function test_specialist_question_lists_the_matching_doctor_without_starting_a_booking(): void
+    {
+        [, , $doctors] = $this->createContext(
+            doctorNames: ['Dr. Samuel Kiptoo', 'Dr. Brian Otieno'],
+        );
+        $doctors[0]->update(['specialization' => 'Oncologist']);
+        $doctors[1]->update(['specialization' => 'General Practitioner']);
+
+        $response = app(BookingChatService::class)->handle(
+            'specialist-question-oncologist',
+            'do you have an oncologist?',
+            'web',
+        );
+
+        $this->assertSame('hospital_doctors', $response->source);
+        $this->assertSame('IDLE', $response->state);
+        $this->assertStringContainsString('Dr. Samuel Kiptoo (Oncologist)', $response->message);
+        $this->assertStringNotContainsString('Dr. Brian Otieno', $response->message);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_service_offer_question_confirms_catalog_entry_without_starting_a_booking(): void
+    {
+        $this->createContext(['IVF & Fertility Consultation']);
+
+        $response = app(BookingChatService::class)->handle(
+            'service-offer-ivf',
+            'do you offer IVF?',
+            'web',
+        );
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertSame('hospital_services', $response->source);
+        $this->assertStringContainsString('IVF & Fertility Consultation', $response->message);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
     public function test_booking_state_machine_survives_repeated_intent_during_active_flow(): void
     {
         [, $services] = $this->createContext();

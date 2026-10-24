@@ -558,10 +558,31 @@ class BookingChatService
         }
 
         if ($intent === 'services') {
-            if (! $this->isBroadServicesOverview($message)
-                && $this->extractService($message, $hospital) !== null
-            ) {
-                return $this->delegateToAssistant($sessionId, $channel, $message, $state);
+            $requestedService = $this->isBroadServicesOverview($message)
+                ? null
+                : $this->extractService($message, $hospital);
+
+            if ($requestedService !== null) {
+                $response = $state['language'] === self::LANGUAGE_SWAHILI
+                    ? sprintf(
+                        'Ndiyo, %s imeorodheshwa kama huduma inayopatikana katika %s. Je, ungependa msaada wa kuweka miadi?',
+                        $requestedService->name,
+                        $hospital->name,
+                    )
+                    : sprintf(
+                        'Yes, %s is listed as an available service at %s. Would you like help booking it?',
+                        $requestedService->name,
+                        $hospital->name,
+                    );
+
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $response,
+                    $state,
+                    source: 'hospital_services',
+                );
             }
 
             $services = $hospital->services()->active()->orderBy('name')->pluck('name');
@@ -634,6 +655,21 @@ class BookingChatService
                 preg_match('/\b(ob\/gyn|obstetrician|gynecologist|gynaecologist)\b/iu', $normalizedMessage) === 1 => ['obstetric', 'gynec', 'gynaec'],
                 preg_match('/\b(radiologist|radiology)\b/iu', $normalizedMessage) === 1 => ['radiolog'],
                 preg_match('/\b(physiotherapist|physiotherapy)\b/iu', $normalizedMessage) === 1 => ['physiotherap'],
+                preg_match('/\b(oncolo(?:gist|gy))\b/iu', $normalizedMessage) === 1 => ['oncolog'],
+                preg_match('/\b(?:pediatrician|paediatrician|pediatrics|paediatrics)\b/iu', $normalizedMessage) === 1 => ['pediatric', 'paediatric'],
+                preg_match('/\b(neurolog(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['neurolog'],
+                preg_match('/\b(psychiatr(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['psychiatr'],
+                preg_match('/\b(urolog(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['urolog'],
+                preg_match('/\b(orthopedic|orthopaedic|orthopedist|orthopaedist)\b/iu', $normalizedMessage) === 1 => ['orthop', 'orthopaed'],
+                preg_match('/\b(cardiolog(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['cardiolog'],
+                preg_match('/\b(nephrolog(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['nephrolog'],
+                preg_match('/\b(gastroenterolog(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['gastroenterolog'],
+                preg_match('/\b(fertility specialist|fertility)\b/iu', $normalizedMessage) === 1 => ['fertility'],
+                preg_match('/\b(optometrist|optometry)\b/iu', $normalizedMessage) === 1 => ['optometr'],
+                preg_match('/\b(occupational therapist|occupational therapy)\b/iu', $normalizedMessage) === 1 => ['occupational therapist'],
+                preg_match('/\b(pharmacist|pharmacy)\b/iu', $normalizedMessage) === 1 => ['pharmac'],
+                preg_match('/\b(surgeon|surgery)\b/iu', $normalizedMessage) === 1 => ['surgeon'],
+                preg_match('/\bENT(?:\s+specialist)?\b/iu', $normalizedMessage) === 1 => ['ent specialist'],
                 default => [],
             };
             if ($specialtyTerms !== []) {
@@ -2110,7 +2146,7 @@ class BookingChatService
         }
         if (
             (
-                preg_match('/\b(dentist|dentists|doctor|doctors|doc|daktari|madaktari|specialist|specialists|radiologist|physiotherapist|obstetrician|gynecologist|gynaecologist)\b/iu', $normalized)
+                preg_match('/\b(dentist|dentists|doctor|doctors|doc|daktari|madaktari|specialist|specialists|radiologist|physiotherapist|obstetrician|gynecologist|gynaecologist|oncologist|pediatrician|paediatrician|neurologist|psychiatrist|urologist|orthopedic(?:\s+surgeon)?|orthopaedic(?:\s+surgeon)?|cardiologist|nephrologist|gastroenterologist|fertility specialist|optometrist|occupational therapist|pharmacist|surgeon|ENT(?:\s+specialist)?)\b/iu', $normalized)
                 && (
                     preg_match('/\b(do you have|is there|are there|available|availability|which|who|can i see|mna|yupo|wapo|yupi|yuko|gimme|give me)\b/iu', $normalized)
                     || preg_match('/^\s*(?:a\s+)?(?:dentists?|doctors?|docs?|daktari|madaktari)\s*[?!.]*\s*$/iu', $normalized)
@@ -2119,6 +2155,9 @@ class BookingChatService
             || preg_match('/\b(?:who|which)\s+(?:is\s+)?available\s+(?:today|tomorrow|on\s+[\pL\d-]+)/iu', $message) === 1
         ) {
             return 'doctors';
+        }
+        if (preg_match('/\b(?:do you (?:offer|provide)|is (?:the )?service available)\b/iu', $normalized) === 1) {
+            return 'services';
         }
         if (preg_match('/\b(opening hours|working hours|outpatient hours|emergency hours|what time|when do you open|when are you open|hours|saa ngapi|mnafunga)\b/iu', $normalized)) {
             return 'hours';
