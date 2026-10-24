@@ -36,6 +36,8 @@ class DatabaseSeeder extends Seeder
         $testUser->syncRolesFromFlags();
 
         $this->call(DoctorUserSeeder::class);
+        $this->call(PearlHospitalFullServicesSeeder::class);
+        $this->call(PearlDoctorAvailabilitySeeder::class);
         $this->call(KnowledgeBaseSeeder::class);
     }
 }
