@@ -135,6 +135,45 @@ class ReceiptLifecycleTest extends TestCase
         $this->assertDatabaseCount('receipts', 0);
     }
 
+    public function test_no_payment_appointment_has_no_payment_action_or_receipt(): void
+    {
+        $hospital = Hospital::factory()->create([
+            'subscription_plan' => 'enterprise',
+            'subscription_status' => 'active',
+        ]);
+        app()->instance('currentHospital', $hospital);
+        $admin = User::factory()->for($hospital, 'hospital')->create([
+            'is_admin' => true,
+            'role' => 'hospital_admin',
+        ]);
+        $appointment = AppointmentRequest::factory()->create([
+            'hospital_id' => $hospital->id,
+            'status' => AppointmentRequest::STATUS_CONFIRMED,
+            'payment_status' => 'not_required',
+            'payment_method' => 'none',
+            'payment_due_at' => null,
+            'payment_amount' => 0,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.appointments.show', $appointment->id))
+            ->assertOk()
+            ->assertSee('Not required')
+            ->assertSee('No payment is required for this appointment.')
+            ->assertDontSee('Mark as paid and generate receipt')
+            ->assertDontSee('Download receipt PDF');
+
+        $this->actingAs($admin)
+            ->post(route('admin.appointments.mark-paid', $appointment->id), [
+                'amount' => '1.00',
+                'payment_method' => 'cash',
+            ])
+            ->assertUnprocessable();
+
+        $this->assertSame('not_required', $appointment->fresh()->payment_status);
+        $this->assertDatabaseCount('receipts', 0);
+    }
+
     public function test_receipt_generation_is_idempotent_for_an_appointment(): void
     {
         Storage::fake();

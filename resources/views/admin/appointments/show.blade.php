@@ -49,7 +49,7 @@
             @endphp
             <section class="my-5 rounded-xl border border-slate-200 bg-slate-50 p-4" aria-labelledby="payment-heading">
                 <div class="flex flex-wrap items-center justify-between gap-3">
-                    <h2 id="payment-heading" class="font-semibold text-slate-900">M-Pesa payment</h2>
+                    <h2 id="payment-heading" class="font-semibold text-slate-900">Appointment payment</h2>
                     <span @class([
                         'rounded-full px-3 py-1 text-xs font-semibold capitalize',
                         'bg-emerald-100 text-emerald-800' => $paymentStatus === 'paid',
@@ -57,32 +57,36 @@
                         'bg-rose-100 text-rose-800' => in_array($paymentStatus, ['failed', 'unpaid'], true),
                         'bg-slate-200 text-slate-700' => ! in_array($paymentStatus, ['paid', 'pending', 'failed', 'unpaid', 'refunded'], true),
                         'bg-violet-100 text-violet-800' => $paymentStatus === 'refunded',
-                    ])>{{ $paymentStatus }}</span>
+                    ])>{{ $paymentStatus === 'not_required' ? 'Not required' : $paymentStatus }}</span>
                 </div>
-                <dl class="mt-4 grid gap-4 text-sm sm:grid-cols-2">
-                    <div>
-                        <dt class="text-slate-500">Amount</dt>
-                        <dd class="mt-1 font-medium text-slate-900">{{ $paymentAmount !== null ? 'KSh '.number_format((float) $paymentAmount, 2) : 'Not set' }}</dd>
-                    </div>
-                    <div>
-                        <dt class="text-slate-500">Paid at</dt>
-                        <dd class="mt-1 font-medium text-slate-900">{{ $appt->paid_at?->format('M j, Y g:i a') ?? 'Not paid' }}</dd>
-                    </div>
-                    @if ($appt->payment_method)
+                @if ($paymentStatus === 'not_required')
+                    <p class="mt-4 text-sm text-slate-700">No payment is required for this appointment.</p>
+                @else
+                    <dl class="mt-4 grid gap-4 text-sm sm:grid-cols-2">
                         <div>
-                            <dt class="text-slate-500">Payment method</dt>
-                            <dd class="mt-1 font-medium capitalize text-slate-900">{{ str_replace('_', ' ', $appt->payment_method) }}</dd>
+                            <dt class="text-slate-500">Amount</dt>
+                            <dd class="mt-1 font-medium text-slate-900">{{ $paymentAmount !== null ? 'KSh '.number_format((float) $paymentAmount, 2) : 'Not set' }}</dd>
                         </div>
-                    @endif
-                    @if ($paymentReceipt)
-                        <div class="sm:col-span-2">
-                            <dt class="text-slate-500">M-Pesa receipt</dt>
-                            <dd class="mt-1 font-mono font-semibold text-slate-900">{{ $paymentReceipt }}</dd>
+                        <div>
+                            <dt class="text-slate-500">Paid at</dt>
+                            <dd class="mt-1 font-medium text-slate-900">{{ $appt->paid_at?->format('M j, Y g:i a') ?? 'Not paid' }}</dd>
                         </div>
-                    @endif
-                </dl>
+                        @if ($appt->payment_method)
+                            <div>
+                                <dt class="text-slate-500">Payment method</dt>
+                                <dd class="mt-1 font-medium capitalize text-slate-900">{{ str_replace('_', ' ', $appt->payment_method) }}</dd>
+                            </div>
+                        @endif
+                        @if ($paymentReceipt)
+                            <div class="sm:col-span-2">
+                                <dt class="text-slate-500">M-Pesa receipt</dt>
+                                <dd class="mt-1 font-mono font-semibold text-slate-900">{{ $paymentReceipt }}</dd>
+                            </div>
+                        @endif
+                    </dl>
+                @endif
 
-                @if ($checkoutRequestId)
+                @if ($checkoutRequestId && $paymentStatus !== 'not_required')
                     <div class="mt-4 flex flex-wrap items-center gap-3">
                         <button
                             type="button"

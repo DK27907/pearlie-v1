@@ -93,6 +93,7 @@ class SettingsController extends Controller
             'name',
             'phone',
             'address',
+            'booking_payment_mode',
             'patient_cancellation_enabled',
             'patient_rescheduling_enabled',
             'cancellation_cutoff_hours',

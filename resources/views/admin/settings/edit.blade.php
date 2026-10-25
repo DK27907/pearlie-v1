@@ -99,6 +99,17 @@
                                 <input class="{{ $inputClass }}" type="number" name="slot_duration_minutes" min="5" max="480" required value="{{ old('slot_duration_minutes', $slotDuration) }}">
                             </label>
                         </div>
+                        <label class="block text-sm font-semibold text-slate-700">
+                            Appointment payment mode
+                            <select class="{{ $inputClass }}" name="booking_payment_mode" required>
+                                <option value="mpesa" @selected(old('booking_payment_mode', $hospital->bookingPaymentMode()) === 'mpesa')>M-Pesa or cash at the hospital</option>
+                                <option value="cash" @selected(old('booking_payment_mode', $hospital->bookingPaymentMode()) === 'cash')>Cash at the hospital only</option>
+                                <option value="none" @selected(old('booking_payment_mode', $hospital->bookingPaymentMode()) === 'none')>No payment required</option>
+                            </select>
+                            <span class="mt-1 block text-xs font-normal text-slate-500">
+                                M-Pesa mode lets patients choose online payment or cash at the hospital. Cash mode confirms bookings without an online payment option. No-payment mode confirms bookings without collecting payment or issuing a receipt.
+                            </span>
+                        </label>
                         <label class="flex items-start gap-3 text-sm font-semibold text-slate-700">
                             <input type="checkbox" name="auto_confirm_paid_appointments" value="1" @checked(old('auto_confirm_paid_appointments', $autoConfirm)) class="mt-0.5 rounded border-slate-300 text-sky-800 focus:ring-sky-700">
                             <span>Automatically confirm appointments after successful payment</span>

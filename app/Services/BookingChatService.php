@@ -284,6 +284,10 @@ class BookingChatService
         }
 
         if ($state['state'] === self::STATE_PAYMENT_CHOICE) {
+            if ($hospital->bookingPaymentMode() !== Hospital::BOOKING_PAYMENT_MODE_MPESA) {
+                return $this->confirmBooking($sessionId, $channel, $message, $hospital, $state);
+            }
+
             $lowerMessage = mb_strtolower($message);
             $paymentMethod = preg_match('/\b(cash|at the hospital|at hospital|pay later|later|hospitalini|lipa hospitalini)\b/u', $lowerMessage) === 1
                 ? 'cash'
@@ -1341,6 +1345,13 @@ class BookingChatService
         array $state,
         ?string $paymentMethod = null,
     ): ChatResponse {
+        $paymentMode = $hospital->bookingPaymentMode();
+        if (! $hospital->requiresPayment()) {
+            $paymentMethod = 'none';
+        } elseif ($paymentMode === Hospital::BOOKING_PAYMENT_MODE_CASH) {
+            $paymentMethod = 'cash';
+        }
+
         if ($paymentMethod === null) {
             $service = $this->serviceById((int) $state['service_id'], $hospital);
             $amount = (float) $service->price;
@@ -1390,6 +1401,37 @@ class BookingChatService
         }
 
         $amount = (float) ($appointment->payment_amount ?? $service->price);
+        if (
+            ! $hospital->requiresPayment()
+            || ($paymentMode === Hospital::BOOKING_PAYMENT_MODE_CASH && $amount <= 0)
+        ) {
+            $appointment->forceFill([
+                'status' => AppointmentRequest::STATUS_CONFIRMED,
+                'status_updated_at' => now(),
+                'payment_status' => 'not_required',
+                'payment_method' => 'none',
+                'payment_due_at' => null,
+                'payment_amount' => 0,
+            ])->save();
+            SlotHold::query()
+                ->where('hospital_id', $appointment->hospital_id)
+                ->where('appointment_request_id', $appointment->id)
+                ->delete();
+            $state['state'] = self::STATE_COMPLETED;
+            $state['appointment_id'] = $appointment->id;
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Miadi yako imethibitishwa. Hakuna malipo yanayohitajika.'
+                    : 'Your appointment is confirmed. No payment is required.',
+                $state,
+                $appointment->id,
+            );
+        }
+
         if ($paymentMethod === 'cash') {
             $appointment->forceFill([
                 'status' => AppointmentRequest::STATUS_CONFIRMED,
@@ -3314,14 +3356,22 @@ class BookingChatService
         $service = $this->serviceById((int) $state['service_id'], $hospital);
         $doctor = $this->eligibleDoctors($hospital, $service)->firstWhere('id', (int) $state['doctor_id']);
         $paymentAmount = (float) ($service->price ?? 0);
-        $paymentAmountSummary = $hospital->hasFeature('mpesa') && $paymentAmount > 0
-            ? sprintf(
+        $paymentAmountSummary = '';
+        if ($hospital->requiresOnlinePayment() && $hospital->hasFeature('mpesa') && $paymentAmount > 0) {
+            $paymentAmountSummary = sprintf(
                 $state['language'] === self::LANGUAGE_SWAHILI
                     ? ' Kiasi cha M-Pesa ni KSh %s.'
                     : ' M-Pesa amount: KSh %s.',
                 number_format($paymentAmount, 2, '.', ','),
-            )
-            : '';
+            );
+        } elseif ($hospital->bookingPaymentMode() === Hospital::BOOKING_PAYMENT_MODE_CASH && $paymentAmount > 0) {
+            $paymentAmountSummary = sprintf(
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? ' Malipo ya KSh %s yatafanywa hospitalini.'
+                    : ' Payment of KSh %s is due at the hospital.',
+                number_format($paymentAmount, 2, '.', ','),
+            );
+        }
         $date = $state['language'] === self::LANGUAGE_SWAHILI
             ? CarbonImmutable::parse((string) $state['date'])->format('d/m/Y')
             : CarbonImmutable::parse((string) $state['date'])->toFormattedDateString();

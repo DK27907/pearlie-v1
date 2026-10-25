@@ -119,6 +119,11 @@ class AppointmentController extends Controller
 
         $appointment = DB::transaction(function () use ($id, $validated, $request): AppointmentRequest {
             $appointment = AppointmentRequest::query()->lockForUpdate()->findOrFail($id);
+            abort_if(
+                $appointment->payment_status === 'not_required',
+                422,
+                'This appointment does not require payment.',
+            );
             abort_unless(
                 $appointment->payment_due_at === 'at_hospital',
                 422,

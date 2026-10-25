@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Models\AppointmentRequest;
 use App\Models\Hospital;
 use App\Models\HospitalIntegrationCredential;
 use App\Models\User;
@@ -31,7 +32,10 @@ class SettingsPageTest extends TestCase
             ->assertSee('M-Pesa')
             ->assertSee('WhatsApp')
             ->assertSee('SMS')
-            ->assertSee('Email');
+            ->assertSee('Email')
+            ->assertSee('name="booking_payment_mode"', false)
+            ->assertSee('Cash at the hospital only')
+            ->assertSee('No payment required');
     }
 
     public function test_branding_tab_does_not_decrypt_unrelated_integration_credentials(): void
@@ -91,6 +95,32 @@ class SettingsPageTest extends TestCase
             $hospital->fresh()->reminder_message_template,
         );
         $this->assertSame('08:00', $hospital->fresh()->business_hours['monday']['open']);
+    }
+
+    public function test_admin_can_change_booking_payment_mode_without_changing_existing_appointments(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $otherHospital = Hospital::factory()->create();
+        $admin = $this->createAdmin($hospital);
+        $appointment = AppointmentRequest::factory()->create([
+            'hospital_id' => $hospital->id,
+            'payment_status' => 'pending',
+            'payment_method' => 'mpesa',
+            'payment_due_at' => 'online',
+        ]);
+
+        $this->actingAs($admin)->put(route('admin.integration-settings.general.update'), [
+            'deposit_amount' => 500,
+            'slot_duration_minutes' => 30,
+            'booking_payment_mode' => Hospital::BOOKING_PAYMENT_MODE_NONE,
+            'hospital_id' => $otherHospital->id,
+        ])->assertRedirect(route('admin.integration-settings.edit', ['tab' => 'general']));
+
+        $this->assertSame(Hospital::BOOKING_PAYMENT_MODE_NONE, $hospital->fresh()->bookingPaymentMode());
+        $this->assertSame(Hospital::BOOKING_PAYMENT_MODE_MPESA, $otherHospital->fresh()->bookingPaymentMode());
+        $this->assertSame('pending', $appointment->fresh()->payment_status);
+        $this->assertSame('mpesa', $appointment->fresh()->payment_method);
+        $this->assertSame('online', $appointment->fresh()->payment_due_at);
     }
 
     public function test_admin_can_update_hospital_information_and_tenant_pages_show_it(): void
@@ -210,6 +240,21 @@ class SettingsPageTest extends TestCase
             ->assertJsonValidationErrors('deposit_amount');
 
         $this->assertSame('500.00', $hospital->fresh()->deposit_amount);
+    }
+
+    public function test_general_settings_reject_an_unsupported_booking_payment_mode(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $admin = $this->createAdmin($hospital);
+
+        $this->actingAs($admin)->putJson(route('admin.integration-settings.general.update'), [
+            'deposit_amount' => 500,
+            'slot_duration_minutes' => 30,
+            'booking_payment_mode' => 'crypto',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('booking_payment_mode');
+
+        $this->assertSame(Hospital::BOOKING_PAYMENT_MODE_MPESA, $hospital->fresh()->bookingPaymentMode());
     }
 
     public function test_admin_can_save_mpesa_credentials(): void

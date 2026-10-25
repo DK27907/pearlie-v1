@@ -1203,6 +1203,65 @@ class BookingChatServiceTest extends TestCase
         Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/mpesa/stkpush/v1/processrequest'));
     }
 
+    public function test_cash_only_mode_confirms_without_offering_mpesa(): void
+    {
+        [$hospital] = $this->createContext(
+            price: 1,
+            bookingPaymentMode: Hospital::BOOKING_PAYMENT_MODE_CASH,
+        );
+        Http::preventStrayRequests();
+        $chat = app(BookingChatService::class);
+        $summary = $chat->handle(
+            'state-cash-only-mode',
+            'Book Dental Cleaning with Dr. Amina Njeri tomorrow at 9am. My name is Test Patient, phone 254748249882.',
+            'web',
+        );
+
+        $response = $chat->handle('state-cash-only-mode', 'yes', 'web');
+        $appointment = AppointmentRequest::query()->where('session_id', 'state-cash-only-mode')->firstOrFail();
+
+        $this->assertSame('CONFIRMING', $summary->state);
+        $this->assertStringContainsString('Payment of KSh 1.00 is due at the hospital', $summary->message);
+        $this->assertSame('COMPLETED', $response->state);
+        $this->assertStringNotContainsString('pay now via M-Pesa', mb_strtolower($response->message));
+        $this->assertSame(AppointmentRequest::STATUS_CONFIRMED, $appointment->status);
+        $this->assertSame('pending', $appointment->payment_status);
+        $this->assertSame('cash', $appointment->payment_method);
+        $this->assertSame('at_hospital', $appointment->payment_due_at);
+        $this->assertDatabaseMissing('slot_holds', ['appointment_request_id' => $appointment->id]);
+        $this->assertDatabaseCount('mpesa_payments', 0);
+    }
+
+    public function test_no_payment_mode_confirms_without_creating_payment_or_receipt(): void
+    {
+        $this->createContext(
+            price: 1,
+            bookingPaymentMode: Hospital::BOOKING_PAYMENT_MODE_NONE,
+        );
+        Http::preventStrayRequests();
+        $chat = app(BookingChatService::class);
+        $summary = $chat->handle(
+            'state-no-payment-mode',
+            'Book Dental Cleaning with Dr. Amina Njeri tomorrow at 9am. My name is Test Patient, phone 254748249882.',
+            'web',
+        );
+
+        $response = $chat->handle('state-no-payment-mode', 'yes', 'web');
+        $appointment = AppointmentRequest::query()->where('session_id', 'state-no-payment-mode')->firstOrFail();
+
+        $this->assertStringNotContainsString('KSh', $summary->message);
+        $this->assertSame('COMPLETED', $response->state);
+        $this->assertStringContainsString('No payment is required', $response->message);
+        $this->assertSame(AppointmentRequest::STATUS_CONFIRMED, $appointment->status);
+        $this->assertSame('not_required', $appointment->payment_status);
+        $this->assertSame('none', $appointment->payment_method);
+        $this->assertNull($appointment->payment_due_at);
+        $this->assertSame(0.0, $appointment->fresh()->payment_amount);
+        $this->assertDatabaseMissing('slot_holds', ['appointment_request_id' => $appointment->id]);
+        $this->assertDatabaseCount('mpesa_payments', 0);
+        $this->assertDatabaseCount('receipts', 0);
+    }
+
     public function test_patient_can_pay_at_hospital_without_triggering_mpesa(): void
     {
         [$hospital] = $this->createContext(price: 1, mpesaEnabled: true);
@@ -2303,6 +2362,7 @@ class BookingChatServiceTest extends TestCase
         array $doctorNames = ['Dr. Amina Njeri'],
         float $price = 1,
         bool $mpesaEnabled = false,
+        string $bookingPaymentMode = Hospital::BOOKING_PAYMENT_MODE_MPESA,
     ): array {
         $this->travelTo(CarbonImmutable::parse('2026-10-02 08:00:00'));
         $hospital = Hospital::query()->create([
@@ -2316,6 +2376,7 @@ class BookingChatServiceTest extends TestCase
             'no_show_grace_minutes' => 30,
             'default_language' => 'en',
             'supported_languages' => ['en', 'sw'],
+            'booking_payment_mode' => $bookingPaymentMode,
         ]);
         app()->instance('currentHospital', $hospital);
 

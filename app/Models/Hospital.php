@@ -14,8 +14,21 @@ class Hospital extends Model
 {
     use HasFactory;
 
+    public const BOOKING_PAYMENT_MODE_MPESA = 'mpesa';
+
+    public const BOOKING_PAYMENT_MODE_CASH = 'cash';
+
+    public const BOOKING_PAYMENT_MODE_NONE = 'none';
+
+    public const BOOKING_PAYMENT_MODES = [
+        self::BOOKING_PAYMENT_MODE_MPESA,
+        self::BOOKING_PAYMENT_MODE_CASH,
+        self::BOOKING_PAYMENT_MODE_NONE,
+    ];
+
     protected $attributes = [
         'supported_languages' => '["en","sw"]',
+        'booking_payment_mode' => self::BOOKING_PAYMENT_MODE_MPESA,
     ];
 
     protected $fillable = [
@@ -46,6 +59,7 @@ class Hospital extends Model
         'mpesa_consumer_secret',
         'mpesa_passkey',
         'deposit_amount',
+        'booking_payment_mode',
         'slot_duration_minutes',
         'auto_confirm_paid_appointments',
         'business_hours',
@@ -177,6 +191,25 @@ class Hospital extends Model
         }
 
         return (bool) $this->auto_confirm_paid_appointments;
+    }
+
+    public function bookingPaymentMode(): string
+    {
+        $mode = $this->getAttribute('booking_payment_mode');
+
+        return in_array($mode, self::BOOKING_PAYMENT_MODES, true)
+            ? $mode
+            : self::BOOKING_PAYMENT_MODE_MPESA;
+    }
+
+    public function requiresPayment(): bool
+    {
+        return $this->bookingPaymentMode() !== self::BOOKING_PAYMENT_MODE_NONE;
+    }
+
+    public function requiresOnlinePayment(): bool
+    {
+        return $this->bookingPaymentMode() === self::BOOKING_PAYMENT_MODE_MPESA;
     }
 
     public function services(): HasMany
