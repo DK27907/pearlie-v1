@@ -26,6 +26,7 @@ class UpdateGeneralSettingsRequest extends FormRequest
             'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
             'address' => ['sometimes', 'nullable', 'string', 'max:500'],
             'deposit_amount' => ['required', 'numeric', 'min:0', 'max:1000000'],
+            'booking_payment_mode' => ['sometimes', 'required', 'in:mpesa,cash,none'],
             'slot_duration_minutes' => ['required', 'integer', 'min:5', 'max:480'],
             'auto_confirm_paid_appointments' => ['sometimes', 'boolean'],
             'patient_cancellation_enabled' => ['sometimes', 'boolean'],
