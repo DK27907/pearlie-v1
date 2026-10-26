@@ -20,11 +20,16 @@ class NoShowNotification extends Notification
 
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)
+        $message = (new MailMessage)
             ->subject('You missed your appointment at '.pearlie_config('hospital.name'))
             ->greeting('Hello '.($this->appointment->name ?: 'there').',')
-            ->line('We noticed you were unable to attend your appointment at '.pearlie_config('hospital.name').'.')
-            ->line('The appointment deposit is retained for a missed appointment.')
+            ->line('We noticed you were unable to attend your appointment at '.pearlie_config('hospital.name').'.');
+
+        if ($this->appointment->payment_status === 'paid') {
+            $message->line('The appointment deposit is retained for a missed appointment.');
+        }
+
+        return $message
             ->line('Please contact us to arrange another appointment.')
             ->line('Call '.pearlie_config('hospital.appointment_phone').' for assistance.');
     }

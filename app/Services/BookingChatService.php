@@ -92,7 +92,7 @@ class BookingChatService
     ) {}
 
     /**
-     * @param  array{service_id: int, doctor_id: int, date: string, time: string, patient_name: string, phone: string, payment_override?: ?string}  $data
+     * @param  array{service_id: int, doctor_id: int, date: string, time: string, patient_name: string, phone: string, payment_override?: ?string, session_id?: string}  $data
      */
     public function createBookingFromData(Hospital $hospital, array $data): AppointmentRequest
     {
@@ -141,7 +141,7 @@ class BookingChatService
                     'email' => null,
                     'reason' => $service->name,
                     'raw_message' => 'Walk-in booking created by hospital staff.',
-                    'session_id' => 'walk-in:'.Str::uuid(),
+                    'session_id' => $data['session_id'] ?? 'walk-in:'.Str::uuid(),
                     'booking_source' => 'walk-in',
                 ],
                 (int) $data['doctor_id'],

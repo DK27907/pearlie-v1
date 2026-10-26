@@ -10,6 +10,10 @@
 
 @section('content')
     <div class="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+        @if (session('warning'))
+            <p role="alert" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">{{ session('warning') }}</p>
+        @endif
+
         <section class="rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm">
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>

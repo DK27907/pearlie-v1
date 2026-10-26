@@ -24,14 +24,14 @@ class NoShowService
         try {
             $updatedAppointment = DB::transaction(function () use ($appointment, $reason): AppointmentRequest {
                 $lockedAppointment = AppointmentRequest::query()
+                    ->with('hospital')
                     ->lockForUpdate()
                     ->findOrFail($appointment->id);
 
                 abort_unless(
-                    $lockedAppointment->status === AppointmentRequest::STATUS_CONFIRMED
-                        && $lockedAppointment->payment_status === 'paid',
+                    $lockedAppointment->canBeMarkedAsNoShow(),
                     422,
-                    'Only confirmed, paid appointments can be marked as no-shows.',
+                    'This appointment is not eligible to be marked as a no-show.',
                 );
 
                 $lockedAppointment->markAsNoShow($reason);
@@ -119,10 +119,14 @@ class NoShowService
 
     private function notifyPatient(AppointmentRequest $appointment): void
     {
+        $depositMessage = $appointment->payment_status === 'paid'
+            ? ' The booking deposit is retained for missed appointments.'
+            : '';
         $message = sprintf(
-            'Hello %s, our records show you missed your appointment at %s. The booking deposit is retained for missed appointments. Call %s to arrange a new visit.',
+            'Hello %s, our records show you missed your appointment at %s.%s Call %s to arrange a new visit.',
             $appointment->name ?: 'there',
             pearlie_config('hospital.name'),
+            $depositMessage,
             pearlie_config('hospital.appointment_phone'),
         );
 
