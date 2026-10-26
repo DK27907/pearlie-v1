@@ -103,8 +103,8 @@
         .message.user {
             background: var(--tenant-primary);
             color: #ffffff;
-            align-self: flex-end;
-            border-bottom-right-radius: 4px;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
         }
 
         .message .meta {
