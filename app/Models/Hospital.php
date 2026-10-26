@@ -26,9 +26,13 @@ class Hospital extends Model
         self::BOOKING_PAYMENT_MODE_NONE,
     ];
 
+    public const DEFAULT_REMINDER_MESSAGE_TEMPLATE = 'Reminder: {patient_name}, your appointment with {doctor_name} ({service_name}) is on {appointment_time}. Reference: {booking_reference}. Reply STOP to opt out.';
+
     protected $attributes = [
         'supported_languages' => '["en","sw"]',
         'booking_payment_mode' => self::BOOKING_PAYMENT_MODE_MPESA,
+        'reminder_hours_before' => 24,
+        'reminder_message_template' => self::DEFAULT_REMINDER_MESSAGE_TEMPLATE,
     ];
 
     protected $fillable = [
@@ -93,6 +97,7 @@ class Hospital extends Model
         'etims_environment',
         'etims_device_id',
         'reminder_enabled',
+        'reminder_hours_before',
         'reminder_message_template',
     ];
 
@@ -122,6 +127,7 @@ class Hospital extends Model
             'receipt_show_kra_pin' => 'boolean',
             'etims_enabled' => 'boolean',
             'reminder_enabled' => 'boolean',
+            'reminder_hours_before' => 'integer',
         ];
     }
 
@@ -178,6 +184,16 @@ class Hospital extends Model
     public function announcements(): HasMany
     {
         return $this->hasMany(Announcement::class);
+    }
+
+    public function apiTokens(): HasMany
+    {
+        return $this->hasMany(TenantApiToken::class);
+    }
+
+    public function webhookSubscriptions(): HasMany
+    {
+        return $this->hasMany(WebhookSubscription::class);
     }
 
     public function shouldAutoConfirmPaidAppointments(): bool

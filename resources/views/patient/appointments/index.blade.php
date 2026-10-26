@@ -29,6 +29,7 @@
                             <tr class="transition hover:bg-slate-50">
                                 <td class="whitespace-nowrap px-5 py-4 font-medium text-slate-800">
                                     {{ $appointment->preferred_date?->format('M j, Y') ?: 'Date not set' }}
+                                    <p class="mt-1 font-mono text-xs text-slate-500">{{ $appointment->booking_reference ?: 'Not available' }}</p>
                                 </td>
                                 <td class="px-5 py-4 text-slate-700">
                                     {{ $appointment->doctor?->name ?: 'Not assigned' }}

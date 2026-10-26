@@ -41,6 +41,10 @@
             <p role="alert" class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900">{{ session('warning') }}</p>
         @endif
 
+        @if (session('error'))
+            <p role="alert" class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800">{{ session('error') }}</p>
+        @endif
+
         @if ($errors->any())
             <div role="alert" class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800">
                 <p class="font-semibold">Please correct the highlighted settings.</p>
@@ -165,19 +169,60 @@
                                 @endforeach
                             </div>
                         </fieldset>
-                        <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save general settings</button>
-                    </form>
                     <fieldset class="space-y-4 rounded-xl border border-slate-200 p-4">
                         <legend class="px-2 text-sm font-bold text-slate-900">Appointment reminders</legend>
                         <label class="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                            <input type="hidden" name="reminder_enabled" value="0">
                             <input type="checkbox" name="reminder_enabled" value="1" @checked(old('reminder_enabled', $hospital->reminder_enabled))>
-                            Send an SMS reminder at 8:00 AM on the day before confirmed appointments
+                            Send SMS reminders for confirmed appointments
+                        </label>
+                        <label class="block max-w-sm text-sm font-semibold text-slate-700">Reminder timing
+                            <div class="mt-1 flex items-center gap-2">
+                                <input class="{{ $inputClass }}" type="number" name="reminder_hours_before" min="1" max="168" required value="{{ old('reminder_hours_before', $reminderHoursBefore) }}">
+                                <span class="shrink-0 text-sm font-normal text-slate-500">hours before appointment</span>
+                            </div>
                         </label>
                         <label class="block text-sm font-semibold text-slate-700">Reminder message
-                            <textarea class="{{ $inputClass }}" name="reminder_message_template" rows="3" maxlength="1000">{{ old('reminder_message_template', $hospital->reminder_message_template) }}</textarea>
-                            <span class="mt-1 block text-xs font-normal text-slate-500">Available placeholders: {patient_name}, {doctor_name}, {appointment_time}.</span>
+                            <textarea id="reminder-message-template" class="{{ $inputClass }}" name="reminder_message_template" rows="3" maxlength="1000">{{ old('reminder_message_template', $reminderMessageTemplate) }}</textarea>
+                            <span class="mt-1 block text-xs font-normal text-slate-500">Placeholders: {patient_name}, {doctor_name}, {service_name}, {appointment_time}, {booking_reference}, {hospital_name}.</span>
                         </label>
+                        <div class="rounded-lg bg-slate-50 p-3">
+                            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Preview</p>
+                            <output id="reminder-message-preview" class="mt-2 block whitespace-pre-wrap text-sm text-slate-800" aria-live="polite"></output>
+                        </div>
                     </fieldset>
+                        <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save general settings</button>
+                    </form>
+                    @if ($canSendReminderTest)
+                        <form method="POST" action="{{ route('admin.integration-settings.reminders.test') }}">
+                            @csrf
+                            <button type="submit" class="rounded-lg border border-sky-800 px-4 py-2.5 text-sm font-semibold text-sky-800 hover:bg-sky-50">Send test reminder to my admin phone</button>
+                        </form>
+                    @else
+                        <p class="text-xs text-slate-500">A live test send is available after configuring SMS delivery and adding a phone number to your admin account.</p>
+                    @endif
+                    <script>
+                        const reminderTemplate = document.getElementById('reminder-message-template');
+                        const reminderPreview = document.getElementById('reminder-message-preview');
+                        const reminderSamples = {{ \Illuminate\Support\Js::from([
+                            'patient_name' => 'Jane Doe',
+                            'doctor_name' => 'Dr. Example',
+                            'service_name' => 'Sample service',
+                            'appointment_time' => now()->addDay()->format('d M Y g:i A'),
+                            'booking_reference' => 'BK-SAMPLE-REFERENCE',
+                            'hospital_name' => $hospital->name,
+                        ]) }};
+                        const updateReminderPreview = () => {
+                            if (!reminderTemplate || !reminderPreview) {
+                                return;
+                            }
+                            reminderPreview.textContent = reminderTemplate.value.replace(/\{([a-z_]+)\}/g, (placeholder, name) => {
+                                return Object.hasOwn(reminderSamples, name) ? reminderSamples[name] : placeholder;
+                            });
+                        };
+                        reminderTemplate?.addEventListener('input', updateReminderPreview);
+                        updateReminderPreview();
+                    </script>
                 </section>
             @elseif ($activeTab === 'mpesa')
                 <section role="tabpanel" class="space-y-6 p-5 sm:p-7">

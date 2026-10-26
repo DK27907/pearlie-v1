@@ -16,6 +16,12 @@ class ResolveHospital
     {
         $isHomeRoute = $request->routeIs('home');
 
+        if ($request->is('api/v1/*')) {
+            app()->instance('currentHospital', null);
+
+            return $next($request);
+        }
+
         if ($isHomeRoute || $request->routeIs('superadmin.*')) {
             app()->instance('currentHospital', null);
 

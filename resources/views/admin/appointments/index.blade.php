@@ -45,6 +45,7 @@
                 <th scope="col" class="px-4 py-3"><a href="?sort=id&dir={{ request('dir', 'desc') === 'asc' ? 'desc' : 'asc' }}" class="hover:text-slate-900">ID</a></th>
                 <th scope="col" class="px-4 py-3">Session</th>
                 <th scope="col" class="px-4 py-3">Name</th>
+                <th scope="col" class="px-4 py-3">Booking reference</th>
                 <th scope="col" class="px-4 py-3">Phone</th>
                 <th scope="col" class="px-4 py-3">Preferred Date</th>
                 <th scope="col" class="px-4 py-3">Status</th>
@@ -59,6 +60,7 @@
                 <td class="whitespace-nowrap px-4 py-3 font-semibold text-slate-800">{{ $a->id }}</td>
                 <td class="max-w-48 truncate px-4 py-3 text-slate-600">{{ $a->session_id }}</td>
                 <td class="px-4 py-3 font-medium text-slate-800">{{ $a->name }}</td>
+                <td class="whitespace-nowrap px-4 py-3 font-mono text-slate-700">{{ $a->booking_reference ?: 'Not available' }}</td>
                 <td class="whitespace-nowrap px-4 py-3 text-slate-600">{{ $a->phone }}</td>
                 <td class="whitespace-nowrap px-4 py-3 text-slate-600">{{ $a->preferred_date?->format('M j, Y') }}</td>
                 <td class="px-4 py-3"><span class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold capitalize text-amber-700">{{ str_replace('_', ' ', $a->status) }}</span></td>
@@ -68,7 +70,7 @@
                 </td>
             </tr>
             @empty
-            <tr><td colspan="9" class="px-5 py-14 text-center">
+            <tr><td colspan="10" class="px-5 py-14 text-center">
                 <p class="font-semibold text-slate-800">No appointment requests found.</p>
                 <p class="mt-1 text-sm text-slate-500">Try clearing or adjusting the search and status filters.</p>
             </td></tr>

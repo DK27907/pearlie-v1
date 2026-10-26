@@ -49,24 +49,42 @@
 
                 <div class="divide-y divide-slate-100">
                     @forelse ($today_appointments as $appointment)
-                        <a href="{{ route('doctor.appointments.show', $appointment->id) }}" class="flex flex-col gap-3 border-l-4 border-cyan-500 bg-cyan-50/30 px-5 py-4 transition hover:bg-cyan-50 sm:flex-row sm:items-center">
-                            <div class="w-20 shrink-0">
+                        <article class="border-l-4 border-cyan-500 bg-cyan-50/30 px-5 py-4 transition hover:bg-cyan-50">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                                <div class="w-20 shrink-0">
                                 <p class="font-semibold text-slate-900">{{ $appointment->slot_start_time ? substr($appointment->slot_start_time, 0, 5) : 'Time TBC' }}</p>
                                 <p class="text-xs text-slate-500">{{ $appointment->slot_end_time ? substr($appointment->slot_end_time, 0, 5) : '' }}</p>
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate font-semibold text-slate-900">{{ $appointment->name ?: 'Patient name not provided' }}</p>
+                                    <p class="mt-1 truncate text-sm text-slate-500">{{ $appointment->service?->name ?: ($appointment->reason ?: 'Appointment request') }}</p>
+                                    <p class="mt-1 text-xs text-slate-500">{{ $appointment->preferred_date?->format('M j, Y') ?: 'Date not set' }} · Reference <span class="font-mono">{{ $appointment->booking_reference ?: 'Not available' }}</span></p>
+                                </div>
+                                <span @class([
+                                    'w-fit rounded-full px-2.5 py-1 text-xs font-semibold capitalize',
+                                    'bg-amber-50 text-amber-800' => $appointment->status === 'pending',
+                                    'bg-cyan-50 text-cyan-800' => $appointment->status === 'confirmed',
+                                    'bg-emerald-50 text-emerald-800' => $appointment->status === 'completed',
+                                    'bg-orange-50 text-orange-800' => $appointment->status === 'expired',
+                                    'bg-slate-100 text-slate-600' => $appointment->status === 'cancelled',
+                                ])>{{ $appointment->status }}</span>
                             </div>
-                            <div class="min-w-0 flex-1">
-                                <p class="truncate font-semibold text-slate-900">{{ $appointment->name ?: 'Patient name not provided' }}</p>
-                                <p class="mt-1 truncate text-sm text-slate-500">{{ $appointment->reason ?: 'Appointment request' }}</p>
+                            <div class="mt-3 flex flex-wrap items-center gap-3 border-t border-cyan-100 pt-3">
+                                <a href="{{ route('doctor.appointments.show', $appointment->id) }}" class="text-sm font-semibold text-cyan-800 hover:text-cyan-600">View details</a>
+                                @if ($appointment->status === 'confirmed')
+                                    <form method="POST" action="{{ route('doctor.appointments.complete', $appointment->id) }}">
+                                        @csrf
+                                        <button type="submit" class="text-sm font-semibold text-emerald-700 hover:text-emerald-800">Complete</button>
+                                    </form>
+                                    @if ($appointment->payment_status === 'paid')
+                                        <form method="POST" action="{{ route('doctor.appointments.no-show', $appointment->id) }}">
+                                            @csrf
+                                            <button type="submit" class="text-sm font-semibold text-rose-700 hover:text-rose-800">No-show</button>
+                                        </form>
+                                    @endif
+                                @endif
                             </div>
-                            <span @class([
-                                'w-fit rounded-full px-2.5 py-1 text-xs font-semibold capitalize',
-                                'bg-amber-50 text-amber-800' => $appointment->status === 'pending',
-                                'bg-cyan-50 text-cyan-800' => $appointment->status === 'confirmed',
-                                'bg-emerald-50 text-emerald-800' => $appointment->status === 'completed',
-                                'bg-orange-50 text-orange-800' => $appointment->status === 'expired',
-                                'bg-slate-100 text-slate-600' => $appointment->status === 'cancelled',
-                            ])>{{ $appointment->status }}</span>
-                        </a>
+                        </article>
                     @empty
                         <div class="px-5 py-12 text-center">
                             <p class="font-semibold text-slate-800">No appointments today</p>

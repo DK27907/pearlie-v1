@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\ReceiptSettingsController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\WalkInBookingController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\DoctorSetupController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
@@ -181,6 +182,7 @@ use App\Http\Controllers\Admin\AuditController;
 use App\Http\Controllers\Admin\ConversationController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\EscalationController;
+use App\Http\Controllers\Admin\IntegrationController;
 use App\Http\Controllers\Admin\InviteController;
 use App\Http\Controllers\Admin\KnowledgeBaseController;
 use App\Http\Controllers\Admin\NotificationLogController;
@@ -207,6 +209,15 @@ Route::middleware(['auth', 'hospital.admin', 'password.changed'])
     ->name('admin.')
     ->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+        Route::get('/integrations', [IntegrationController::class, 'index'])->name('integrations.index');
+        Route::post('/integrations/tokens', [IntegrationController::class, 'storeToken'])->name('integrations.tokens.store');
+        Route::delete('/integrations/tokens/{tokenId}', [IntegrationController::class, 'destroyToken'])
+            ->whereNumber('tokenId')
+            ->name('integrations.tokens.destroy');
+        Route::post('/integrations/webhooks', [IntegrationController::class, 'storeWebhook'])->name('integrations.webhooks.store');
+        Route::delete('/integrations/webhooks/{subscriptionId}', [IntegrationController::class, 'destroyWebhook'])
+            ->whereNumber('subscriptionId')
+            ->name('integrations.webhooks.destroy');
         Route::get('/audit', [AuditController::class, 'index'])->name('audit.index');
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::get('/users/{user}/edit', [UserController::class, 'edit'])->whereNumber('user')->name('users.edit');
@@ -244,6 +255,9 @@ Route::middleware(['auth', 'hospital.admin', 'password.changed'])
             Route::put('/receipts', [ReceiptSettingsController::class, 'update'])->name('receipts.update');
             Route::get('/receipt-assets/{kind}', [ReceiptSettingsController::class, 'asset'])->name('receipts.asset');
             Route::put('/general', [SettingsController::class, 'updateGeneral'])->name('general.update');
+            Route::post('/reminders/test', [SettingsController::class, 'testReminder'])
+                ->middleware('throttle:3,1')
+                ->name('reminders.test');
             Route::put('/mpesa', [SettingsController::class, 'updateMpesa'])->name('mpesa.update');
             Route::put('/whatsapp', [SettingsController::class, 'updateWhatsApp'])->name('whatsapp.update');
             Route::put('/sms', [SettingsController::class, 'updateSms'])->name('sms.update');
@@ -293,6 +307,24 @@ Route::middleware(['auth', 'hospital.admin', 'password.changed'])
         Route::delete('invites/{id}', [InviteController::class, 'destroy'])->name('invites.destroy');
 
         // Appointments
+        Route::get('walk-in/create', [WalkInBookingController::class, 'create'])
+            ->middleware('feature:booking')
+            ->name('walk-in.create');
+        Route::get('walk-in/doctors', [WalkInBookingController::class, 'doctors'])
+            ->middleware('feature:booking')
+            ->name('walk-in.doctors');
+        Route::get('walk-in/slots', [WalkInBookingController::class, 'slots'])
+            ->middleware('feature:booking')
+            ->name('walk-in.slots');
+        Route::post('walk-in', [WalkInBookingController::class, 'store'])
+            ->middleware('feature:booking')
+            ->name('walk-in.store');
+        Route::get('walk-in/{appointment}/confirmation', [WalkInBookingController::class, 'confirmation'])
+            ->middleware('feature:booking')
+            ->name('walk-in.confirmation');
+        Route::post('walk-in/{appointment}/mark-paid', [WalkInBookingController::class, 'markPaidOnArrival'])
+            ->middleware('feature:booking')
+            ->name('walk-in.mark-paid');
         Route::get('appointments', [AppointmentController::class, 'index'])->middleware('feature:booking')->name('appointments.index');
         Route::get('appointments/export', [AppointmentController::class, 'exportCsv'])->middleware('feature:booking')->name('appointments.exportCsv');
         Route::get('appointments/{id}', [AppointmentController::class, 'show'])->middleware('feature:booking')->name('appointments.show');

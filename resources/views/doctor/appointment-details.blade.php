@@ -5,7 +5,7 @@
         <div>
             <a href="{{ route('doctor.appointments') }}" class="text-sm font-semibold text-cyan-800 hover:text-cyan-600">← All appointments</a>
             <h1 class="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Appointment details</h1>
-            <p class="mt-1 text-sm text-slate-500">Request #{{ $appointment->id }}</p>
+            <p class="mt-1 text-sm text-slate-500">Request #{{ $appointment->id }} · Reference <span class="font-mono">{{ $appointment->booking_reference ?: 'Not available' }}</span></p>
         </div>
         <span @class([
             'rounded-full px-3 py-1.5 text-sm font-semibold capitalize',

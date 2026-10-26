@@ -45,6 +45,7 @@
                     <a href="{{ route('admin.users.index') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Users</a>
                     @if (hospital()?->hasFeature('booking'))
                         <a href="{{ route('admin.appointments.index') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Appointments</a>
+                        <a href="{{ route('admin.walk-in.create') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Walk-in booking</a>
                     @endif
                     @if (hospital()?->hasFeature('doctors'))
                         <a href="{{ route('admin.doctors.index') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Doctors</a>
@@ -62,6 +63,7 @@
                     <a href="{{ route('admin.notification-logs.index') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Notification logs</a>
                     <a href="{{ route('admin.reports.index') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Reports</a>
                     <a href="{{ route('admin.integration-settings.edit') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Settings</a>
+                    <a href="{{ route('admin.integrations.index') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">API and webhooks</a>
                     <a href="{{ route('hospital.onboarding') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Hospital setup</a>
                 </nav>
             </aside>

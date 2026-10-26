@@ -9,9 +9,12 @@ use App\Http\Requests\Admin\UpdateGeneralSettingsRequest;
 use App\Http\Requests\Admin\UpdateMpesaSettingsRequest;
 use App\Http\Requests\Admin\UpdateSmsSettingsRequest;
 use App\Http\Requests\Admin\UpdateWhatsAppSettingsRequest;
+use App\Models\Announcement;
 use App\Models\Hospital;
 use App\Models\HospitalIntegrationCredential;
 use App\Services\HospitalSettings;
+use App\Services\SmsService;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -36,7 +39,7 @@ class SettingsController extends Controller
         'email' => ['resend_api_key', 'smtp_password'],
     ];
 
-    public function edit(Request $request, HospitalSettings $settings): View
+    public function edit(Request $request, HospitalSettings $settings, SmsService $sms): View
     {
         $hospital = $this->currentHospital();
         $settings->for($hospital);
@@ -63,6 +66,18 @@ class SettingsController extends Controller
             }
         }
 
+        $canSendReminderTest = false;
+        if ($activeTab === 'general') {
+            try {
+                $canSendReminderTest = $sms->isConfigured() && filled($request->user()?->phone);
+            } catch (DecryptException) {
+                session()->flash(
+                    'warning',
+                    'Stored SMS credentials are unreadable. Re-enter them in the SMS settings tab before sending a test.',
+                );
+            }
+        }
+
         return view('admin.settings.edit', [
             'activeTab' => $activeTab,
             'hospital' => $hospital,
@@ -78,6 +93,9 @@ class SettingsController extends Controller
             'reschedulingCutoffHours' => $hospital->rescheduling_cutoff_hours,
             'lateCancellationFee' => $hospital->late_cancellation_fee,
             'depositsRefundable' => $hospital->deposits_refundable,
+            'reminderHoursBefore' => $hospital->reminder_hours_before ?? 24,
+            'canSendReminderTest' => $canSendReminderTest,
+            'reminderMessageTemplate' => $hospital->reminder_message_template ?: Hospital::DEFAULT_REMINDER_MESSAGE_TEMPLATE,
         ]);
     }
 
@@ -102,6 +120,9 @@ class SettingsController extends Controller
             'deposits_refundable',
         ]));
         $hospitalFields['reminder_enabled'] = (bool) ($data['reminder_enabled'] ?? false);
+        if (array_key_exists('reminder_hours_before', $data)) {
+            $hospitalFields['reminder_hours_before'] = (int) $data['reminder_hours_before'];
+        }
         if (array_key_exists('reminder_message_template', $data)) {
             $hospitalFields['reminder_message_template'] = $data['reminder_message_template'];
         }
@@ -116,6 +137,46 @@ class SettingsController extends Controller
         $settings->set('business_hours', $businessHours);
 
         return $this->redirectToTab('general', 'General settings saved.');
+    }
+
+    public function testReminder(Request $request, SmsService $sms): RedirectResponse
+    {
+        $hospital = $this->currentHospital();
+        $user = $request->user();
+
+        try {
+            $smsConfigured = $sms->isConfigured();
+        } catch (DecryptException) {
+            return $this->redirectToTab('general', 'Stored SMS credentials are unreadable. Re-enter them in SMS settings.', 'error');
+        }
+
+        if (! $smsConfigured) {
+            return $this->redirectToTab('general', 'Configure a valid SMS provider before sending a test.', 'error');
+        }
+
+        if (! $user || blank($user->phone)) {
+            return $this->redirectToTab('general', 'Add a phone number to your admin account before sending a test.', 'error');
+        }
+
+        $message = (new Announcement([
+            'message' => $hospital->reminder_message_template ?: Hospital::DEFAULT_REMINDER_MESSAGE_TEMPLATE,
+        ]))->renderFor(
+            $user->name,
+            'Dr. Example',
+            now()->addDay()->format('d M Y g:i A'),
+            [
+                'booking_reference' => 'BK-TEST-REFERENCE',
+                'hospital_name' => $hospital->name,
+                'service_name' => 'Sample service',
+            ],
+        );
+        $result = $sms->send((string) $user->phone, $message, 'configured');
+
+        return $this->redirectToTab(
+            'general',
+            $result->success ? 'Test reminder SMS sent to your admin phone.' : 'Test reminder SMS could not be delivered.',
+            $result->success ? 'status' : 'error',
+        );
     }
 
     public function updateMpesa(UpdateMpesaSettingsRequest $request, HospitalSettings $settings): RedirectResponse
@@ -292,11 +353,11 @@ class SettingsController extends Controller
         return $hospital;
     }
 
-    private function redirectToTab(string $tab, string $message): RedirectResponse
+    private function redirectToTab(string $tab, string $message, string $flashType = 'status'): RedirectResponse
     {
         return redirect()
             ->route('admin.integration-settings.edit', ['tab' => $tab])
-            ->with('status', $message);
+            ->with($flashType, $message);
     }
 
     private function sanitizeSvg(UploadedFile $logo): string

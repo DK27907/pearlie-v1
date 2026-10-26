@@ -1,8 +1,25 @@
 <?php
 
+use App\Http\Controllers\Api\AppointmentController;
+use App\Http\Controllers\BookingLookupController;
 use App\Http\Controllers\MpesaCallbackController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
+
+Route::prefix('v1')
+    ->middleware(['tenant.api-token', 'throttle:120,1'])
+    ->name('api.v1.')
+    ->group(function (): void {
+        Route::get('/appointments', [AppointmentController::class, 'index'])->name('appointments.index');
+        Route::get('/appointments/{appointmentId}', [AppointmentController::class, 'show'])
+            ->whereNumber('appointmentId')
+            ->name('appointments.show');
+    });
+
+Route::get('/bookings/lookup/{bookingReference}', [BookingLookupController::class, 'show'])
+    ->where('bookingReference', 'BK-[A-F0-9]{32}')
+    ->middleware('throttle:10,1')
+    ->name('bookings.lookup');
 
 Route::get('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify'])
     ->name('webhooks.whatsapp.verify');

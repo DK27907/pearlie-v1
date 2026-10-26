@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\HospitalSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class SettingsPageTest extends TestCase
@@ -34,6 +35,8 @@ class SettingsPageTest extends TestCase
             ->assertSee('SMS')
             ->assertSee('Email')
             ->assertSee('name="booking_payment_mode"', false)
+            ->assertSee('name="reminder_hours_before"', false)
+            ->assertSee('booking_reference')
             ->assertSee('Cash at the hospital only')
             ->assertSee('No payment required');
     }
@@ -77,6 +80,7 @@ class SettingsPageTest extends TestCase
             'slot_duration_minutes' => 45,
             'auto_confirm_paid_appointments' => '1',
             'reminder_enabled' => '1',
+            'reminder_hours_before' => '36',
             'reminder_message_template' => 'Hello {patient_name}, your appointment is tomorrow.',
             'business_hours' => [
                 'monday' => ['open' => '08:00', 'close' => '17:00', 'closed' => '0'],
@@ -89,6 +93,7 @@ class SettingsPageTest extends TestCase
             'slot_duration_minutes' => 45,
             'auto_confirm_paid_appointments' => true,
             'reminder_enabled' => true,
+            'reminder_hours_before' => 36,
         ]);
         $this->assertSame(
             'Hello {patient_name}, your appointment is tomorrow.',
@@ -236,10 +241,58 @@ class SettingsPageTest extends TestCase
         $this->actingAs($admin)->putJson(route('admin.integration-settings.general.update'), [
             'deposit_amount' => -1,
             'slot_duration_minutes' => 30,
+            'reminder_hours_before' => 0,
         ])->assertUnprocessable()
-            ->assertJsonValidationErrors('deposit_amount');
+            ->assertJsonValidationErrors(['deposit_amount', 'reminder_hours_before']);
 
         $this->assertSame('500.00', $hospital->fresh()->deposit_amount);
+    }
+
+    public function test_general_settings_reject_reminder_hours_above_the_allowed_maximum(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $admin = $this->createAdmin($hospital);
+
+        $this->actingAs($admin)->putJson(route('admin.integration-settings.general.update'), [
+            'deposit_amount' => 500,
+            'slot_duration_minutes' => 30,
+            'reminder_hours_before' => 169,
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('reminder_hours_before');
+
+        $this->assertSame(24, $hospital->fresh()->reminder_hours_before);
+    }
+
+    public function test_admin_can_send_a_test_reminder_to_their_phone_when_sms_is_configured(): void
+    {
+        $hospital = Hospital::factory()->create([
+            'reminder_message_template' => 'Hello {patient_name}; {booking_reference} at {hospital_name}.',
+        ]);
+        $admin = $this->createAdmin($hospital);
+        $admin->update(['phone' => '254712345678']);
+        app(HospitalSettings::class)->for($hospital)->setCredential('sms', [
+            'provider' => 'africastalking',
+            'username' => 'test-account',
+            'api_key' => 'test-sms-api-key',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://api.africastalking.com/version1/messaging' => Http::response([
+                'SMSMessageData' => [
+                    'Recipients' => [['status' => 'Success', 'messageId' => 'test-message']],
+                ],
+            ], 202),
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.integration-settings.reminders.test'))
+            ->assertRedirect(route('admin.integration-settings.edit', ['tab' => 'general']))
+            ->assertSessionHas('status', 'Test reminder SMS sent to your admin phone.');
+
+        Http::assertSent(fn ($request): bool => $request->url() === 'https://api.africastalking.com/version1/messaging'
+            && $request['to'] === '254712345678'
+            && str_contains($request['message'], 'BK-TEST-REFERENCE')
+            && str_contains($request['message'], $hospital->name));
     }
 
     public function test_general_settings_reject_an_unsupported_booking_payment_mode(): void

@@ -10,9 +10,11 @@ use App\Models\MpesaPayment;
 use App\Models\PaymentEvent;
 use App\Models\Receipt;
 use App\Models\SlotHold;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class PaymentLifecycleService
 {
@@ -21,6 +23,80 @@ class PaymentLifecycleService
         private readonly ReceiptService $receipts,
         private readonly EtimsService $etims,
     ) {}
+
+    public function markPaidAtHospital(
+        AppointmentRequest $appointment,
+        float $amount,
+        string $paymentMethod,
+        User $cashier,
+        ?string $notes = null,
+    ): Receipt {
+        $receiptAppointment = DB::transaction(function () use (
+            $appointment,
+            $amount,
+            $paymentMethod,
+            $cashier,
+            $notes,
+        ): AppointmentRequest {
+            $lockedAppointment = AppointmentRequest::withoutGlobalScope('hospital')
+                ->where('hospital_id', $appointment->hospital_id)
+                ->whereKey($appointment->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            abort_unless(
+                (int) $cashier->hospital_id === (int) $lockedAppointment->hospital_id,
+                403,
+                'You cannot record a payment for another hospital.',
+            );
+            abort_unless(
+                $lockedAppointment->payment_due_at === 'at_hospital',
+                422,
+                'Only appointments payable at the hospital can be marked paid here.',
+            );
+            abort_if(
+                $lockedAppointment->payment_status === 'not_required',
+                422,
+                'This appointment does not require payment.',
+            );
+            abort_if($lockedAppointment->payment_status === 'paid', 422, 'This appointment is already marked as paid.');
+            abort_if(in_array($lockedAppointment->status, [
+                AppointmentRequest::STATUS_CANCELLED,
+                AppointmentRequest::STATUS_EXPIRED,
+            ], true), 422, 'Cancelled or expired appointments cannot be marked as paid.');
+
+            $amountDue = round((float) ($lockedAppointment->payment_amount ?? $lockedAppointment->booking_fee), 2);
+            if (! is_finite($amount) || round($amount, 2) !== $amountDue) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Amount received must equal the full outstanding amount. Partial and excess payments are not supported.',
+                ]);
+            }
+
+            $wasPending = $lockedAppointment->status === AppointmentRequest::STATUS_PENDING;
+            $lockedAppointment->forceFill([
+                'payment_status' => 'paid',
+                'payment_method' => $paymentMethod,
+                'payment_due_at' => 'at_hospital',
+                'payment_collected_amount' => $amount,
+                'payment_notes' => $notes,
+                'paid_by_user_id' => $cashier->id,
+                'payment_amount' => $amount,
+                'paid_at' => now(),
+                'status' => $wasPending ? AppointmentRequest::STATUS_CONFIRMED : $lockedAppointment->status,
+                'status_updated_at' => $wasPending ? now() : $lockedAppointment->status_updated_at,
+            ])->save();
+
+            return $lockedAppointment;
+        });
+
+        $receipt = $this->receipts->generateForAppointment($receiptAppointment, cashier: $cashier);
+        $receiptHospital = Hospital::query()->findOrFail($receiptAppointment->hospital_id);
+        if ($this->etims->isEnabled($receiptHospital)) {
+            $this->etims->submitReceipt($receipt);
+        }
+
+        return $receipt;
+    }
 
     /**
      * @param  array<string, mixed>  $metadata
@@ -341,6 +417,7 @@ class PaymentLifecycleService
             ])
             : implode("\n", [
                 'Booking payment received',
+                ...(filled($appointment->booking_reference) ? ['Booking reference: '.$appointment->booking_reference] : []),
                 'Booking: #'.$appointment->id,
                 'Patient: '.$appointment->name,
                 'Service: '.$appointment->reason,

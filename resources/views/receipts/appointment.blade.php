@@ -35,6 +35,7 @@
 
     <h2>Patient and appointment</h2>
     <table class="details">
+        <tr><td class="label">Booking reference</td><td>{{ $appointment->booking_reference ?: 'Not available' }}</td></tr>
         <tr><td class="label">Patient</td><td>{{ $appointment->name }}</td></tr>
         <tr><td class="label">Phone</td><td>{{ $appointment->phone }}</td></tr>
         <tr><td class="label">Service</td><td>{{ $appointment->service?->name ?? $appointment->reason }}</td></tr>

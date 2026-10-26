@@ -6,6 +6,7 @@ const typingEl = document.getElementById('typingIndicator');
 const resetBtn = document.getElementById('resetChat');
 const languageToggle = document.getElementById('languageToggle');
 const quickReplyButtons = document.querySelectorAll('.quick-reply');
+const dynamicQuickRepliesEl = document.getElementById('dynamicQuickReplies');
 const welcomeEl = messagesEl ? messagesEl.querySelector('[data-welcome-en]') : null;
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 let lastMessageId = Number(formEl?.dataset.lastMessageId ?? 0);
@@ -117,6 +118,7 @@ async function resetChat() {
 
     stopPaymentPolling();
     messagesEl.replaceChildren(welcomeEl);
+    renderQuickReplies([]);
     updateLanguage();
     inputEl.value = '';
     inputEl.focus();
@@ -174,12 +176,37 @@ function startPaymentPolling() {
     paymentPollTimer = window.setInterval(pollForPaymentReceipt, 3000);
 }
 
-async function sendMessage(suggestedMessage = null) {
+function renderQuickReplies(replies) {
+    if (!dynamicQuickRepliesEl) {
+        return;
+    }
+
+    dynamicQuickRepliesEl.replaceChildren();
+    if (!Array.isArray(replies)) {
+        return;
+    }
+
+    replies.forEach((reply) => {
+        if (typeof reply?.label !== 'string' || typeof reply?.value !== 'string') {
+            return;
+        }
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'quick-reply';
+        button.textContent = reply.label;
+        button.dataset.replyValue = reply.value;
+        dynamicQuickRepliesEl.appendChild(button);
+    });
+}
+
+async function sendMessage(suggestedMessage = null, displayedMessage = null) {
     if (!inputEl || !sendBtn || !messagesEl || !formEl) {
         return;
     }
 
     const message = (typeof suggestedMessage === 'string' ? suggestedMessage : inputEl.value).trim();
+    const visibleMessage = (typeof displayedMessage === 'string' ? displayedMessage : message).trim();
 
     if (!message) {
         return;
@@ -187,7 +214,8 @@ async function sendMessage(suggestedMessage = null) {
 
     inputEl.disabled = true;
     sendBtn.disabled = true;
-    appendMessage(message, 'user');
+    renderQuickReplies([]);
+    appendMessage(visibleMessage, 'user');
     inputEl.value = '';
     showTyping();
 
@@ -214,6 +242,7 @@ async function sendMessage(suggestedMessage = null) {
             appendMessage(data.message || data.error || 'The assistant could not process your request. Please try again.', 'ai');
         } else {
             appendMessage(data.response || 'I could not process that. Please try again.', 'ai');
+            renderQuickReplies(data.quick_replies);
             if (Number.isSafeInteger(data.last_message_id)) {
                 lastMessageId = Math.max(lastMessageId, data.last_message_id);
             }
@@ -256,6 +285,16 @@ quickReplyButtons.forEach((button) => {
         sendMessage(languageToggle && languageToggle.value === 'sw' ? button.dataset.messageSw : button.dataset.messageEn);
     });
 });
+if (dynamicQuickRepliesEl) {
+    dynamicQuickRepliesEl.addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-reply-value]');
+        if (!button) {
+            return;
+        }
+
+        sendMessage(button.dataset.replyValue, button.textContent);
+    });
+}
 if (resetBtn) {
     resetBtn.addEventListener('click', (event) => {
         event.preventDefault();

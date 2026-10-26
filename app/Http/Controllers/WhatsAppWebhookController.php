@@ -87,20 +87,35 @@ class WhatsAppWebhookController extends Controller
         foreach ($payload['entry'] ?? [] as $entry) {
             foreach ($entry['changes'] ?? [] as $change) {
                 foreach ($change['value']['messages'] ?? [] as $message) {
-                    if (($message['type'] ?? null) !== 'text' || empty($message['from']) || ! isset($message['text']['body'])) {
+                    if (empty($message['from'])) {
+                        continue;
+                    }
+
+                    $type = $message['type'] ?? null;
+                    $incomingMessage = match ($type) {
+                        'text' => data_get($message, 'text.body'),
+                        'interactive' => data_get($message, 'interactive.list_reply.id'),
+                        default => null,
+                    };
+                    if (! is_string($incomingMessage) || $incomingMessage === '') {
                         continue;
                     }
 
                     try {
                         $result = $booking->handle(
                             (string) $message['from'],
-                            (string) $message['text']['body'],
+                            $incomingMessage,
                             'whatsapp',
                         );
-                        $whatsApp->sendMessage(
-                            (string) $message['from'],
-                            $result->message,
-                        );
+                        if ($result->quickReplies !== []) {
+                            $whatsApp->sendInteractiveList(
+                                (string) $message['from'],
+                                $result->message,
+                                $result->quickReplies,
+                            );
+                        } else {
+                            $whatsApp->sendMessage((string) $message['from'], $result->message);
+                        }
                     } catch (MissingProviderCredentialsException $exception) {
                         Log::error('WhatsApp inbound message could not be handled because provider credentials are missing.', [
                             'from' => $message['from'],

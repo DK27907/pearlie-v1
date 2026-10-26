@@ -27,4 +27,9 @@ class SmsService
             message: $sent ? 'SMS accepted by the configured provider.' : 'SMS provider is not configured or rejected delivery.',
         );
     }
+
+    public function isConfigured(): bool
+    {
+        return $this->notifications->smsIsConfigured();
+    }
 }
