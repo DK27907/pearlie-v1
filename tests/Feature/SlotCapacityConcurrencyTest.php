@@ -7,9 +7,10 @@ use App\Models\SlotCapacity;
 use App\Models\User;
 use App\Services\DoctorAvailabilityService;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\Query\Grammars\PostgresGrammar;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Database\Query\Grammars\PostgresGrammar;
 use Tests\TestCase;
 
 class SlotCapacityConcurrencyTest extends TestCase
@@ -53,7 +54,7 @@ class SlotCapacityConcurrencyTest extends TestCase
         $this->assertDatabaseHas('slot_capacity', [
             'hospital_id' => $hospital->id,
             'doctor_id' => $doctor->id,
-            'slot_date' => '2026-11-01 00:00:00',
+            'slot_date' => '2026-11-01',
             'slot_time' => '09:00:00',
             'capacity' => 1,
             'booked_count' => 1,
@@ -90,6 +91,8 @@ class SlotCapacityConcurrencyTest extends TestCase
                     1,
                 );
             });
+        } catch (ModelNotFoundException) {
+            $queries = $connection->getQueryLog();
         } finally {
             $connection->setQueryGrammar($originalGrammar);
         }

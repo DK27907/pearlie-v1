@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Announcement;
+use App\Models\AnnouncementRecipient;
 use App\Models\AppointmentRequest;
 use App\Models\Hospital;
 use App\Models\Service;
@@ -270,6 +271,8 @@ class AnnouncementWorkflowTest extends TestCase
         ]);
 
         Artisan::call('appointments:send-reminders');
+        $this->assertDatabaseCount('announcements', 1);
+        $this->travelTo(CarbonImmutable::parse('2026-10-22 08:05:00'));
         Artisan::call('appointments:send-reminders');
 
         $this->assertDatabaseHas('announcements', [
@@ -280,11 +283,78 @@ class AnnouncementWorkflowTest extends TestCase
                 ->where('slot_start_time', '08:00:00')
                 ->value('id'),
         ]);
+        $reminderAppointment = AppointmentRequest::withoutGlobalScope('hospital')
+            ->where('hospital_id', $enabledHospital->id)
+            ->where('slot_start_time', '08:00:00')
+            ->firstOrFail();
+        $recipient = AnnouncementRecipient::query()
+            ->where('appointment_request_id', $reminderAppointment->id)
+            ->firstOrFail();
+        $this->assertStringContainsString($reminderAppointment->booking_reference, $recipient->rendered_message);
         $this->assertDatabaseCount('announcements', 2);
         $this->assertDatabaseMissing('announcements', [
             'hospital_id' => $disabledHospital->id,
             'type' => 'reminder',
         ]);
+    }
+
+    public function test_reminders_are_scheduled_at_the_configured_lead_time(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-10-22 08:00:00'));
+        $hospital = Hospital::factory()->create([
+            'reminder_enabled' => true,
+            'reminder_hours_before' => 36,
+        ]);
+        app()->instance('currentHospital', $hospital);
+        User::factory()->for($hospital, 'hospital')->create([
+            'is_admin' => true,
+            'role' => 'hospital_admin',
+        ]);
+        AppointmentRequest::factory()->for($hospital)->create([
+            'preferred_date' => '2026-10-23',
+            'slot_start_time' => '19:59:00',
+            'status' => AppointmentRequest::STATUS_CONFIRMED,
+        ]);
+        AppointmentRequest::factory()->for($hospital)->create([
+            'preferred_date' => '2026-10-23',
+            'slot_start_time' => '20:01:00',
+            'status' => AppointmentRequest::STATUS_CONFIRMED,
+        ]);
+
+        $announcements = app(AnnouncementService::class)->scheduleReminderAnnouncements($hospital);
+
+        $this->assertCount(1, $announcements);
+        $this->assertSame('reminder', $announcements->first()->type);
+    }
+
+    public function test_reminders_use_defaults_when_legacy_settings_and_reference_are_null(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-10-22 08:00:00'));
+        $hospital = Hospital::factory()->create(['reminder_enabled' => true]);
+        $legacyTemplate = 'Hello {patient_name}, this is a reminder of your appointment with {doctor_name} tomorrow at {appointment_time}. Reply STOP to opt out.';
+        $hospital->forceFill([
+            'reminder_hours_before' => null,
+            'reminder_message_template' => $legacyTemplate,
+        ])->save();
+        app()->instance('currentHospital', $hospital);
+        User::factory()->for($hospital, 'hospital')->create([
+            'is_admin' => true,
+            'role' => 'hospital_admin',
+        ]);
+        $appointment = AppointmentRequest::factory()->for($hospital)->create([
+            'preferred_date' => '2026-10-23',
+            'slot_start_time' => '08:00:00',
+            'status' => AppointmentRequest::STATUS_CONFIRMED,
+        ]);
+        $appointment->forceFill(['booking_reference' => null])->save();
+
+        $announcements = app(AnnouncementService::class)->scheduleReminderAnnouncements($hospital->fresh());
+
+        $this->assertCount(1, $announcements);
+        $this->assertSame($legacyTemplate, $announcements->first()->message);
+        $this->assertNull($hospital->fresh()->reminder_hours_before);
+        $this->assertSame($legacyTemplate, $hospital->fresh()->reminder_message_template);
+        $this->assertNull($appointment->fresh()->booking_reference);
     }
 
     public function test_combined_announcement_falls_back_to_sms_when_whatsapp_is_not_configured(): void

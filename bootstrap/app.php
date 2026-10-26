@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\AuthenticateTenantApiToken;
 use App\Http\Middleware\EnsureFeatureEnabled;
 use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\EnsureSuperAdmin;
@@ -57,6 +58,7 @@ $application = Application::configure(basePath: dirname(__DIR__))
             'superadmin' => EnsureSuperAdmin::class,
             'feature' => EnsureFeatureEnabled::class,
             'safaricom.ip' => RestrictMpesaCallbackToSafaricom::class,
+            'tenant.api-token' => AuthenticateTenantApiToken::class,
         ]);
 
         $middleware->validateCsrfTokens(except: [

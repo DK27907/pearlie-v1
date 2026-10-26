@@ -14,6 +14,15 @@ class AppointmentRequest extends Model
 {
     use BelongsToHospital, HasFactory;
 
+    protected static function booted(): void
+    {
+        static::creating(static function (self $appointment): void {
+            if (blank($appointment->booking_reference)) {
+                $appointment->booking_reference = 'BK-'.strtoupper(bin2hex(random_bytes(16)));
+            }
+        });
+    }
+
     public const STATUS_PENDING = 'pending';
 
     public const STATUS_CONFIRMED = 'confirmed';
@@ -63,6 +72,7 @@ class AppointmentRequest extends Model
         'paid_by_user_id',
         'payment_collected_amount',
         'payment_notes',
+        'booking_source',
     ];
 
     protected $casts = [

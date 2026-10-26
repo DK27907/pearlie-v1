@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Conversation;
 use App\Models\Hospital;
+use App\Services\BookingChatService;
+use App\Services\Chat\ChatResponse;
 use App\Services\WhatsAppBookingService;
 use App\Services\WhatsAppService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -51,6 +53,83 @@ class WhatsAppIntegrationTest extends TestCase
 
         $this->assertTrue($result['success']);
         Http::assertSent(fn ($request): bool => $request->hasHeader('Authorization', 'Bearer test-token'));
+    }
+
+    public function test_whatsapp_interactive_list_is_bounded_and_uses_quick_reply_values(): void
+    {
+        config([
+            'whatsapp.access_token' => 'test-token',
+            'whatsapp.phone_number_id' => 'test-phone-number-id',
+            'whatsapp.api_version' => 'v20.0',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.list']]]),
+        ]);
+        $quickReplies = collect(range(1, 12))
+            ->map(fn (int $number): array => [
+                'id' => 'service-'.$number,
+                'label' => 'Service '.$number,
+                'value' => '__service:'.$number.'__',
+            ])
+            ->all();
+
+        $result = app(WhatsAppService::class)->sendInteractiveList(
+            '254712345678',
+            'Choose a service.',
+            $quickReplies,
+        );
+
+        $this->assertTrue($result['success']);
+        Http::assertSent(fn ($request): bool => $request['type'] === 'interactive'
+            && $request['interactive']['type'] === 'list'
+            && count($request['interactive']['action']['sections'][0]['rows']) === 10
+            && $request['interactive']['action']['sections'][0]['rows'][0]['id'] === '__service:1__');
+    }
+
+    public function test_whatsapp_webhook_passes_interactive_list_reply_id_to_booking_flow(): void
+    {
+        config([
+            'whatsapp.app_secret' => 'webhook-secret',
+            'whatsapp.phone_number_id' => 'phone-number-id',
+            'whatsapp.access_token' => 'whatsapp-token',
+        ]);
+        $booking = \Mockery::mock(BookingChatService::class);
+        $booking->shouldReceive('handle')
+            ->once()
+            ->with('254712345678', '__service:42__', 'whatsapp')
+            ->andReturn(new ChatResponse('Which date do you prefer?', 'COLLECTING'));
+        $whatsApp = \Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendMessage')
+            ->once()
+            ->with('254712345678', 'Which date do you prefer?')
+            ->andReturn(['success' => true, 'message' => 'sent']);
+        $this->app->instance(BookingChatService::class, $booking);
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+        $payload = [
+            'object' => 'whatsapp_business_account',
+            'entry' => [[
+                'changes' => [[
+                    'value' => [
+                        'messages' => [[
+                            'from' => '254712345678',
+                            'type' => 'interactive',
+                            'interactive' => [
+                                'type' => 'list_reply',
+                                'list_reply' => ['id' => '__service:42__', 'title' => 'Consultation'],
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+        $body = json_encode($payload, JSON_THROW_ON_ERROR);
+        $signature = 'sha256='.hash_hmac('sha256', $body, 'webhook-secret');
+
+        $this->call('POST', '/api/whatsapp/webhook', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_X_HUB_SIGNATURE_256' => $signature,
+        ], $body)->assertOk();
     }
 
     public function test_incoming_message_triggers_the_booking_flow(): void

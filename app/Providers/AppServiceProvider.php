@@ -3,7 +3,10 @@
 namespace App\Providers;
 
 use App\Http\Middleware\EnsureUserIsAdmin;
+use App\Models\AppointmentRequest;
 use App\Models\User;
+use App\Observers\AppointmentRequestObserver;
+use App\Policies\AppointmentRequestPolicy;
 use App\Policies\UserPolicy;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -31,6 +34,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::policy(User::class, UserPolicy::class);
+        Gate::policy(AppointmentRequest::class, AppointmentRequestPolicy::class);
+        AppointmentRequest::observe(AppointmentRequestObserver::class);
 
         $tenantRateLimitKey = static function (Request $request): string {
             $tenant = (string) ($request->route('slug') ?? 'pearl');

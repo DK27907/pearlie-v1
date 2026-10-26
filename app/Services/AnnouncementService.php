@@ -29,7 +29,7 @@ class AnnouncementService
     {
         $filter = $announcement->audience_filter ?? [];
         $query = AppointmentRequest::withoutGlobalScope('hospital')
-            ->with(['doctor:id,name', 'service:id,name'])
+            ->with(['doctor:id,name', 'service:id,name', 'hospital:id,name'])
             ->where('hospital_id', $announcement->hospital_id)
             ->whereIn('status', [
                 AppointmentRequest::STATUS_PENDING,
@@ -75,13 +75,26 @@ class AnnouncementService
     public function scheduleReminderAnnouncements(Hospital $hospital): BaseCollection
     {
         $now = now()->toImmutable();
+        $hoursBefore = min(168, max(1, (int) ($hospital->reminder_hours_before ?? 24)));
         $dueAppointments = AppointmentRequest::withoutGlobalScope('hospital')
             ->where('hospital_id', $hospital->id)
             ->where('status', AppointmentRequest::STATUS_CONFIRMED)
             ->whereNotNull('slot_start_time')
-            ->whereDate('preferred_date', $now->addDay()->toDateString())
+            ->whereBetween('preferred_date', [
+                $now->startOfDay()->toDateTimeString(),
+                $now->addHours($hoursBefore)->endOfDay()->toDateTimeString(),
+            ])
             ->orderBy('id')
-            ->get();
+            ->get()
+            ->filter(function (AppointmentRequest $appointment) use ($now, $hoursBefore): bool {
+                $appointmentAt = CarbonImmutable::parse(
+                    $appointment->preferred_date->toDateString().' '.$appointment->slot_start_time,
+                );
+
+                return $appointmentAt->isAfter($now)
+                    && $appointmentAt->subHours($hoursBefore)->lessThanOrEqualTo($now);
+            })
+            ->values();
 
         if ($dueAppointments->isEmpty()) {
             return new BaseCollection;
@@ -96,21 +109,24 @@ class AnnouncementService
             throw new RuntimeException('A hospital admin is required to schedule appointment reminders.');
         }
 
-        return $dueAppointments->map(fn (AppointmentRequest $appointment): Announcement => Announcement::query()->firstOrCreate(
-            [
-                'hospital_id' => $hospital->id,
-                'type' => 'reminder',
-                'reminder_appointment_id' => $appointment->id,
-            ],
-            [
-                'sent_by_user_id' => $systemUser->id,
-                'message' => $hospital->reminder_message_template,
-                'audience_filter' => ['appointment_date' => $appointment->preferred_date->toDateString()],
-                'channel' => 'sms',
-                'scheduled_for' => $now,
-                'status' => 'scheduled',
-            ],
-        ));
+        return $dueAppointments
+            ->map(fn (AppointmentRequest $appointment): Announcement => Announcement::query()->firstOrCreate(
+                [
+                    'hospital_id' => $hospital->id,
+                    'type' => 'reminder',
+                    'reminder_appointment_id' => $appointment->id,
+                ],
+                [
+                    'sent_by_user_id' => $systemUser->id,
+                    'message' => $hospital->reminder_message_template ?: Hospital::DEFAULT_REMINDER_MESSAGE_TEMPLATE,
+                    'audience_filter' => ['appointment_date' => $appointment->preferred_date->toDateString()],
+                    'channel' => 'sms',
+                    'scheduled_for' => $now,
+                    'status' => 'scheduled',
+                ],
+            ))
+            ->filter(fn (Announcement $announcement): bool => in_array($announcement->status, ['scheduled', 'sending'], true))
+            ->values();
     }
 
     public function sendAnnouncement(Announcement $announcement): void
@@ -232,6 +248,11 @@ class AnnouncementService
             $appointment->name,
             $appointment->doctor?->name ?? 'the hospital team',
             trim($date.' '.$time),
+            [
+                'booking_reference' => $appointment->booking_reference ?: 'Not available',
+                'service_name' => $appointment->service?->name ?? $appointment->reason,
+                'hospital_name' => $appointment->hospital?->name ?? '',
+            ],
         );
     }
 

@@ -27,6 +27,7 @@
         <article class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 class="font-bold text-slate-900">Appointment</h2>
             <dl class="mt-5 grid gap-x-8 gap-y-5 sm:grid-cols-2">
+                <div><dt class="text-xs font-semibold uppercase tracking-wider text-slate-500">Booking reference</dt><dd class="mt-1 font-mono font-medium text-slate-900">{{ $appointment->booking_reference ?: 'Not available' }}</dd></div>
                 <div><dt class="text-xs font-semibold uppercase tracking-wider text-slate-500">Date and time</dt><dd class="mt-1 font-medium text-slate-900">{{ $appointment->preferred_date?->format('l, F j, Y') ?: 'Not set' }}{{ $appointment->slot_start_time ? ' · '.substr($appointment->slot_start_time, 0, 5) : '' }}</dd></div>
                 <div><dt class="text-xs font-semibold uppercase tracking-wider text-slate-500">Status</dt><dd class="mt-1 font-medium capitalize text-slate-900">{{ $appointment->status }}</dd></div>
                 <div><dt class="text-xs font-semibold uppercase tracking-wider text-slate-500">Doctor</dt><dd class="mt-1 font-medium text-slate-900">{{ $appointment->doctor?->name ?: 'Not assigned' }}{{ $appointment->doctor?->specialization ? ' · '.$appointment->doctor->specialization : '' }}</dd></div>

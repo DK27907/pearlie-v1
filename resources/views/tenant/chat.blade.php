@@ -181,6 +181,10 @@
             background: #f9fbfd;
         }
 
+        #dynamicQuickReplies:empty {
+            display: none;
+        }
+
         .quick-reply {
             border: 1px solid #d5e1ea;
             border-radius: 999px;
@@ -387,6 +391,7 @@
             <button type="button" class="quick-reply" data-message-en="I need emergency help" data-message-sw="Nina dharura" data-label-en="Emergency" data-label-sw="Dharura"></button>
             <button type="button" class="quick-reply" data-message-en="Where are you located?" data-message-sw="Mko wapi?" data-label-en="Location" data-label-sw="Mahali"></button>
         </div>
+        <div id="dynamicQuickReplies" class="quick-replies" aria-label="Booking options" aria-live="polite"></div>
 
         <!-- ─── Typing Indicator ─── -->
         <div class="typing-indicator" id="typingIndicator" role="status" aria-live="polite">

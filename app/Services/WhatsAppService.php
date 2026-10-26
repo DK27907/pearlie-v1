@@ -7,6 +7,7 @@ use App\Models\AppointmentRequest;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Throwable;
 
@@ -39,6 +40,52 @@ class WhatsAppService
             return ['success' => true, 'message' => 'WhatsApp message accepted for delivery.'];
         } catch (Throwable $exception) {
             Log::error('Unable to send a WhatsApp message.', [
+                'exception_class' => $exception::class,
+            ]);
+
+            throw $exception;
+        }
+    }
+
+    /**
+     * @param  array<int, array{id: string, label: string, value: string}>  $quickReplies
+     * @return array{success: bool, message: string}
+     */
+    public function sendInteractiveList(string $to, string $message, array $quickReplies): array
+    {
+        if ($quickReplies === []) {
+            throw new InvalidArgumentException('At least one WhatsApp list option is required.');
+        }
+
+        $rows = array_map(static fn (array $reply): array => [
+            'id' => $reply['value'],
+            'title' => Str::limit($reply['label'], 24, ''),
+        ], array_slice($quickReplies, 0, 10));
+
+        try {
+            $response = $this->apiRequest()->post($this->messagesUrl(), [
+                'messaging_product' => 'whatsapp',
+                'to' => $this->formatPhone($to),
+                'type' => 'interactive',
+                'interactive' => [
+                    'type' => 'list',
+                    'body' => ['text' => Str::limit($message, 1024, '')],
+                    'action' => [
+                        'button' => 'Choose an option',
+                        'sections' => [[
+                            'title' => 'Available options',
+                            'rows' => $rows,
+                        ]],
+                    ],
+                ],
+            ])->throw();
+
+            return [
+                'success' => true,
+                'message' => (string) ($response->json('messages.0.id') ?? 'WhatsApp list accepted.'),
+            ];
+        } catch (Throwable $exception) {
+            Log::error('Unable to send a WhatsApp interactive list.', [
                 'exception_class' => $exception::class,
             ]);
 
@@ -142,11 +189,14 @@ class WhatsAppService
                 return false;
             }
 
+            $reference = filled($appointment->booking_reference)
+                ? ' (reference '.$appointment->booking_reference.')'
+                : '';
             $message = sprintf(
-                'Hello %s, your %s appointment (ID %d) is confirmed. Your M-Pesa payment%s was received.',
+                'Hello %s, your %s appointment%s is confirmed. Your M-Pesa payment%s was received.',
                 $appointment->name ?: 'Patient',
                 pearlie_config('hospital.name'),
-                $appointment->id,
+                $reference,
                 $appointment->mpesa_receipt ? ' '.$appointment->mpesa_receipt : '',
             );
 

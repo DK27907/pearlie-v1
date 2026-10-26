@@ -48,12 +48,24 @@ class Announcement extends Model
         return $this->hasMany(AnnouncementRecipient::class);
     }
 
-    public function renderFor(string $patientName, string $doctorName, string $appointmentTime): string
-    {
-        return strtr($this->message, [
+    /**
+     * @param  array<string, string>  $additionalPlaceholders
+     */
+    public function renderFor(
+        string $patientName,
+        string $doctorName,
+        string $appointmentTime,
+        array $additionalPlaceholders = [],
+    ): string {
+        $placeholders = [
             '{patient_name}' => $patientName,
             '{doctor_name}' => $doctorName,
             '{appointment_time}' => $appointmentTime,
-        ]);
+        ];
+        foreach ($additionalPlaceholders as $key => $value) {
+            $placeholders['{'.$key.'}'] = $value;
+        }
+
+        return strtr((string) $this->message, $placeholders);
     }
 }

@@ -90,6 +90,70 @@ class BookingChatServiceTest extends TestCase
         $this->assertStringNotContainsString('phone number', mb_strtolower($response->message));
     }
 
+    public function test_service_quick_replies_are_tenant_scoped_and_paginated(): void
+    {
+        [$hospital, $services] = $this->createContext([
+            'Service One',
+            'Service Two',
+            'Service Three',
+            'Service Four',
+            'Service Five',
+            'Service Six',
+            'Service Seven',
+        ]);
+        $otherHospital = Hospital::factory()->create();
+        app()->instance('currentHospital', $otherHospital);
+        $foreignService = $otherHospital->services()->create([
+            'name' => 'Foreign Service',
+            'price' => 10,
+            'duration_minutes' => 30,
+            'is_active' => true,
+        ]);
+        app()->instance('currentHospital', $hospital);
+        $this->assertNotSame($hospital->id, $otherHospital->id);
+        $this->assertSame($otherHospital->id, $foreignService->hospital_id);
+
+        $chat = app(BookingChatService::class);
+        $firstPage = $chat->handle('service-quick-replies', 'Book an appointment', 'web');
+        $secondPage = $chat->handle('service-quick-replies', '__service_page:6__', 'web');
+        $selected = $chat->handle('service-quick-replies', '__service:'.$services[6]->id.'__', 'web');
+
+        $this->assertSame($hospital->id, hospital()->id);
+        $this->assertCount(7, $firstPage->quickReplies);
+        $this->assertSame('service-more', $firstPage->quickReplies[6]['id']);
+        $this->assertSame('COLLECTING', $secondPage->state);
+        $this->assertSame(['Previous services', 'Service Seven'], array_column($secondPage->quickReplies, 'label'));
+        $this->assertNotContains($foreignService->name, array_column($secondPage->quickReplies, 'label'));
+        $this->assertSame($services[6]->id, $selected->collectedFields['service_id']);
+        $this->assertSame($hospital->id, Service::query()->findOrFail($selected->collectedFields['service_id'])->hospital_id);
+    }
+
+    public function test_date_doctor_and_available_time_options_follow_booking_state(): void
+    {
+        [, $services, $doctors] = $this->createContext(
+            ['Dental Cleaning'],
+            ['Dr. Amina Njeri', 'Dr. Brian Otieno'],
+        );
+        $chat = app(BookingChatService::class);
+        $sessionId = 'contextual-booking-options';
+
+        $chat->handle($sessionId, 'Book an appointment', 'web');
+        $datePrompt = $chat->handle($sessionId, 'Dental Cleaning', 'web');
+        $namePrompt = $chat->handle($sessionId, '2026-10-05', 'web');
+        $phonePrompt = $chat->handle($sessionId, 'Patient Example', 'web');
+        $doctorPrompt = $chat->handle($sessionId, '0712345678', 'web');
+        $timePrompt = $chat->handle($sessionId, '__doctor:'.$doctors[0]->id.'__', 'web');
+
+        $this->assertCount(5, $datePrompt->quickReplies);
+        $this->assertSame('2026-10-03', $datePrompt->quickReplies[0]['value']);
+        $this->assertSame('COLLECTING', $namePrompt->state);
+        $this->assertSame($services[0]->id, $doctorPrompt->collectedFields['service_id']);
+        $this->assertSame('doctor-'.$doctors[0]->id, $doctorPrompt->quickReplies[0]['id']);
+        $this->assertSame($doctors[0]->id, $timePrompt->collectedFields['doctor_id']);
+        $this->assertNotEmpty($timePrompt->quickReplies);
+        $this->assertSame('09:00', $timePrompt->quickReplies[0]['value']);
+    }
+
     public function test_specialist_question_lists_the_matching_doctor_without_starting_a_booking(): void
     {
         [, , $doctors] = $this->createContext(
@@ -1251,7 +1315,13 @@ class BookingChatServiceTest extends TestCase
 
         $this->assertStringNotContainsString('KSh', $summary->message);
         $this->assertSame('COMPLETED', $response->state);
-        $this->assertStringContainsString('No payment is required', $response->message);
+        $this->assertStringNotContainsString('payment', mb_strtolower($response->message));
+        $this->assertStringContainsString($appointment->booking_reference, $response->message);
+        $this->assertStringContainsString('Dental Cleaning', $response->message);
+        $this->assertStringContainsString('Dr. Amina Njeri', $response->message);
+        $this->assertStringContainsString('Booking Chat Hospital', $response->message);
+        $this->assertStringContainsString('Please arrive 15 minutes early', $response->message);
+        $this->assertStringContainsString('254748249882', $response->message);
         $this->assertSame(AppointmentRequest::STATUS_CONFIRMED, $appointment->status);
         $this->assertSame('not_required', $appointment->payment_status);
         $this->assertSame('none', $appointment->payment_method);

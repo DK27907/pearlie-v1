@@ -53,6 +53,7 @@
                                 <td class="px-5 py-4">
                                     <p class="font-semibold text-slate-900">{{ $appointment->name ?: 'Name not provided' }}</p>
                                     <p class="mt-1 text-xs text-slate-500">{{ $appointment->phone ?: 'No phone provided' }}</p>
+                                    <p class="mt-1 font-mono text-xs text-slate-500">{{ $appointment->booking_reference ?: 'Not available' }}</p>
                                 </td>
                                 <td class="whitespace-nowrap px-5 py-4">
                                     <p class="font-medium text-slate-800">{{ $appointment->preferred_date?->format('M j, Y') ?: 'Date not set' }}</p>

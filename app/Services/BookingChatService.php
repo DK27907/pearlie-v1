@@ -23,6 +23,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Throwable;
 
@@ -88,6 +90,96 @@ class BookingChatService
         private readonly AppointmentLifecycleService $appointmentLifecycle,
         private readonly ChatLanguageDetector $languageDetector,
     ) {}
+
+    /**
+     * @param  array{service_id: int, doctor_id: int, date: string, time: string, patient_name: string, phone: string, payment_override?: ?string}  $data
+     */
+    public function createBookingFromData(Hospital $hospital, array $data): AppointmentRequest
+    {
+        $currentHospital = hospital();
+        if (! $currentHospital instanceof Hospital || (int) $currentHospital->id !== (int) $hospital->id) {
+            throw new RuntimeException('The active hospital context does not match this walk-in booking.');
+        }
+
+        $service = Service::withoutGlobalScope('hospital')
+            ->where('hospital_id', $hospital->id)
+            ->whereKey($data['service_id'])
+            ->where('is_active', true)
+            ->firstOrFail();
+        $eligibleDoctor = $this->availability
+            ->getInHospitalDoctorsForService($hospital, (int) $service->id)
+            ->firstWhere('id', (int) $data['doctor_id']);
+
+        if (! $eligibleDoctor) {
+            throw ValidationException::withMessages([
+                'doctor_id' => 'Select an in-hospital doctor who offers this service.',
+            ]);
+        }
+
+        $paymentMode = $data['payment_override'] ?? $hospital->bookingPaymentMode();
+        if (! in_array($paymentMode, Hospital::BOOKING_PAYMENT_MODES, true)) {
+            throw ValidationException::withMessages([
+                'payment_override' => 'Select a valid payment option.',
+            ]);
+        }
+        if ((float) $service->price <= 0) {
+            $paymentMode = Hospital::BOOKING_PAYMENT_MODE_NONE;
+        }
+        if ($paymentMode === Hospital::BOOKING_PAYMENT_MODE_MPESA && ! $hospital->hasFeature('mpesa')) {
+            throw ValidationException::withMessages([
+                'payment_override' => 'M-Pesa is not enabled for this hospital plan. Choose cash or no payment.',
+            ]);
+        }
+
+        $appointment = DB::transaction(function () use ($data, $service, $paymentMode): AppointmentRequest {
+            $appointment = $this->availability->bookAppointment(
+                $data['date'],
+                $data['time'],
+                [
+                    'name' => $data['patient_name'],
+                    'phone' => $data['phone'],
+                    'email' => null,
+                    'reason' => $service->name,
+                    'raw_message' => 'Walk-in booking created by hospital staff.',
+                    'session_id' => 'walk-in:'.Str::uuid(),
+                    'booking_source' => 'walk-in',
+                ],
+                (int) $data['doctor_id'],
+                $service,
+            );
+
+            if (! $appointment) {
+                throw ValidationException::withMessages([
+                    'time' => 'This slot is no longer available. Choose another free slot.',
+                ]);
+            }
+
+            $amount = (float) ($appointment->payment_amount ?? $service->price);
+            $appointment->forceFill([
+                'status' => AppointmentRequest::STATUS_CONFIRMED,
+                'status_updated_at' => now(),
+                'payment_status' => $paymentMode === Hospital::BOOKING_PAYMENT_MODE_NONE ? 'not_required' : 'pending',
+                'payment_method' => $paymentMode === Hospital::BOOKING_PAYMENT_MODE_NONE ? null : $paymentMode,
+                'payment_due_at' => $paymentMode === Hospital::BOOKING_PAYMENT_MODE_NONE ? null : 'at_hospital',
+                'payment_amount' => $paymentMode === Hospital::BOOKING_PAYMENT_MODE_NONE ? 0 : $amount,
+            ])->save();
+
+            if ($paymentMode !== Hospital::BOOKING_PAYMENT_MODE_MPESA) {
+                SlotHold::query()
+                    ->where('hospital_id', $appointment->hospital_id)
+                    ->where('appointment_request_id', $appointment->id)
+                    ->delete();
+            }
+
+            return $appointment;
+        });
+
+        if ($paymentMode === Hospital::BOOKING_PAYMENT_MODE_MPESA) {
+            $this->mpesa->initiateStkPush($appointment);
+        }
+
+        return $appointment->fresh();
+    }
 
     public function handle(string $channelId, string $message, string $channel = 'web'): ChatResponse
     {
@@ -172,6 +264,72 @@ class BookingChatService
         $previousState = $this->persistedState($channelId, $channel);
         $state = $this->reconcilePaymentState($previousState);
         $state['language'] = $this->resolveReplyLanguage($message, $state);
+
+        if (preg_match('/^__service_page:(\d{1,4})__$/', $message, $matches) === 1
+            && $state['state'] === self::STATE_COLLECTING
+            && ! filled($state['service_id'] ?? null)
+        ) {
+            $offset = min(1000, (int) $matches[1]);
+            $quickReplies = $this->serviceQuickReplies($hospital, $state['language'], $offset);
+            $message = $state['language'] === self::LANGUAGE_SWAHILI ? 'Huduma zaidi' : 'More services';
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $this->servicePrompt($hospital, $state['language']),
+                $state,
+                quickReplies: $quickReplies,
+            );
+        }
+
+        if (preg_match('/^__service:(\d{1,10})__$/', $message, $matches) === 1
+            && $state['state'] === self::STATE_COLLECTING
+            && ! filled($state['service_id'] ?? null)
+        ) {
+            $service = $hospital->services()
+                ->where('hospital_id', $hospital->id)
+                ->active()
+                ->whereKey((int) $matches[1])
+                ->first();
+            if ($service === null) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $state['language'] === self::LANGUAGE_SWAHILI ? 'Huduma iliyochaguliwa' : 'Selected service',
+                    $this->servicePrompt($hospital, $state['language']),
+                    $state,
+                    source: 'quick_reply_invalid',
+                    quickReplies: $this->serviceQuickReplies($hospital, $state['language']),
+                );
+            }
+
+            $message = $service->name;
+        }
+
+        if (preg_match('/^__doctor:(\d{1,10})__$/', $message, $matches) === 1
+            && $state['state'] === self::STATE_COLLECTING
+            && filled($state['service_id'] ?? null)
+            && ! filled($state['doctor_id'] ?? null)
+        ) {
+            $doctor = $this->eligibleDoctors(
+                $hospital,
+                $this->serviceById((int) $state['service_id'], $hospital),
+            )->firstWhere('id', (int) $matches[1]);
+            if ($doctor === null) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $state['language'] === self::LANGUAGE_SWAHILI ? 'Daktari aliyechaguliwa' : 'Selected doctor',
+                    $this->doctorPrompt($state, $hospital),
+                    $state,
+                    source: 'quick_reply_invalid',
+                    quickReplies: $this->doctorQuickReplies($state, $hospital),
+                );
+            }
+
+            $message = $doctor->name;
+        }
 
         if (($previousState['state'] ?? self::STATE_IDLE) === self::STATE_PAYMENT_PENDING
             && in_array($state['state'], [self::STATE_COMPLETED, self::STATE_CANCELLED], true)
@@ -1424,9 +1582,7 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                $state['language'] === self::LANGUAGE_SWAHILI
-                    ? 'Miadi yako imethibitishwa. Hakuna malipo yanayohitajika.'
-                    : 'Your appointment is confirmed. No payment is required.',
+                $this->appointmentConfirmationMessage($appointment, $hospital, $state['language']),
                 $state,
                 $appointment->id,
             );
@@ -1451,10 +1607,13 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                sprintf(
-                    'Your appointment is confirmed. Payment of KES %s is due at the hospital on your appointment date.',
-                    number_format($amount, 2),
-                ),
+                $this->appointmentConfirmationMessage($appointment, $hospital, $state['language'])
+                    ."\n".sprintf(
+                        $state['language'] === self::LANGUAGE_SWAHILI
+                            ? 'Malipo ya KSh %s yatafanywa hospitalini siku ya miadi.'
+                            : 'Payment of KES %s is due at the hospital on your appointment date.',
+                        number_format($amount, 2),
+                    ),
                 $state,
                 $appointment->id,
             );
@@ -1531,9 +1690,10 @@ class BookingChatService
             $message,
             sprintf(
                 $state['language'] === self::LANGUAGE_SWAHILI
-                    ? 'Tumetuma ombi la M-Pesa kwa %s. Miadi yako itasasishwa baada ya malipo kuthibitishwa.'
-                    : 'We sent an M-Pesa prompt to %s. Your appointment will be updated when payment is verified.',
+                    ? 'Tumetuma ombi la M-Pesa kwa %s kwa rejea ya miadi %s. Hali ya miadi itasasishwa baada ya malipo kuthibitishwa.'
+                    : 'We sent an M-Pesa prompt to %s for booking reference %s. Your appointment will be updated when payment is verified.',
                 $this->mpesa->formatPhone((string) $state['patient_phone']),
+                $appointment->booking_reference,
             ),
             $state,
             $appointment->id,
@@ -2906,6 +3066,7 @@ class BookingChatService
         ?string $source = null,
         bool $escalated = false,
         ?Closure $beforePersist = null,
+        ?array $quickReplies = null,
     ): ChatResponse {
         $state['language'] = in_array($state['language'] ?? null, [
             self::LANGUAGE_ENGLISH,
@@ -2926,6 +3087,10 @@ class BookingChatService
             return $this->retryResponse($sessionId, $channel, $state['language']);
         }
         $state['state_version']++;
+        $hospital = hospital();
+        if (! $hospital instanceof Hospital) {
+            throw new RuntimeException('A hospital context is required to build chat quick replies.');
+        }
 
         return new ChatResponse(
             $response,
@@ -2934,7 +3099,131 @@ class BookingChatService
             $paymentRequired,
             $state,
             $source,
+            $quickReplies ?? ($source === null ? $this->quickRepliesForState($state, $hospital) : []),
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     * @return array<int, array{id: string, label: string, value: string}>
+     */
+    private function quickRepliesForState(array $state, Hospital $hospital): array
+    {
+        if ($state['state'] !== self::STATE_COLLECTING) {
+            return [];
+        }
+
+        return match ($this->nextMissingField($state)) {
+            'service_id' => $this->serviceQuickReplies($hospital, $state['language']),
+            'doctor_id' => $this->doctorQuickReplies($state, $hospital),
+            'date' => $this->dateQuickReplies($state['language']),
+            'time' => $this->timeQuickReplies($state),
+            default => [],
+        };
+    }
+
+    /**
+     * @return array<int, array{id: string, label: string, value: string}>
+     */
+    private function serviceQuickReplies(Hospital $hospital, string $language, int $offset = 0): array
+    {
+        $services = $hospital->services()
+            ->where('hospital_id', $hospital->id)
+            ->active()
+            ->orderBy('id');
+        $total = (clone $services)->count();
+        $pageSize = 6;
+        $options = $services->offset($offset)->limit($pageSize)->get();
+        $quickReplies = $options->map(fn (Service $service): array => [
+            'id' => 'service-'.$service->id,
+            'label' => $service->name,
+            'value' => '__service:'.$service->id.'__',
+        ])->all();
+
+        if ($offset > 0) {
+            array_unshift($quickReplies, [
+                'id' => 'service-previous',
+                'label' => $language === self::LANGUAGE_SWAHILI ? 'Huduma zilizotangulia' : 'Previous services',
+                'value' => '__service_page:'.max(0, $offset - $pageSize).'__',
+            ]);
+        }
+
+        if ($offset + $pageSize < $total) {
+            $quickReplies[] = [
+                'id' => 'service-more',
+                'label' => $language === self::LANGUAGE_SWAHILI ? 'Huduma zaidi' : 'More services',
+                'value' => '__service_page:'.($offset + $pageSize).'__',
+            ];
+        }
+
+        return $quickReplies;
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     * @return array<int, array{id: string, label: string, value: string}>
+     */
+    private function doctorQuickReplies(array $state, Hospital $hospital): array
+    {
+        $service = $this->serviceById((int) $state['service_id'], $hospital);
+
+        return $this->eligibleDoctors($hospital, $service)
+            ->take(8)
+            ->map(fn (User $doctor): array => [
+                'id' => 'doctor-'.$doctor->id,
+                'label' => $doctor->name,
+                'value' => '__doctor:'.$doctor->id.'__',
+            ])
+            ->all();
+    }
+
+    /**
+     * @return array<int, array{id: string, label: string, value: string}>
+     */
+    private function dateQuickReplies(string $language): array
+    {
+        $today = CarbonImmutable::today();
+
+        return collect(range(1, 5))
+            ->map(function (int $daysAhead) use ($today, $language): array {
+                $date = $today->addDays($daysAhead);
+
+                return [
+                    'id' => 'date-'.$date->toDateString(),
+                    'label' => $language === self::LANGUAGE_SWAHILI
+                        ? $date->format('d/m/Y')
+                        : $date->format('D, M j'),
+                    'value' => $date->toDateString(),
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     * @return array<int, array{id: string, label: string, value: string}>
+     */
+    private function timeQuickReplies(array $state): array
+    {
+        if (! filled($state['doctor_id'] ?? null) || ! filled($state['date'] ?? null)) {
+            return [];
+        }
+
+        $slots = $this->availability->getAvailableSlots(
+            (int) $state['doctor_id'],
+            CarbonImmutable::parse((string) $state['date'])->toDateString(),
+        );
+
+        return collect($slots)
+            ->filter(fn (bool $isAvailable): bool => $isAvailable)
+            ->keys()
+            ->take(8)
+            ->map(fn (string $time): array => [
+                'id' => 'time-'.sha1($time),
+                'label' => $time,
+                'value' => $time,
+            ])
+            ->all();
     }
 
     /**
@@ -3395,6 +3684,41 @@ class BookingChatService
                 $state['patient_name'],
                 $state['patient_phone'],
             ).$paymentAmountSummary;
+    }
+
+    private function appointmentConfirmationMessage(
+        AppointmentRequest $appointment,
+        Hospital $hospital,
+        string $language,
+    ): string {
+        $service = $appointment->service?->name ?? $appointment->reason;
+        $doctor = $appointment->doctor?->name ?? 'Not assigned';
+        $isSwahili = $language === self::LANGUAGE_SWAHILI;
+        $date = $isSwahili
+            ? ($appointment->preferred_date?->format('d/m/Y') ?? 'Haijawekwa')
+            : ($appointment->preferred_date?->format('l, F j, Y') ?? 'Not set');
+        $time = filled($appointment->slot_start_time)
+            ? CarbonImmutable::parse($appointment->slot_start_time)->format('g:i A')
+            : ($isSwahili ? 'Itapangwa' : 'To be arranged');
+        $location = trim(implode(', ', array_filter([$hospital->name, $hospital->address])));
+        $reminder = $hospital->reminder_enabled
+            ? ($isSwahili
+                ? sprintf('Ujumbe wa SMS utakutumwa saa %d kabla ya miadi.', (int) ($hospital->reminder_hours_before ?? 24))
+                : sprintf('An SMS reminder is scheduled %d hours before your appointment.', (int) ($hospital->reminder_hours_before ?? 24)))
+            : ($isSwahili ? 'Ujumbe wa SMS wa ukumbusho umezimwa kwa sasa.' : 'SMS reminders are currently disabled.');
+
+        return implode("\n", [
+            $isSwahili ? 'Miadi yako imethibitishwa.' : 'Your appointment is confirmed.',
+            ($isSwahili ? 'Nambari ya rejea: ' : 'Booking reference: ').$appointment->booking_reference,
+            ($isSwahili ? 'Huduma: ' : 'Service: ').$service,
+            ($isSwahili ? 'Daktari: ' : 'Doctor: ').$doctor,
+            ($isSwahili ? 'Tarehe: ' : 'Date: ').$date,
+            ($isSwahili ? 'Saa: ' : 'Time: ').$time,
+            ($isSwahili ? 'Mahali: ' : 'Location: ').$location,
+            $reminder,
+            $isSwahili ? 'Tafadhali fika dakika 15 mapema.' : 'Please arrive 15 minutes early.',
+            ($isSwahili ? 'Simu: ' : 'Phone: ').$appointment->phone,
+        ]);
     }
 
     private function serviceById(int $serviceId, Hospital $hospital): Service

@@ -284,6 +284,24 @@ class NotificationService
         return false;
     }
 
+    public function smsIsConfigured(): bool
+    {
+        $this->ensureTenantContext();
+
+        try {
+            $smsConfig = $this->smsConfig();
+        } catch (MissingProviderCredentialsException) {
+            return false;
+        }
+
+        return match ((string) ($smsConfig['provider'] ?? '')) {
+            'africastalking' => filled($smsConfig['username'] ?? null)
+                && filled($smsConfig['api_key'] ?? null),
+            'twilio' => $this->missingTwilioCredentials($smsConfig) === [],
+            default => false,
+        };
+    }
+
     public function sendWhatsApp(string $to, string $message, ?int $appointmentRequestId = null): bool
     {
         $this->ensureTenantContext();

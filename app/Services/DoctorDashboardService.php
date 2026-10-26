@@ -47,6 +47,7 @@ class DoctorDashboardService
                     ->limit(8)
                     ->get(),
                 'today_appointments' => (clone $appointments)
+                    ->with('service')
                     ->whereDate('preferred_date', $today)
                     ->orderBy('slot_start_time')
                     ->orderBy('id')

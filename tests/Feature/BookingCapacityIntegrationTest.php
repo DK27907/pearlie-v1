@@ -67,7 +67,7 @@ class BookingCapacityIntegrationTest extends TestCase
         $this->assertDatabaseHas('slot_capacity', [
             'hospital_id' => $hospital->id,
             'doctor_id' => $doctor->id,
-            'slot_date' => '2026-10-03 00:00:00',
+            'slot_date' => '2026-10-03',
             'slot_time' => '09:00:00',
             'capacity' => 1,
             'booked_count' => 1,

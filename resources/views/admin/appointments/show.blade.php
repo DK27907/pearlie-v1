@@ -3,6 +3,7 @@
 @section('content')
 <div class="container">
     <h1>Appointment #{{ $appt->id }}</h1>
+    <p><strong>Booking reference:</strong> <span class="font-mono">{{ $appt->booking_reference ?: 'Not available' }}</span></p>
 
     @if(session('status'))
         <div class="alert alert-success">{{ session('status') }}</div>

@@ -11,6 +11,7 @@ use App\Models\SlotCapacity;
 use App\Models\SlotHold;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -18,6 +19,29 @@ use Throwable;
 
 class DoctorAvailabilityService
 {
+    /**
+     * @return Collection<int, User>
+     */
+    public function getInHospitalDoctorsForService(Hospital $hospital, int $serviceId): Collection
+    {
+        $service = Service::withoutGlobalScope('hospital')
+            ->where('hospital_id', $hospital->id)
+            ->whereKey($serviceId)
+            ->where('is_active', true)
+            ->firstOrFail();
+
+        return User::withoutGlobalScope('hospital')
+            ->where('hospital_id', $hospital->id)
+            ->where('is_doctor', true)
+            ->where('is_active', true)
+            ->whereHas('availabilities', fn ($query) => $query->where('hospital_id', $hospital->id))
+            ->orderBy('name')
+            ->get()
+            ->filter(fn (User $doctor): bool => blank($service->requires_specialty)
+                || $this->doctorMatchesSpecialty($doctor, (string) $service->requires_specialty))
+            ->values();
+    }
+
     /**
      * @return array<string, bool>
      */
@@ -193,7 +217,7 @@ class DoctorAvailabilityService
     }
 
     /**
-     * @param  array{name: ?string, phone: ?string, email?: ?string, reason: string, raw_message: string, session_id: string}  $patient
+     * @param  array{name: ?string, phone: ?string, email?: ?string, reason: string, raw_message: string, session_id: string, booking_source?: string}  $patient
      */
     public function bookAppointment(
         string $date,
@@ -341,6 +365,7 @@ class DoctorAvailabilityService
                                 'slot_start_time' => $slot['start'],
                                 'slot_end_time' => $slot['end'],
                                 'service_id' => $service?->id,
+                                'booking_source' => $patient['booking_source'] ?? null,
                                 'booking_fee' => (int) round($effectiveAmount),
                                 'payment_amount' => $service !== null ? $effectiveAmount : null,
                             ]);
@@ -413,14 +438,23 @@ class DoctorAvailabilityService
                 ->whereTime('slot_start_at', $slotTime)
                 ->count();
 
-            $slotCapacity = SlotCapacity::query()->create([
+            SlotCapacity::query()->insertOrIgnore([
                 'hospital_id' => $hospital->id,
                 'doctor_id' => $doctorId,
                 'slot_date' => $date->toDateString(),
                 'slot_time' => $slotTime,
                 'capacity' => $capacity,
                 'booked_count' => $bookedCount + $unassignedHoldCount,
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
+            $slotCapacity = SlotCapacity::query()
+                ->where('hospital_id', $hospital->id)
+                ->where('doctor_id', $doctorId)
+                ->whereDate('slot_date', $date->toDateString())
+                ->whereTime('slot_time', $slotTime)
+                ->lockForUpdate()
+                ->firstOrFail();
         } elseif ($slotCapacity->capacity !== $capacity) {
             $slotCapacity->forceFill(['capacity' => $capacity])->save();
         }

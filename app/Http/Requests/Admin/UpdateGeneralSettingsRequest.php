@@ -36,6 +36,7 @@ class UpdateGeneralSettingsRequest extends FormRequest
             'late_cancellation_fee' => ['sometimes', 'numeric', 'min:0', 'max:1000000'],
             'deposits_refundable' => ['sometimes', 'boolean'],
             'reminder_enabled' => ['sometimes', 'boolean'],
+            'reminder_hours_before' => ['sometimes', 'integer', 'between:1,168'],
             'reminder_message_template' => ['sometimes', 'string', 'max:1000'],
             'business_hours' => ['nullable', 'array'],
             'business_hours.*.open' => ['required_with:business_hours', 'regex:/^\d{2}:\d{2}$/'],
