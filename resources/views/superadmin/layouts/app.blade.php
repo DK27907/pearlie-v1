@@ -16,6 +16,7 @@
             <a href="{{ route('superadmin.dashboard') }}" class="text-lg font-bold tracking-tight text-[#0a2f44]">MediDesk AI</a>
             <div class="flex items-center gap-4">
                 <a href="{{ route('superadmin.hospitals.index') }}" class="text-sm font-semibold text-slate-700 hover:text-[#1a5276]">Hospitals</a>
+                <a href="{{ route('superadmin.users.index') }}" class="text-sm font-semibold text-slate-700 hover:text-[#1a5276]">Users</a>
                 @auth
                     <span class="hidden text-sm text-slate-500 sm:inline">{{ auth()->user()->name }}</span>
                     <form method="POST" action="{{ route('logout') }}">

@@ -33,16 +33,22 @@ class UserPolicy
 
     private function canManage(User $actor, User $target): bool
     {
-        return $this->canManageHospitalUsers($actor)
-            && $target->hospital_id !== null
-            && (int) $actor->hospital_id === (int) $target->hospital_id
+        if (! $this->canManageHospitalUsers($actor) || $target->hospital_id === null) {
+            return false;
+        }
+
+        if ($actor->isSuperAdmin()) {
+            return true;
+        }
+
+        return (int) $actor->hospital_id === (int) $target->hospital_id
             && ! $target->isSuperAdmin();
     }
 
     private function canManageHospitalUsers(User $user): bool
     {
         return $user->is_active
-            && $user->hospital_id !== null
-            && ($user->isSuperAdmin() || ($user->isAdmin() && ! $user->isSuperAdmin()));
+            && ($user->isSuperAdmin()
+                || ($user->hospital_id !== null && $user->isAdmin()));
     }
 }

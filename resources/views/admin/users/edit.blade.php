@@ -1,11 +1,14 @@
-@extends('layouts.app')
+@extends($layout ?? 'layouts.app')
 
 @section('content')
 <div class="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
     <div>
-        <a href="{{ route('admin.users.index') }}" class="text-sm font-semibold text-cyan-800 hover:underline">← Back to users</a>
+        <a href="{{ route($indexRoute ?? 'admin.users.index') }}" class="text-sm font-semibold text-cyan-800 hover:underline">← Back to users</a>
         <h1 class="mt-3 text-2xl font-bold tracking-tight text-slate-900">Edit user</h1>
         <p class="mt-1 text-sm text-slate-600">Update account details and hospital access.</p>
+        @if ($showHospital ?? false)
+            <p class="mt-1 text-sm text-slate-600">Hospital: {{ $user->hospital?->name ?? 'Unassigned' }}</p>
+        @endif
     </div>
 
     @if ($errors->any())
@@ -16,7 +19,7 @@
         </div>
     @endif
 
-    <form method="POST" action="{{ route('admin.users.update', $user) }}" class="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+    <form method="POST" action="{{ route($updateRoute ?? 'admin.users.update', $user) }}" class="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         @csrf
         @method('PUT')
 
@@ -36,6 +39,7 @@
                 <input id="phone" name="phone" type="tel" value="{{ old('phone', $user->phone) }}" maxlength="30" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-cyan-600 focus:ring-cyan-600">
                 @error('phone')<p class="mt-1 text-sm text-rose-700">{{ $message }}</p>@enderror
             </div>
+            @if (! $user->isSuperAdmin())
             <div>
                 <label for="role" class="mb-1 block text-sm font-medium text-slate-700">Role</label>
                 <select id="role" name="role" required class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-cyan-600 focus:ring-cyan-600">
@@ -45,6 +49,12 @@
                 </select>
                 @error('role')<p class="mt-1 text-sm text-rose-700">{{ $message }}</p>@enderror
             </div>
+            @else
+            <div>
+                <label class="mb-1 block text-sm font-medium text-slate-700">Role</label>
+                <p class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">Super admin (managed by the platform)</p>
+            </div>
+            @endif
         </div>
 
         <div class="space-y-3 border-t border-slate-100 pt-5">

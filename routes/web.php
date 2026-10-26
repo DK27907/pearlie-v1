@@ -27,6 +27,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
 use App\Http\Controllers\SuperAdmin\HospitalController as SuperAdminHospitalController;
+use App\Http\Controllers\SuperAdmin\UserController as SuperAdminUserController;
 use App\Http\Controllers\TenantHomeController;
 use Illuminate\Support\Facades\Route;
 
@@ -163,6 +164,12 @@ Route::middleware(['auth', 'superadmin', 'password.changed'])
         Route::get('/', fn () => redirect()->route('superadmin.dashboard'))->name('home');
         Route::get('/dashboard', [SuperAdminDashboardController::class, 'index'])->name('dashboard');
         Route::resource('hospitals', SuperAdminHospitalController::class);
+        Route::get('/users', [SuperAdminUserController::class, 'index'])->name('users.index');
+        Route::get('/users/{user}/edit', [SuperAdminUserController::class, 'edit'])->whereNumber('user')->name('users.edit');
+        Route::put('/users/{user}', [SuperAdminUserController::class, 'update'])->whereNumber('user')->name('users.update');
+        Route::patch('/users/{user}/activation', [SuperAdminUserController::class, 'updateActivation'])
+            ->whereNumber('user')
+            ->name('users.activation');
         Route::post('hospitals/{hospital}/suspend', [SuperAdminHospitalController::class, 'suspend'])
             ->name('hospitals.suspend');
         Route::post('hospitals/{hospital}/activate', [SuperAdminHospitalController::class, 'activate'])
