@@ -10,10 +10,12 @@ use App\Models\User;
 use App\Models\WebhookDelivery;
 use App\Models\WebhookSubscription;
 use App\Services\WebhookUrlGuard;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class IntegrationApiTest extends TestCase
@@ -311,6 +313,25 @@ class IntegrationApiTest extends TestCase
         $this->assertSame(1, $delivery->attempts);
         $this->assertSame(503, $delivery->http_status);
         $this->assertNotNull($delivery->next_attempt_at);
+    }
+
+    public function test_migration_repairs_missing_index_on_an_existing_webhook_delivery_table(): void
+    {
+        Schema::table('webhook_deliveries', function (Blueprint $table): void {
+            $table->dropIndex('webhook_deliveries_tenant_lookup');
+        });
+
+        $migration = require database_path('migrations/2026_10_25_213134_create_tenant_integration_tables.php');
+        $migration->up();
+
+        $this->assertTrue(Schema::hasIndex(
+            'webhook_deliveries',
+            ['hospital_id', 'webhook_subscription_id', 'created_at'],
+        ));
+        $this->assertContains(
+            'webhook_deliveries_tenant_lookup',
+            Schema::getIndexListing('webhook_deliveries'),
+        );
     }
 
     private function createHospital(string $slug): Hospital
