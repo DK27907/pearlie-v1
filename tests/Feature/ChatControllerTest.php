@@ -11,6 +11,22 @@ class ChatControllerTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_chat_page_positions_user_messages_on_the_left(): void
+    {
+        $hospital = Hospital::factory()->create([
+            'slug' => 'left-aligned-chat',
+            'is_active' => true,
+            'subscription_status' => 'active',
+        ]);
+
+        $response = $this->get(route('tenant.chat.page', ['slug' => $hospital->slug]));
+
+        $response->assertOk()
+            ->assertSee('.message.user {', false)
+            ->assertSee('align-self: flex-start;', false)
+            ->assertSee('border-bottom-left-radius: 4px;', false);
+    }
+
     public function test_messages_endpoint_returns_only_the_current_hospital_and_chat_session(): void
     {
         $hospital = Hospital::factory()->create([
