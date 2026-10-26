@@ -41,6 +41,21 @@ class SettingsPageTest extends TestCase
             ->assertSee('No payment required');
     }
 
+    public function test_reminder_preview_script_uses_the_content_security_policy_nonce(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $admin = $this->createAdmin($hospital);
+
+        $response = $this->actingAs($admin)->get(route('admin.integration-settings.edit'));
+
+        $policy = $response->headers->get('Content-Security-Policy');
+        preg_match("/script-src[^;]*'nonce-([^']+)'/", (string) $policy, $matches);
+
+        $this->assertArrayHasKey(1, $matches);
+        $response->assertSee('<script nonce="'.$matches[1].'">', false)
+            ->assertSee('const reminderSamples =', false);
+    }
+
     public function test_branding_tab_does_not_decrypt_unrelated_integration_credentials(): void
     {
         $hospital = Hospital::factory()->create();

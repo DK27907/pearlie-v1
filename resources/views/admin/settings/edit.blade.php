@@ -201,7 +201,7 @@
                     @else
                         <p class="text-xs text-slate-500">A live test send is available after configuring SMS delivery and adding a phone number to your admin account.</p>
                     @endif
-                    <script>
+                    <script nonce="{{ Vite::cspNonce() }}">
                         const reminderTemplate = document.getElementById('reminder-message-template');
                         const reminderPreview = document.getElementById('reminder-message-preview');
                         const reminderSamples = {{ \Illuminate\Support\Js::from([
