@@ -13,9 +13,12 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Throwable;
 
 class WalkInBookingController extends Controller
 {
@@ -115,7 +118,52 @@ class WalkInBookingController extends Controller
             ]);
         }
 
-        $appointment = $bookingChat->createBookingFromData($hospital, $validated);
+        $walkInSessionId = 'walk-in:'.Str::uuid();
+
+        try {
+            $appointment = $bookingChat->createBookingFromData($hospital, [
+                ...$validated,
+                'session_id' => $walkInSessionId,
+            ]);
+        } catch (Throwable $exception) {
+            $appointment = DB::transaction(function () use ($hospital, $walkInSessionId): ?AppointmentRequest {
+                $appointment = AppointmentRequest::query()
+                    ->where('hospital_id', $hospital->id)
+                    ->where('session_id', $walkInSessionId)
+                    ->where('booking_source', 'walk-in')
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $appointment
+                    || $appointment->payment_method !== Hospital::BOOKING_PAYMENT_MODE_MPESA
+                    || $appointment->payment_status !== 'pending'
+                    || $appointment->mpesaPayment()->exists()
+                ) {
+                    return null;
+                }
+
+                $paymentNote = 'M-Pesa STK failed; downgraded to cash at counter';
+                $existingNotes = trim((string) $appointment->payment_notes);
+                $appointment->forceFill([
+                    'payment_status' => 'pending',
+                    'payment_method' => Hospital::BOOKING_PAYMENT_MODE_CASH,
+                    'payment_due_at' => 'at_hospital',
+                    'payment_notes' => $existingNotes === ''
+                        ? $paymentNote
+                        : $existingNotes.PHP_EOL.$paymentNote,
+                ])->save();
+
+                return $appointment;
+            });
+
+            if (! $appointment) {
+                throw $exception;
+            }
+
+            return redirect()
+                ->route('admin.walk-in.confirmation', $appointment)
+                ->with('warning', 'M-Pesa prompt could not be sent. Patient can pay at the counter.');
+        }
 
         return redirect()->route('admin.walk-in.confirmation', $appointment);
     }

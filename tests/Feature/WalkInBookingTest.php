@@ -15,6 +15,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Mockery;
+use RuntimeException;
 use Tests\TestCase;
 
 class WalkInBookingTest extends TestCase
@@ -143,6 +144,184 @@ class WalkInBookingTest extends TestCase
             ->assertSee('09:00')
             ->assertSee('Complete')
             ->assertSee('No-show');
+    }
+
+    public function test_doctor_can_mark_cash_walk_in_as_no_show(): void
+    {
+        [$hospital, $admin, $doctor, $service, $date] = $this->bookingContext(paymentMode: 'cash');
+        Storage::fake();
+        $this->actingAs($admin)
+            ->postJson(route('admin.walk-in.store'), [
+                'service_id' => $service->id,
+                'doctor_id' => $doctor->id,
+                'date' => $date,
+                'time' => '09:00',
+                'patient_name' => 'Cash No-Show Walk-In',
+                'phone' => '0748249882',
+            ])
+            ->assertRedirect();
+        $appointment = AppointmentRequest::query()->firstOrFail();
+
+        $this->actingAs($doctor)
+            ->get(route('doctor.dashboard'))
+            ->assertOk()
+            ->assertSee('No-show');
+        $this->get(route('doctor.appointments.show', $appointment))
+            ->assertOk()
+            ->assertSee('Mark No-Show');
+
+        $this->post(route('doctor.appointments.no-show', $appointment))
+            ->assertRedirect(route('doctor.appointments.show', $appointment->id));
+
+        $this->assertDatabaseHas('appointment_requests', [
+            'id' => $appointment->id,
+            'hospital_id' => $hospital->id,
+            'status' => AppointmentRequest::STATUS_NO_SHOW,
+            'payment_status' => 'pending',
+        ]);
+    }
+
+    public function test_doctor_can_mark_not_required_walk_in_as_no_show(): void
+    {
+        [$hospital, $admin, $doctor, $service, $date] = $this->bookingContext(paymentMode: 'none');
+        Storage::fake();
+        $this->actingAs($admin)
+            ->postJson(route('admin.walk-in.store'), [
+                'service_id' => $service->id,
+                'doctor_id' => $doctor->id,
+                'date' => $date,
+                'time' => '09:00',
+                'patient_name' => 'No-Payment No-Show Walk-In',
+                'phone' => '0748249882',
+            ])
+            ->assertRedirect();
+        $appointment = AppointmentRequest::query()->firstOrFail();
+
+        $this->actingAs($doctor)
+            ->get(route('doctor.dashboard'))
+            ->assertOk()
+            ->assertSee('No-show');
+        $this->get(route('doctor.appointments.show', $appointment))
+            ->assertOk()
+            ->assertSee('Mark No-Show');
+
+        $this->post(route('doctor.appointments.no-show', $appointment))
+            ->assertRedirect(route('doctor.appointments.show', $appointment->id));
+
+        $this->assertDatabaseHas('appointment_requests', [
+            'id' => $appointment->id,
+            'hospital_id' => $hospital->id,
+            'status' => AppointmentRequest::STATUS_NO_SHOW,
+            'payment_status' => 'not_required',
+        ]);
+    }
+
+    public function test_doctor_cannot_mark_unpaid_mpesa_walk_in_as_no_show_while_stk_is_pending(): void
+    {
+        [, $admin, $doctor, $service, $date] = $this->bookingContext(paymentMode: 'mpesa');
+        $this->mock(MpesaService::class)
+            ->shouldReceive('initiateStkPush')
+            ->once()
+            ->andReturn([
+                'success' => true,
+                'payment_id' => 1,
+                'checkout_request_id' => 'pending-no-show-checkout',
+                'message' => 'Prompt sent.',
+            ]);
+        $this->actingAs($admin)
+            ->postJson(route('admin.walk-in.store'), [
+                'service_id' => $service->id,
+                'doctor_id' => $doctor->id,
+                'date' => $date,
+                'time' => '09:00',
+                'patient_name' => 'Pending M-Pesa Walk-In',
+                'phone' => '0748249882',
+            ])
+            ->assertRedirect();
+        $appointment = AppointmentRequest::query()->firstOrFail();
+
+        $this->actingAs($doctor)
+            ->get(route('doctor.dashboard'))
+            ->assertOk()
+            ->assertDontSee('No-show');
+
+        $this->post(route('doctor.appointments.no-show', $appointment))
+            ->assertUnprocessable();
+
+        $this->assertDatabaseHas('appointment_requests', [
+            'id' => $appointment->id,
+            'status' => AppointmentRequest::STATUS_CONFIRMED,
+            'payment_status' => 'pending',
+            'payment_method' => 'mpesa',
+        ]);
+    }
+
+    public function test_walk_in_mpesa_failure_falls_back_to_cash(): void
+    {
+        [$hospital, $admin, $doctor, $service, $date] = $this->bookingContext(paymentMode: 'mpesa');
+        $this->mock(MpesaService::class)
+            ->shouldReceive('initiateStkPush')
+            ->once()
+            ->andThrow(new RuntimeException('STK initiation failed.'));
+
+        $response = $this->actingAs($admin)->post(route('admin.walk-in.store'), [
+            'service_id' => $service->id,
+            'doctor_id' => $doctor->id,
+            'date' => $date,
+            'time' => '09:00',
+            'patient_name' => 'M-Pesa Fallback Walk-In',
+            'phone' => '0748249882',
+        ]);
+
+        $appointment = AppointmentRequest::query()->firstOrFail();
+        $response->assertRedirect(route('admin.walk-in.confirmation', $appointment))
+            ->assertSessionHas('warning', 'M-Pesa prompt could not be sent. Patient can pay at the counter.');
+        $this->assertDatabaseHas('appointment_requests', [
+            'id' => $appointment->id,
+            'hospital_id' => $hospital->id,
+            'status' => AppointmentRequest::STATUS_CONFIRMED,
+            'payment_status' => 'pending',
+            'payment_method' => 'cash',
+            'payment_due_at' => 'at_hospital',
+            'payment_notes' => 'M-Pesa STK failed; downgraded to cash at counter',
+        ]);
+        $this->assertDatabaseCount('mpesa_payments', 0);
+
+        $this->get(route('admin.walk-in.confirmation', $appointment))
+            ->assertSee('M-Pesa prompt could not be sent. Patient can pay at the counter.');
+    }
+
+    public function test_walk_in_mpesa_override_failure_falls_back_to_cash(): void
+    {
+        [$hospital, $admin, $doctor, $service, $date] = $this->bookingContext(paymentMode: 'mpesa');
+        $this->mock(MpesaService::class)
+            ->shouldReceive('initiateStkPush')
+            ->once()
+            ->andThrow(new RuntimeException('STK initiation failed.'));
+
+        $response = $this->actingAs($admin)->post(route('admin.walk-in.store'), [
+            'service_id' => $service->id,
+            'doctor_id' => $doctor->id,
+            'date' => $date,
+            'time' => '09:00',
+            'patient_name' => 'Overridden M-Pesa Fallback Walk-In',
+            'phone' => '0748249882',
+            'payment_override' => 'mpesa',
+        ]);
+
+        $appointment = AppointmentRequest::query()->firstOrFail();
+        $response->assertRedirect(route('admin.walk-in.confirmation', $appointment))
+            ->assertSessionHas('warning', 'M-Pesa prompt could not be sent. Patient can pay at the counter.');
+        $this->assertDatabaseHas('appointment_requests', [
+            'id' => $appointment->id,
+            'hospital_id' => $hospital->id,
+            'status' => AppointmentRequest::STATUS_CONFIRMED,
+            'payment_status' => 'pending',
+            'payment_method' => 'cash',
+            'payment_due_at' => 'at_hospital',
+            'payment_notes' => 'M-Pesa STK failed; downgraded to cash at counter',
+        ]);
+        $this->assertDatabaseCount('mpesa_payments', 0);
     }
 
     public function test_walk_in_payment_override_none_on_mpesa_hospital_creates_no_mpesa_intent(): void

@@ -76,7 +76,7 @@
                                         @csrf
                                         <button type="submit" class="text-sm font-semibold text-emerald-700 hover:text-emerald-800">Complete</button>
                                     </form>
-                                    @if ($appointment->payment_status === 'paid')
+                                    @if ($appointment->canBeMarkedAsNoShow())
                                         <form method="POST" action="{{ route('doctor.appointments.no-show', $appointment->id) }}">
                                             @csrf
                                             <button type="submit" class="text-sm font-semibold text-rose-700 hover:text-rose-800">No-show</button>

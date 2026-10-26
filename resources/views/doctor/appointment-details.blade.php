@@ -92,7 +92,7 @@
                         <button type="submit" class="w-full rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-800">Mark completed</button>
                     </form>
                 @endif
-                @if ($appointment->status === 'confirmed' && $appointment->payment_status === 'paid')
+                @if ($appointment->canBeMarkedAsNoShow())
                     <form method="POST" action="{{ route('doctor.appointments.no-show', $appointment->id) }}">
                         @csrf
                         <label class="mb-2 block text-xs font-medium text-slate-600" for="no-show-reason">Reason (optional)</label>

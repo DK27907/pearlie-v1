@@ -109,6 +109,20 @@ class AppointmentRequest extends Model
         return $this->payment_status === 'pending';
     }
 
+    public function canBeMarkedAsNoShow(): bool
+    {
+        if ($this->status !== self::STATUS_CONFIRMED
+            || ($this->payment_method === 'mpesa' && $this->payment_status === 'pending')
+        ) {
+            return false;
+        }
+
+        return $this->payment_status === 'paid'
+            || $this->payment_status === 'not_required'
+            || $this->payment_method === 'cash'
+            || $this->hospital?->bookingPaymentMode() === Hospital::BOOKING_PAYMENT_MODE_CASH;
+    }
+
     public function doctor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'doctor_id');

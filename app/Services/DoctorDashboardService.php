@@ -47,7 +47,7 @@ class DoctorDashboardService
                     ->limit(8)
                     ->get(),
                 'today_appointments' => (clone $appointments)
-                    ->with('service')
+                    ->with(['hospital', 'service'])
                     ->whereDate('preferred_date', $today)
                     ->orderBy('slot_start_time')
                     ->orderBy('id')
@@ -122,7 +122,9 @@ class DoctorDashboardService
     public function ownedAppointmentOrFail(User $doctor, int $appointmentId): AppointmentRequest
     {
         try {
-            return $doctor->doctorAppointments()->findOrFail($appointmentId);
+            return $doctor->doctorAppointments()
+                ->with('hospital')
+                ->findOrFail($appointmentId);
         } catch (Throwable $exception) {
             Log::error('Unable to find an appointment owned by the doctor.', [
                 'doctor_id' => $doctor->id,
