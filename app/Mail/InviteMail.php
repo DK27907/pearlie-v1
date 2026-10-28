@@ -31,7 +31,7 @@ class InviteMail extends Mailable
      */
     public function build(): self
     {
-        return $this->subject('You are invited to MediDesk AI')
+        return $this->subject('You are invited to MediDesk Assistant')
             ->view('emails.invite')
             ->with([
                 'token' => $this->token,

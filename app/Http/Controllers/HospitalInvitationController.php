@@ -81,7 +81,7 @@ class HospitalInvitationController extends Controller
         $request->session()->regenerate();
         event(new Registered($user));
 
-        return redirect()->route('hospital.onboarding')->with('status', 'Welcome. Complete your hospital setup to launch MediDesk AI.');
+        return redirect()->route('hospital.onboarding')->with('status', 'Welcome. Complete your hospital setup to launch MediDesk Assistant.');
     }
 
     private function findInvite(string $slug, string $token): Invite

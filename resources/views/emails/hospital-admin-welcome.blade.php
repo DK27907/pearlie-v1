@@ -12,7 +12,7 @@
                 <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fff;border-radius:16px">
                     <tr>
                         <td style="padding:32px">
-                            <p style="font-size:12px;font-weight:bold;letter-spacing:2px;color:#4f46e5">MEDIDESK AI</p>
+                            <p style="font-size:12px;font-weight:bold;letter-spacing:2px;color:#4f46e5">MEDIDESK ASSISTANT</p>
                             <h1 style="font-size:24px">Your {{ $hospital->name }} admin account is ready</h1>
                             <p>Hello {{ $admin->name }},</p>
                             <p>Your administrator account for {{ $hospital->name }} is ready.</p>

@@ -1,4 +1,4 @@
-# MediDesk AI — Facility Demo Guide
+# MediDesk Assistant — Facility Demo Guide
 
 Use this guide for a local or isolated facility demo. It is not a production deployment procedure.
 

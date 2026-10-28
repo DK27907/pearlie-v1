@@ -1,6 +1,8 @@
-# MediDesk AI
+# MediDesk Assistant
 
-MediDesk AI is a multi-tenant hospital platform. Each hospital has isolated users, knowledge, conversations, appointments, availability, payments, and escalation records. Pearl Hospital's existing Pearlie assistant remains available as the default tenant experience.
+MediDesk Assistant is a multi-tenant hospital platform. Each hospital has isolated users, knowledge, conversations, appointments, availability, payments, and escalation records. Pearl Hospital's existing Pearlie assistant remains available as the default tenant experience.
+
+The platform logo uses a locally hosted healthcare portrait from [Unsplash](https://unsplash.com/license), used under the Unsplash License.
 
 ## Requirements
 

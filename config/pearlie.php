@@ -5,7 +5,7 @@ $hospitalEmail = env('PEARLIE_HOSPITAL_EMAIL', env('PEARL_HOSPITAL_EMAIL'));
 return [
     'default_hospital_slug' => env('PEARLIE_DEFAULT_HOSPITAL', 'pearl'),
     'marketing' => [
-        'name' => env('MEDIDESK_NAME', 'MediDesk AI'),
+        'name' => env('MEDIDESK_NAME', 'MediDesk Assistant'),
         'tagline' => env('MEDIDESK_TAGLINE', 'The smarter way to care for your community'),
         'sales_email' => env('MEDIDESK_SALES_EMAIL', 'sales@axiomforge.co.ke'),
         'sales_whatsapp' => env('MEDIDESK_SALES_WHATSAPP'),
@@ -14,7 +14,7 @@ return [
     'max_history' => (int) env('PEARLIE_MAX_HISTORY', 10),
 
     'hospital' => [
-        'name' => env('PEARLIE_HOSPITAL_NAME', env('PEARL_HOSPITAL_NAME', 'MediDesk AI')),
+        'name' => env('PEARLIE_HOSPITAL_NAME', env('PEARL_HOSPITAL_NAME', 'MediDesk Assistant')),
         'location' => env('PEARLIE_HOSPITAL_LOCATION', env('PEARL_HOSPITAL_ADDRESS', '')),
         'email' => $hospitalEmail,
         'website' => env('PEARLIE_HOSPITAL_WEBSITE', ''),

@@ -117,7 +117,7 @@ class HospitalChatbotNameTest extends TestCase
 
         $this->actingAs($superadmin)
             ->get(route('superadmin.dashboard'))
-            ->assertSee('MediDesk AI')
+            ->assertSee('MediDesk Assistant')
             ->assertDontSee('Pearlie');
     }
 

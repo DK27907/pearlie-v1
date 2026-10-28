@@ -144,7 +144,7 @@ class SuperAdminLifecycleTest extends TestCase
 
         $this->get(route('home'))
             ->assertOk()
-            ->assertSee('MediDesk AI')
+            ->assertSee('MediDesk Assistant')
             ->assertDontSee('Test Clinic')
             ->assertDontSee('42 Clinic Road')
             ->assertDontSee('0700111222');

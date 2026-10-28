@@ -82,14 +82,14 @@ class HospitalBrandingTest extends TestCase
         $this->actingAs($superadmin)
             ->get(route('superadmin.hospitals.index'))
             ->assertOk()
-            ->assertSee('MediDesk AI')
+            ->assertSee('MediDesk Assistant')
             ->assertDontSee('Custom Hospital X');
     }
 
     public function test_login_page_uses_platform_branding_with_no_tenant_context(): void
     {
         $this->get(route('login'))
-            ->assertSee('MediDesk AI')
+            ->assertSee('MediDesk Assistant')
             ->assertDontSee('Pearl Hospital')
             ->assertDontSee('Vin Plaza')
             ->assertDontSee('0707799114');
@@ -98,7 +98,7 @@ class HospitalBrandingTest extends TestCase
     public function test_register_page_uses_platform_branding_with_no_tenant_context(): void
     {
         $this->get(route('register'))
-            ->assertSee('MediDesk AI')
+            ->assertSee('MediDesk Assistant')
             ->assertDontSee('Pearl Hospital')
             ->assertDontSee('Vin Plaza')
             ->assertDontSee('0707799114');
@@ -107,7 +107,7 @@ class HospitalBrandingTest extends TestCase
     public function test_forgot_password_page_uses_platform_branding_with_no_tenant_context(): void
     {
         $this->get(route('password.request'))
-            ->assertSee('MediDesk AI')
+            ->assertSee('MediDesk Assistant')
             ->assertDontSee('Pearl Hospital')
             ->assertDontSee('Vin Plaza')
             ->assertDontSee('0707799114');
@@ -124,8 +124,9 @@ class HospitalBrandingTest extends TestCase
         $this->actingAs($superadmin)
             ->get(route('superadmin.dashboard'))
             ->assertOk()
-            ->assertSee('MediDesk AI')
-            ->assertSee('MediDesk AI platform administration')
+            ->assertSee('MediDesk Assistant')
+            ->assertSee('MediDesk Assistant platform administration')
+            ->assertSee(asset('images/medidesk-assistant-logo.jpg'), false)
             ->assertDontSee((string) $pearl->address)
             ->assertDontSee((string) $pearl->phone)
             ->assertDontSee((string) $pearl->email);
@@ -142,6 +143,13 @@ class HospitalBrandingTest extends TestCase
             ->assertDontSee((string) $pearl->address)
             ->assertDontSee((string) $pearl->phone)
             ->assertDontSee((string) $pearl->email);
+    }
+
+    public function test_platform_branding_uses_the_local_healthcare_portrait_logo(): void
+    {
+        $this->get(route('login'))
+            ->assertOk()
+            ->assertSee(asset('images/medidesk-assistant-logo.jpg'), false);
     }
 
     public function test_register_page_uses_platform_branding(): void
@@ -241,13 +249,13 @@ class HospitalBrandingTest extends TestCase
             ->assertOk()
             ->assertSee('Pearl Hospital')
             ->assertDontSee('Demo Hospital')
-            ->assertDontSee('<h1 class="mt-3 text-xl font-bold text-slate-900">MediDesk AI</h1>', false);
+            ->assertDontSee('<h1 class="mt-3 text-xl font-bold text-slate-900">MediDesk Assistant</h1>', false);
 
         $this->get(route('tenant.login', ['hospital' => $demo->slug]))
             ->assertOk()
             ->assertSee('Demo Hospital')
             ->assertDontSee('Pearl Hospital')
-            ->assertDontSee('<h1 class="mt-3 text-xl font-bold text-slate-900">MediDesk AI</h1>', false);
+            ->assertDontSee('<h1 class="mt-3 text-xl font-bold text-slate-900">MediDesk Assistant</h1>', false);
     }
 
     public function test_tenant_login_shows_configured_logo_contact_details_and_initial_placeholder(): void
@@ -323,7 +331,7 @@ class HospitalBrandingTest extends TestCase
 
         $this->get('/login')
             ->assertOk()
-            ->assertSee('MediDesk AI')
+            ->assertSee('MediDesk Assistant')
             ->assertSee('AI-powered healthcare operations')
             ->assertSee('Need help?')
             ->assertSee('v1.0')

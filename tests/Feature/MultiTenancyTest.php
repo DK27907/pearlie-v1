@@ -184,7 +184,7 @@ class MultiTenancyTest extends TestCase
 
         $this->get(route('home', ['hospital' => $hospital->slug]))
             ->assertOk()
-            ->assertSee('MediDesk AI')
+            ->assertSee('MediDesk Assistant')
             ->assertDontSee($hospital->name)
             ->assertDontSee('Tenant imaging services.')
             ->assertDontSee('Root Tenant Doctor');
@@ -219,7 +219,7 @@ class MultiTenancyTest extends TestCase
             ->assertSee('data-reset-url="'.route('tenant.chat.reset', 'chat-alias').'"', false)
             ->assertSee('href="'.route('tenant.home', 'chat-alias').'"', false)
             ->assertSee('data-welcome-en="👋 Hello! I\'m Pearlie, Chat Alias\'s healthcare assistant.', false)
-            ->assertSee('<title>Chat with Chat Alias | MediDesk AI</title>', false)
+            ->assertSee('<title>Chat with Chat Alias | MediDesk Assistant</title>', false)
             ->assertSee('<meta name="csrf-token"', false);
     }
 

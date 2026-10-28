@@ -23,7 +23,7 @@ class DoctorInviteMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: "You're invited to the MediDesk AI Doctor Dashboard",
+            subject: "You're invited to the MediDesk Assistant Doctor Dashboard",
         );
     }
 

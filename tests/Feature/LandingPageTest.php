@@ -21,7 +21,7 @@ class LandingPageTest extends TestCase
     {
         $this->get('/')
             ->assertOk()
-            ->assertSee('MediDesk AI')
+            ->assertSee('MediDesk Assistant')
             ->assertSee('How it works')
             ->assertSee('Pricing')
             ->assertSee('Frequently asked questions');
@@ -38,6 +38,7 @@ class LandingPageTest extends TestCase
         $response->assertSee('Always here for patients');
         $response->assertSee('How can I help you today?');
         $response->assertSee('Image: Getty Images');
+        $response->assertSee(asset('images/medidesk-assistant-logo.jpg'), false);
         $response->assertSee("The front desk can't keep up", false);
         $response->assertSee('Missed calls');
         $response->assertSee('After-hours gaps');

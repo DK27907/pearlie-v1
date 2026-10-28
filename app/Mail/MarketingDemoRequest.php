@@ -20,7 +20,7 @@ class MarketingDemoRequest extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'New MediDesk AI demo request',
+            subject: 'New MediDesk Assistant demo request',
         );
     }
 

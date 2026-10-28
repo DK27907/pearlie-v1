@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>MediDesk AI escalation notification</title>
+    <title>MediDesk Assistant escalation notification</title>
 </head>
 <body>
-    <h2>New MediDesk AI escalation (#{{ $escalation->id }})</h2>
+    <h2>New MediDesk Assistant escalation (#{{ $escalation->id }})</h2>
     <p><strong>Session ID:</strong> {{ $escalation->session_id }}</p>
     <p><strong>Submitted:</strong> {{ $escalation->created_at }}</p>
 
@@ -25,6 +25,6 @@
     <p>Please follow up with the patient as soon as possible.</p>
     <p><a href="{{ $meta['url'] ?? route('admin.escalations.show', $escalation->id) }}">Open escalation #{{ $escalation->id }}</a></p>
 
-    <p>— MediDesk AI Health Assistant</p>
+    <p>— MediDesk Assistant Health Assistant</p>
 </body>
 </html>

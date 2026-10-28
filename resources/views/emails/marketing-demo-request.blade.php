@@ -1,4 +1,4 @@
-<h1>New MediDesk AI demo request</h1>
+<h1>New MediDesk Assistant demo request</h1>
 
 <p><strong>Name:</strong> {{ $request['name'] }}</p>
 <p><strong>Work email:</strong> {{ $request['email'] }}</p>

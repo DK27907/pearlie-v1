@@ -1,6 +1,6 @@
 <p>Hello,</p>
 
-<p>You have been invited to join {{ $hospitalName }} on MediDesk AI. Use the following invite token when registering (or click the link to register):</p>
+<p>You have been invited to join {{ $hospitalName }} on MediDesk Assistant. Use the following invite token when registering (or click the link to register):</p>
 
 <p><strong>{{ $token }}</strong></p>
 
@@ -8,4 +8,4 @@
 
 <p>If you did not expect this invitation, ignore this message.</p>
 
-<p>— MediDesk AI</p>
+<p>— MediDesk Assistant</p>

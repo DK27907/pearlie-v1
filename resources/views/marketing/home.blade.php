@@ -1,17 +1,15 @@
 @extends('layouts.marketing')
 
-@section('title', 'MediDesk AI — Your Hospital\'s 24/7 Digital Front Desk')
-@section('meta_description', 'MediDesk AI is the 24/7 digital front desk for hospitals. Answer patient questions, manage appointments, collect M-Pesa deposits, and connect patients with staff.')
+@section('title', 'MediDesk Assistant — Your Hospital\'s 24/7 Digital Front Desk')
+@section('meta_description', 'MediDesk Assistant is the 24/7 digital front desk for hospitals. Answer patient questions, manage appointments, collect M-Pesa deposits, and connect patients with staff.')
 
 @section('content')
     <header class="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur">
         <nav aria-label="Main navigation" class="mx-auto flex min-h-18 max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] items-center justify-between gap-5 px-4 py-3 sm:px-6 lg:px-8">
             <a href="#home" class="flex shrink-0 items-center gap-3">
-                <span class="grid h-11 w-11 place-items-center rounded-xl bg-[#0a2f44] text-white" aria-hidden="true">
-                    <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v18m-9-9h18M5.6 5.6l12.8 12.8m0-12.8L5.6 18.4"/></svg>
-                </span>
+                <img class="h-11 w-11 rounded-xl object-cover" src="{{ asset('images/medidesk-assistant-logo.jpg') }}" alt="">
                 <span>
-                    <span class="block text-lg font-extrabold leading-tight tracking-tight text-[#0a2f44]">MediDesk AI</span>
+                    <span class="block text-lg font-extrabold leading-tight tracking-tight text-[#0a2f44]">MediDesk Assistant</span>
                     <span class="block text-[11px] font-medium text-slate-500">by AxiomForge</span>
                 </span>
             </a>
@@ -60,7 +58,7 @@
                         </div>
                         <div class="absolute inset-x-3 bottom-3 flex items-end justify-between gap-3 sm:inset-x-5 sm:bottom-5">
                             <div class="max-w-[75%] rounded-2xl rounded-bl-md border border-white/70 bg-white/95 px-3 py-2.5 shadow-xl backdrop-blur-sm sm:px-4 sm:py-3">
-                                <p class="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 sm:text-xs">MediDesk AI</p>
+                                <p class="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 sm:text-xs">MediDesk Assistant</p>
                                 <p class="mt-1 text-xs font-semibold leading-5 text-slate-800 sm:text-sm">How can I help you today?</p>
                             </div>
                             <span class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#1a5276] text-xl text-white shadow-lg sm:h-12 sm:w-12" aria-hidden="true">✦</span>
@@ -82,7 +80,7 @@
                         <span class="h-2 w-2 rounded-full bg-emerald-500"></span> Built for Kenyan healthcare
                     </p>
                     <h1 class="mt-5 text-4xl font-extrabold leading-[1.08] tracking-tight text-[#0a2f44] sm:text-5xl lg:text-6xl">Your Hospital's 24/7 <span class="text-[#1a5276]">Digital Front Desk</span></h1>
-                    <p class="mt-5 max-w-xl text-lg leading-8 text-slate-600">MediDesk AI answers patient questions, books appointments, takes M-Pesa deposits, and connects patients to your staff — through WhatsApp and web chat, in English and Kiswahili.</p>
+                    <p class="mt-5 max-w-xl text-lg leading-8 text-slate-600">MediDesk Assistant answers patient questions, books appointments, takes M-Pesa deposits, and connects patients to your staff — through WhatsApp and web chat, in English and Kiswahili.</p>
                     <div class="mt-7 flex flex-col gap-3 sm:flex-row">
                         <a href="#demo" class="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1a5276] px-6 py-3.5 text-base font-bold text-white shadow-lg shadow-[#1a5276]/20 transition hover:-translate-y-0.5 hover:bg-[#0a2f44]">Book a Free Demo <span aria-hidden="true">→</span></a>
                         <a href="#how-it-works" class="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white/90 px-6 py-3.5 text-base font-bold text-[#0a2f44] transition hover:border-[#1a5276] hover:bg-white">See How It Works</a>
@@ -180,7 +178,7 @@
                             @if ($plan === 'Professional')<span class="mb-3 w-fit rounded-full bg-cyan-50 px-3 py-1 text-xs font-extrabold uppercase tracking-wide text-[#1a5276]">Popular</span>@endif
                             <h3 class="text-lg font-bold text-[#0a2f44]">{{ $plan }}</h3><p class="mt-4 text-3xl font-extrabold tracking-tight text-[#0a2f44]">{{ $setup }}<span class="text-base font-semibold text-slate-500"> setup</span></p><p class="mt-2 text-sm text-slate-600">then <strong>{{ $monthly }}/mo</strong></p>
                             <ul class="mt-6 grid gap-3 text-sm text-slate-600">@foreach ($items as $item)<li class="flex gap-2"><span class="font-bold text-emerald-600" aria-hidden="true">✓</span><span>{{ $item }}</span></li>@endforeach</ul>
-                            <a href="mailto:sales@axiomforge.co.ke?subject={{ rawurlencode('MediDesk AI '.$plan.' plan') }}" class="mt-7 inline-flex justify-center rounded-xl {{ $plan === 'Professional' ? 'bg-[#1a5276] text-white hover:bg-[#0a2f44]' : 'border border-slate-300 text-[#0a2f44] hover:bg-slate-50' }} px-4 py-3 text-sm font-bold transition">Talk to our team</a>
+                            <a href="mailto:sales@axiomforge.co.ke?subject={{ rawurlencode('MediDesk Assistant '.$plan.' plan') }}" class="mt-7 inline-flex justify-center rounded-xl {{ $plan === 'Professional' ? 'bg-[#1a5276] text-white hover:bg-[#0a2f44]' : 'border border-slate-300 text-[#0a2f44] hover:bg-slate-50' }} px-4 py-3 text-sm font-bold transition">Talk to our team</a>
                         </article>
                     @endforeach
                 </div>
@@ -200,12 +198,12 @@
             <div class="text-center"><p class="text-sm font-extrabold uppercase tracking-[.18em] text-[#1a5276]">Questions</p><h2 class="mt-3 text-3xl font-extrabold tracking-tight text-[#0a2f44] sm:text-4xl">Frequently asked questions</h2></div>
             <div class="mt-9 divide-y divide-slate-200 border-y border-slate-200">
                 @foreach ([
-                    ['Can MediDesk AI connect to our HMIS?', 'Integration options depend on your HMIS and available interfaces. We assess the technical requirements during onboarding before promising a connection.'],
+                    ['Can MediDesk Assistant connect to our HMIS?', 'Integration options depend on your HMIS and available interfaces. We assess the technical requirements during onboarding before promising a connection.'],
                     ['What technology do patients need?', 'Patients can use a web browser or a supported hospital WhatsApp Business account; they do not need to install a separate app.'],
                     ['Can a staff member take over a conversation?', 'Yes. The escalation queue gives authorized staff the conversation context and a way to respond.'],
                     ['How is hospital information protected?', 'Hospital records are tenant-scoped, and access to staff tools is role-restricted. Security requirements are reviewed with each hospital during implementation.'],
                     ['How long does setup take?', 'Setup depends on your hospital information, integrations, and staff workflows. We confirm a delivery plan during your demo.'],
-                    ['Can our hospital try MediDesk AI first?', 'Book a demo to walk through the patient and staff experiences and discuss a trial that fits your setup.'],
+                    ['Can our hospital try MediDesk Assistant first?', 'Book a demo to walk through the patient and staff experiences and discuss a trial that fits your setup.'],
                 ] as [$question, $answer])
                     <details class="group py-5"><summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-bold text-[#0a2f44]"><span>{{ $question }}</span><span class="text-xl text-[#1a5276] transition group-open:rotate-45" aria-hidden="true">+</span></summary><p class="mt-3 max-w-3xl leading-7 text-slate-600">{{ $answer }}</p></details>
                 @endforeach
@@ -262,10 +260,10 @@
 
     <footer class="bg-[#071f2d] text-slate-300">
         <div class="mx-auto grid max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] gap-10 px-4 py-12 sm:px-6 md:grid-cols-3 lg:px-8">
-            <div><a href="#home" class="text-xl font-extrabold text-white">MediDesk AI</a><p class="mt-2 text-sm text-slate-400">By AxiomForge Digital Solutions</p><p class="mt-4 max-w-sm text-sm leading-6 text-slate-400">A digital front desk for more accessible, connected hospital experiences.</p></div>
+            <div><a href="#home" class="text-xl font-extrabold text-white">MediDesk Assistant</a><p class="mt-2 text-sm text-slate-400">By AxiomForge Digital Solutions</p><p class="mt-4 max-w-sm text-sm leading-6 text-slate-400">A digital front desk for more accessible, connected hospital experiences.</p></div>
             <div><h2 class="text-sm font-bold uppercase tracking-wider text-white">Explore</h2><ul class="mt-4 grid gap-3 text-sm"><li><a class="hover:text-white" href="#features">Features</a></li><li><a class="hover:text-white" href="#how-it-works">How It Works</a></li><li><a class="hover:text-white" href="#demo">Demo</a></li><li><a class="hover:text-white" href="#pricing">Pricing</a></li><li><a class="hover:text-white" href="#faq">FAQ</a></li></ul></div>
             <div><h2 class="text-sm font-bold uppercase tracking-wider text-white">Talk to our team</h2><ul class="mt-4 grid gap-3 text-sm"><li><a class="hover:text-white" href="mailto:sales@axiomforge.co.ke">sales@axiomforge.co.ke</a></li>@if (filled(config('pearlie.marketing.sales_whatsapp')))<li><a class="hover:text-white" href="tel:{{ config('pearlie.marketing.sales_whatsapp') }}">{{ config('pearlie.marketing.sales_whatsapp') }}</a></li><li><a class="hover:text-white" href="https://wa.me/{{ preg_replace('/[^\\d]/', '', config('pearlie.marketing.sales_whatsapp')) }}">WhatsApp sales</a></li>@endif</ul></div>
         </div>
-        <div class="border-t border-white/10"><div class="mx-auto flex max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] flex-col gap-2 px-4 py-4 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8"><p>© {{ date('Y') }} MediDesk AI by AxiomForge Digital Solutions.</p><a class="hover:text-white" href="mailto:sales@axiomforge.co.ke">Contact sales</a></div></div>
+        <div class="border-t border-white/10"><div class="mx-auto flex max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] flex-col gap-2 px-4 py-4 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8"><p>© {{ date('Y') }} MediDesk Assistant by AxiomForge Digital Solutions.</p><a class="hover:text-white" href="mailto:sales@axiomforge.co.ke">Contact sales</a></div></div>
     </footer>
 @endsection

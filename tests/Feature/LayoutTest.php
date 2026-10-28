@@ -36,7 +36,7 @@ class LayoutTest extends TestCase
         $this->get(route('home'))
             ->assertOk()
             ->assertSee("Your Hospital's 24/7", false)
-            ->assertDontSee('aria-label="MediDesk AI home"', false);
+            ->assertDontSee('aria-label="MediDesk Assistant home"', false);
     }
 
     public function test_chat_page_has_a_main_landmark_and_level_one_heading(): void
@@ -91,7 +91,7 @@ class LayoutTest extends TestCase
             ->assertOk()
             ->assertSee($this->hospital->address)
             ->assertSee($this->hospital->phone)
-            ->assertSee('Powered by MediDesk AI');
+            ->assertSee('Powered by MediDesk Assistant');
     }
 
     public function test_tenant_footer_does_not_fall_back_to_another_hospitals_contacts(): void

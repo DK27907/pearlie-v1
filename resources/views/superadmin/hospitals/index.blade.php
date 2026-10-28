@@ -4,7 +4,7 @@
     <div class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] space-y-6 px-4 py-8 sm:px-6 lg:px-8">
         <div class="flex flex-wrap items-end justify-between gap-4">
             <div>
-                <p class="text-sm font-semibold uppercase tracking-widest text-indigo-700">MediDesk AI platform</p>
+                <p class="text-sm font-semibold uppercase tracking-widest text-indigo-700">MediDesk Assistant platform</p>
                 <h1 class="mt-2 text-3xl font-bold text-slate-900">Hospitals</h1>
                 <p class="mt-2 text-slate-600">Manage tenant accounts, subscriptions, and support access.</p>
             </div>

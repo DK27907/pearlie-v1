@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>MediDesk AI Doctor Dashboard invitation</title>
+    <title>MediDesk Assistant Doctor Dashboard invitation</title>
 </head>
 <body style="margin:0;background:#f1f5f9;color:#0f172a;font-family:Arial,sans-serif">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:32px 12px;background:#f1f5f9">
@@ -13,13 +13,13 @@
                     <tr>
                         <td style="padding:28px 32px;background:#082f49;color:#fff">
                             <div style="font-size:13px;font-weight:bold;letter-spacing:2px;color:#67e8f9">{{ mb_strtoupper(pearlie_config('hospital.name')) }}</div>
-                            <h1 style="margin:12px 0 0;font-size:24px">MediDesk AI Doctor Dashboard invitation</h1>
+                            <h1 style="margin:12px 0 0;font-size:24px">MediDesk Assistant Doctor Dashboard invitation</h1>
                         </td>
                     </tr>
                     <tr>
                         <td style="padding:32px">
                             <p style="font-size:16px">Hello {{ $doctor->name }},</p>
-                            <p style="font-size:15px;line-height:1.6;color:#334155">You have been invited to access your hospital’s MediDesk AI doctor workspace. Set a password to activate your account and manage your schedule and appointments.</p>
+                            <p style="font-size:15px;line-height:1.6;color:#334155">You have been invited to access your hospital’s MediDesk Assistant doctor workspace. Set a password to activate your account and manage your schedule and appointments.</p>
                             <p style="margin:28px 0">
                                 <a href="{{ $setupUrl }}" style="display:inline-block;padding:14px 22px;border-radius:8px;background:#0e7490;color:#fff;text-decoration:none;font-weight:bold">Set Up My Account</a>
                             </p>

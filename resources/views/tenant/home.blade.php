@@ -78,7 +78,7 @@
                     <div class="rounded-2xl border border-slate-200 p-5">
                         <div class="flex items-center justify-between border-b border-slate-200 pb-4">
                             <div>
-                                <p class="text-sm font-semibold text-slate-500">Today at {{ $hospital?->name ?? 'MediDesk AI' }}</p>
+                                <p class="text-sm font-semibold text-slate-500">Today at {{ $hospital?->name ?? 'MediDesk Assistant' }}</p>
                                 <p class="mt-1 text-2xl font-extrabold text-slate-900">24/7 Support</p>
                             </div>
                             <span class="rounded-full px-3 py-1 text-xs font-bold text-white" style="background: {{ $primary }};">Online</span>
@@ -259,7 +259,7 @@
         <div class="mx-auto flex max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] flex-col gap-3 px-4 py-6 text-sm text-slate-600 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
             <div>
                 <p class="font-bold text-slate-900">{{ $branding['footer_text'] }}</p>
-                <p class="text-xs">Powered by MediDesk AI · By AxiomForge Digital Solutions</p>
+                <p class="text-xs">Powered by MediDesk Assistant · By AxiomForge Digital Solutions</p>
                 <p>{{ $hospital->name }}@if ($hospital->phone) · {{ $hospital->phone }}@endif</p>
                 @if ($hospital->address)
                     <p>{{ $hospital->address }}</p>

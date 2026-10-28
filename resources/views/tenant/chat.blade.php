@@ -1,7 +1,7 @@
 @extends('layouts.tenant-chat')
 
 @php($branding = hospital_branding())
-@section('title', 'Chat with '.$branding['header_text'].' | MediDesk AI')
+@section('title', 'Chat with '.$branding['header_text'].' | MediDesk Assistant')
 
 @push('styles')
 <style>
@@ -435,7 +435,7 @@
             <span class="mx-1" aria-hidden="true">·</span>
             <span>{{ $branding['footer_text'] }}</span>
             <span class="mx-1" aria-hidden="true">·</span>
-            <span>Powered by MediDesk AI</span>
+            <span>Powered by MediDesk Assistant</span>
         </div>
 
     </div>

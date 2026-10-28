@@ -106,9 +106,9 @@ if (! function_exists('platform_branding')) {
     function platform_branding(): array
     {
         return [
-            'header_text' => (string) config('app.platform_name', 'MediDesk AI'),
-            'footer_text' => (string) config('app.platform_footer', 'MediDesk AI — AxiomForge Digital Solutions'),
-            'logo_url' => config('app.platform_logo'),
+            'header_text' => (string) config('app.platform_name', 'MediDesk Assistant'),
+            'footer_text' => (string) config('app.platform_footer', 'MediDesk Assistant — AxiomForge Digital Solutions'),
+            'logo_url' => config('app.platform_logo') ?: asset('images/medidesk-assistant-logo.jpg'),
             'primary_color' => '#0a2f44',
             'secondary_color' => '#1a5276',
         ];

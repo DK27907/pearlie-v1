@@ -64,7 +64,7 @@ class DoctorManagementTest extends TestCase
 
             return $mail->doctor->email === 'ada@example.test';
         });
-        $this->assertSame("You're invited to the MediDesk AI Doctor Dashboard", $sentMail->envelope()->subject);
+        $this->assertSame("You're invited to the MediDesk Assistant Doctor Dashboard", $sentMail->envelope()->subject);
     }
 
     public function test_doctor_with_temporary_password_must_change_on_first_login(): void
