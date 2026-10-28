@@ -1310,6 +1310,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame(AppointmentRequest::STATUS_CONFIRMED, $appointment->status);
         $this->assertSame('pending', $appointment->payment_status);
         $this->assertSame('cash', $appointment->payment_method);
+        $this->assertSame('chat', $appointment->booking_source);
         $this->assertSame('at_hospital', $appointment->payment_due_at);
         $this->assertDatabaseMissing('slot_holds', ['appointment_request_id' => $appointment->id]);
         $this->assertDatabaseCount('mpesa_payments', 0);

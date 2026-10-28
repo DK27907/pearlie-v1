@@ -1550,6 +1550,7 @@ class BookingChatService
                 'reason' => $service->name,
                 'raw_message' => $message,
                 'session_id' => $sessionId,
+                'booking_source' => 'chat',
             ],
             (int) $state['doctor_id'],
             $service,
