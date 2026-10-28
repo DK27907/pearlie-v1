@@ -7,6 +7,15 @@
         font-size: 16px;
     }
 
+    body {
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    :focus-visible {
+        outline: 2px solid #0891b2;
+        outline-offset: 3px;
+    }
+
     @media (min-width: 1920px) {
         html {
             font-size: 17px;
@@ -29,5 +38,359 @@
 @layer utilities {
     .max-shell {
         @apply mx-auto max-w-screen-2xl px-4 sm:px-6 lg:px-8 2xl:max-w-[110rem];
+    }
+}
+
+@layer components {
+    .btn-primary {
+        @apply inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-700 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-950/15 transition-all duration-200 ease-out hover:bg-cyan-600 hover:shadow-xl hover:shadow-cyan-900/20 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 focus-visible:ring-offset-2;
+    }
+
+    .input-premium {
+        @apply block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition-colors duration-200 placeholder:text-slate-400 focus:border-cyan-700 focus:ring-4 focus:ring-cyan-100 focus:ring-offset-0;
+    }
+
+    .hover-lift {
+        @apply transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.99];
+    }
+
+    .marketing-link {
+        @apply relative after:absolute after:inset-x-0 after:-bottom-1 after:h-px after:origin-left after:scale-x-0 after:bg-current after:transition-transform after:duration-200 hover:after:scale-x-100;
+    }
+
+    .skeleton-shimmer {
+        @apply relative overflow-hidden rounded-lg bg-slate-200;
+    }
+
+    .skeleton-shimmer::after {
+        position: absolute;
+        inset: 0;
+        content: "";
+        transform: translateX(-100%);
+        background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.6), transparent);
+    }
+
+    .auth-brand-panel {
+        background-image:
+            linear-gradient(135deg, rgb(10 22 40 / 0.78), rgb(10 22 40 / 0.58)),
+            linear-gradient(135deg, var(--auth-primary, #06b6d4), var(--auth-secondary, #0891b2));
+        background-size: 200% 200%;
+    }
+
+    .marketing-nav {
+        border-color: transparent;
+        background-color: rgb(255 255 255 / 0.94);
+        box-shadow: none;
+        transition: border-color 220ms ease, background-color 220ms ease, box-shadow 220ms ease;
+    }
+
+    .marketing-nav.is-scrolled {
+        border-color: rgb(226 232 240 / 0.85);
+        background-color: rgb(255 255 255 / 0.96);
+        box-shadow: 0 8px 24px rgb(15 23 42 / 0.08);
+    }
+
+    .marketing-nav.is-scrolled .marketing-nav-link {
+        color: #334155;
+    }
+
+    .marketing-hero {
+        background:
+            radial-gradient(ellipse at 70% 22%, rgb(8 145 178 / 0.24), transparent 38%),
+            linear-gradient(135deg, #0a1628 0%, #111827 54%, #0c3040 100%);
+    }
+
+    .app-surface {
+        background:
+            radial-gradient(ellipse at 10% 0%, rgb(6 182 212 / 0.07), transparent 30rem),
+            #f8fafc;
+    }
+
+    .app-surface main article,
+    .app-surface main section > div.rounded-2xl,
+    .app-surface main section > div.rounded-xl {
+        transition: box-shadow 200ms ease, transform 200ms ease, border-color 200ms ease;
+    }
+
+    .app-surface main article:hover {
+        border-color: #cbd5e1;
+        box-shadow: 0 18px 42px -28px rgb(8 145 178 / 0.42);
+    }
+
+    .app-surface table thead {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+
+    .app-surface table tbody tr {
+        transition: background-color 150ms ease;
+    }
+
+    .app-surface table tbody tr:hover {
+        background-color: #f0f9ff;
+    }
+
+    .app-surface input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+    .app-surface select,
+    .app-surface textarea {
+        border-color: #cbd5e1;
+        border-radius: 0.75rem;
+        transition: border-color 200ms ease, box-shadow 200ms ease;
+    }
+
+    .app-surface input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):focus,
+    .app-surface select:focus,
+    .app-surface textarea:focus {
+        border-color: #0891b2;
+        box-shadow: 0 0 0 4px rgb(6 182 212 / 0.14);
+        outline: none;
+    }
+
+    .app-surface button[type="submit"],
+    .app-surface button[data-primary-action] {
+        transition: transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease;
+    }
+
+    .app-surface button[type="submit"]:hover,
+    .app-surface button[data-primary-action]:hover {
+        box-shadow: 0 10px 24px -12px rgb(8 145 178 / 0.45);
+        transform: translateY(-1px);
+    }
+
+    .flash-message {
+        transition: opacity 240ms ease, transform 240ms ease;
+    }
+
+    .flash-message.is-dismissing {
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-8px);
+    }
+
+    .app-surface .is-loading {
+        position: relative;
+        min-height: 7rem;
+        overflow: hidden;
+    }
+
+    .app-surface .is-loading::after {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        content: "";
+        background:
+            linear-gradient(90deg, transparent, rgb(255 255 255 / 0.72), transparent),
+            repeating-linear-gradient(
+                to bottom,
+                rgb(226 232 240 / 0.52) 0,
+                rgb(226 232 240 / 0.52) 2.25rem,
+                transparent 2.25rem,
+                transparent 3.5rem
+            );
+        pointer-events: none;
+    }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    @keyframes skeleton-shimmer {
+        to {
+            transform: translateX(100%);
+        }
+    }
+
+    @keyframes premium-fade-up {
+        from {
+            opacity: 0;
+            transform: translateY(12px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes premium-fade-in {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    @keyframes premium-scale-in {
+        from {
+            opacity: 0;
+            transform: scale(0.9);
+        }
+
+        to {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    @keyframes premium-float {
+        0%,
+        100% {
+            transform: translateY(0);
+        }
+
+        50% {
+            transform: translateY(-6px);
+        }
+    }
+
+    @keyframes premium-gradient-shift {
+        0%,
+        100% {
+            background-position: 0% 50%;
+        }
+
+        50% {
+            background-position: 100% 50%;
+        }
+    }
+
+    @keyframes premium-pulse {
+        0%,
+        100% {
+            opacity: 0.35;
+            transform: scale(0.9);
+        }
+
+        50% {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+    }
+
+    .animate-fade-up {
+        animation: premium-fade-up 520ms cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0ms) both;
+    }
+
+    .animate-fade-in {
+        animation: premium-fade-in 450ms ease-out both;
+    }
+
+    .animate-scale-in {
+        animation: premium-scale-in 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    .animate-float {
+        animation: premium-float 6s ease-in-out infinite;
+    }
+
+    .animate-gradient {
+        animation: premium-gradient-shift 12s ease-in-out infinite;
+    }
+
+    .status-pulse {
+        animation: premium-pulse 1.8s ease-in-out infinite;
+    }
+
+    .skeleton-shimmer::after {
+        animation: skeleton-shimmer 1.4s ease-in-out infinite;
+    }
+
+    .auth-form > div {
+        animation: premium-fade-up 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    .auth-form > div:nth-of-type(1) {
+        animation-delay: 80ms;
+    }
+
+    .auth-form > div:nth-of-type(2) {
+        animation-delay: 160ms;
+    }
+
+    .auth-form > div:nth-of-type(3) {
+        animation-delay: 240ms;
+    }
+
+    .auth-form > div:nth-of-type(4) {
+        animation-delay: 320ms;
+    }
+
+    .auth-form > div:nth-of-type(5) {
+        animation-delay: 400ms;
+    }
+
+    .auth-error {
+        animation: premium-fade-up 350ms ease-out both, auth-error-pulse 650ms ease-out 1;
+    }
+
+    @keyframes auth-error-pulse {
+        0%,
+        100% {
+            box-shadow: 0 0 0 0 rgb(244 63 94 / 0);
+        }
+
+        45% {
+            box-shadow: 0 0 0 4px rgb(244 63 94 / 0.18);
+        }
+    }
+
+    .marketing-hero-visual {
+        animation: premium-float 6s ease-in-out infinite;
+    }
+
+    .flash-message:not(.is-dismissing) {
+        animation: premium-fade-up 350ms ease-out both;
+    }
+
+    .marketing-word {
+        display: inline-block;
+        animation: premium-fade-up 520ms cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0ms) both;
+    }
+}
+
+.has-reveal [data-reveal]:not(.is-revealed) {
+    opacity: 0;
+    transform: translateY(12px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    .animate-fade-up,
+    .animate-fade-in,
+    .animate-scale-in,
+    .animate-float,
+    .animate-gradient,
+    .status-pulse,
+    .auth-form > div,
+    .auth-error,
+    .flash-message,
+    .marketing-hero-visual,
+    .marketing-word,
+    .skeleton-shimmer::after {
+        animation: none !important;
+    }
+
+    .has-reveal [data-reveal]:not(.is-revealed) {
+        opacity: 1;
+        transform: none;
+    }
+
+    .hover-lift,
+    .btn-primary,
+    .input-premium,
+    .marketing-nav,
+    .app-surface main article,
+    .app-surface table tbody tr,
+    .app-surface button[type="submit"] {
+        transition-duration: 0.01ms !important;
     }
 }

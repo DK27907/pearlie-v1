@@ -12,13 +12,17 @@ export default {
 
     theme: {
         extend: {
+            colors: {
+                midnight: '#0a1628',
+                ocean: '#0891b2',
+            },
             screens: {
                 '3xl': '1920px',
                 '4xl': '2560px',
                 '5xl': '3840px',
             },
             fontFamily: {
-                sans: ['Figtree', ...defaultTheme.fontFamily.sans],
+                sans: ['ui-sans-serif', 'system-ui', ...defaultTheme.fontFamily.sans],
             },
             maxWidth: {
                 '8xl': '96rem',

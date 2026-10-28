@@ -60,6 +60,60 @@ Alpine.data('passwordInput', () => ({
 
 Alpine.start();
 
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const revealTargets = document.querySelectorAll(
+    '.marketing-page main > section, .marketing-page main article, .marketing-page main ol > li, .tenant-public-page main > section, .app-surface main article, .app-surface main > section, [data-reveal]',
+);
+
+if (!prefersReducedMotion.matches && revealTargets.length > 0) {
+    document.documentElement.classList.add('has-reveal');
+
+    if ('IntersectionObserver' in window) {
+        const revealObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach((entry) => {
+                if (!entry.isIntersecting) {
+                    return;
+                }
+
+                entry.target.classList.add('is-revealed', 'animate-fade-up');
+                observer.unobserve(entry.target);
+            });
+        }, { threshold: 0.12 });
+
+        revealTargets.forEach((element, index) => {
+            element.style.setProperty('--reveal-delay', `${(index % 5) * 55}ms`);
+            revealObserver.observe(element);
+        });
+    } else {
+        revealTargets.forEach((element) => element.classList.add('is-revealed'));
+    }
+}
+
+const marketingNavigation = document.querySelector('[data-marketing-nav]');
+
+if (marketingNavigation) {
+    const updateNavigation = () => {
+        marketingNavigation.classList.toggle('is-scrolled', window.scrollY > 24);
+    };
+
+    updateNavigation();
+    window.addEventListener('scroll', updateNavigation, { passive: true });
+}
+
+document.querySelectorAll(
+    '.flash-message, .app-surface [role="status"]:not([id]):not([aria-live]), .app-surface .alert.alert-success',
+).forEach((message) => {
+    if (!message.textContent.trim()) {
+        return;
+    }
+
+    message.classList.add('flash-message');
+    window.setTimeout(() => {
+        message.classList.add('is-dismissing');
+        window.setTimeout(() => message.remove(), 260);
+    }, 4000);
+});
+
 document.addEventListener('submit', (event) => {
     if (!(event.target instanceof HTMLFormElement)) {
         return;
