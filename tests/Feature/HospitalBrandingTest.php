@@ -147,9 +147,14 @@ class HospitalBrandingTest extends TestCase
 
     public function test_platform_branding_uses_the_local_healthcare_portrait_logo(): void
     {
-        $this->get(route('login'))
+        $response = $this->get(route('login'))
             ->assertOk()
             ->assertSee(asset('images/medidesk-assistant-logo.jpg'), false);
+
+        $this->assertSame(2, substr_count(
+            $response->getContent(),
+            asset('images/medidesk-assistant-logo.jpg'),
+        ));
     }
 
     public function test_register_page_uses_platform_branding(): void

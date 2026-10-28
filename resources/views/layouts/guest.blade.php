@@ -44,7 +44,11 @@
                         <p class="mt-1 text-xs text-slate-500">Hours: {{ $branding['hours'] }}</p>
                     @endif
                 @else
-                    <span class="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-[#0a2f44] text-2xl text-white" aria-hidden="true">🏥</span>
+                    @if ($isPlatformPage && $branding['logo_url'])
+                        <img class="mx-auto h-12 w-12 rounded-xl object-cover" src="{{ $branding['logo_url'] }}" alt="">
+                    @else
+                        <span class="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-[#0a2f44] text-2xl text-white" aria-hidden="true">🏥</span>
+                    @endif
                     <p class="mt-3 text-lg font-bold text-[#0a2f44]">{{ $branding['header_text'] }}</p>
                     @if (! request()->routeIs('login', 'register', 'password.request', 'password.email', 'password.reset', 'password.store') && hospital())
                         <p class="text-sm text-slate-500">{{ pearlie_config('hospital.location') }}</p>
