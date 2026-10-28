@@ -271,6 +271,25 @@ class BookingChatServiceTest extends TestCase
         }
     }
 
+    public function test_booking_keyword_in_patient_name_does_not_restart_collection(): void
+    {
+        [, $services] = $this->createContext();
+        $chat = app(BookingChatService::class);
+        $sessionId = 'booking-name-contains-booking';
+
+        $chat->handle($sessionId, 'I want to book an appointment', 'web');
+        $chat->handle($sessionId, 'Dental Cleaning', 'web');
+        $chat->handle($sessionId, '15/10/2026', 'web');
+
+        $phonePrompt = $chat->handle($sessionId, 'Readiness Booking', 'web');
+
+        $this->assertSame('COLLECTING', $phonePrompt->state);
+        $this->assertSame($services[0]->id, $phonePrompt->collectedFields['service_id']);
+        $this->assertSame('2026-10-15', $phonePrompt->collectedFields['date']);
+        $this->assertSame('Readiness Booking', $phonePrompt->collectedFields['patient_name']);
+        $this->assertStringContainsString('mobile number', mb_strtolower($phonePrompt->message));
+    }
+
     public function test_booking_intent_restarts_a_confirming_flow(): void
     {
         $this->createContext();

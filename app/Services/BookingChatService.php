@@ -505,6 +505,7 @@ class BookingChatService
         if (in_array($state['state'], [self::STATE_COLLECTING, self::STATE_CONFIRMING], true)
             && (
                 ($intent === 'book'
+                    && $this->isPlainBookingIntent($message)
                     && (
                         $state['state'] === self::STATE_CONFIRMING
                         || filled($state['service_id'])
