@@ -49,5 +49,8 @@ jobs:
       - name: Run migrations
         run: php artisan migrate --force
 
+      - name: Build frontend assets
+        run: npm ci --audit false && npm run build
+
       - name: Run PHPUnit
         run: php artisan test --no-ansi
