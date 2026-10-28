@@ -50,4 +50,4 @@ jobs:
         run: php artisan migrate --force
 
       - name: Run PHPUnit
-        run: php artisan test --no-interaction --no-ansi
+        run: php artisan test --no-ansi
