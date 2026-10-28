@@ -10,14 +10,14 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('styles')
 </head>
-<body class="flex min-h-screen flex-col bg-slate-50 font-sans antialiased text-slate-900">
-    <header class="border-b border-slate-200 bg-white">
+<body class="app-surface flex min-h-screen flex-col bg-slate-50 font-sans antialiased text-slate-900">
+    <header class="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur">
         <nav aria-label="Platform administration" class="mx-auto flex max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
             <a href="{{ route('superadmin.dashboard') }}" class="flex items-center gap-3 text-lg font-bold tracking-tight text-[#0a2f44]">
                 <img class="h-10 w-10 rounded-xl object-cover" src="{{ asset('images/medidesk-assistant-logo.jpg') }}" alt="">
                 <span>MediDesk Assistant</span>
             </a>
-            <div class="flex items-center gap-4">
+            <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-4">
                 <a href="{{ route('superadmin.hospitals.index') }}" class="text-sm font-semibold text-slate-700 hover:text-[#1a5276]">Hospitals</a>
                 <a href="{{ route('superadmin.users.index') }}" class="text-sm font-semibold text-slate-700 hover:text-[#1a5276]">Users</a>
                 @auth

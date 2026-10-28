@@ -10,7 +10,7 @@
     @stack('styles')
 </head>
 <body
-    class="min-h-screen bg-slate-50 font-sans antialiased text-slate-900"
+    class="tenant-chat-surface min-h-screen bg-slate-50 font-sans antialiased text-slate-900"
     style="--tenant-primary: {{ $hospital->primary_color ?: '#0a2f44' }}; --tenant-secondary: {{ $hospital->secondary_color ?: '#1a5276' }}"
 >
     @yield('content')

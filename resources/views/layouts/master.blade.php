@@ -6,6 +6,7 @@
     $metaDescription = $isPlatformPage
         ? $branding['header_text'].' — healthcare platform.'
         : $branding['header_text'].' in '.pearlie_config('hospital.location').'. Chat with '.$botName.' or book an appointment.';
+    $isAuthSurface = request()->routeIs('login', 'register', 'password.*', 'tenant.login', 'tenant.password.*');
 @endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
@@ -19,8 +20,14 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('styles')
 </head>
-<body class="flex min-h-screen flex-col bg-slate-50 font-sans antialiased text-slate-900" style="--hospital-primary: {{ $branding['primary_color'] }}; --hospital-secondary: {{ $branding['secondary_color'] }}">
-    <x-site-header />
+<body @class([
+    'flex min-h-screen flex-col bg-slate-50 font-sans antialiased text-slate-900',
+    'auth-surface' => $isAuthSurface,
+    'app-surface' => auth()->check() && ! $isAuthSurface,
+]) style="--hospital-primary: {{ $branding['primary_color'] }}; --hospital-secondary: {{ $branding['secondary_color'] }}">
+    @unless ($isAuthSurface)
+        <x-site-header />
+    @endunless
 
     @if (auth()->user()?->isSuperAdmin() && session()->has('impersonating_hospital_id'))
         <div class="bg-amber-100 px-4 py-2 text-center text-sm font-semibold text-amber-950">
@@ -38,9 +45,19 @@
 
     @if (auth()->check() && auth()->user()->isAdmin() && request()->routeIs('admin.*'))
         <div class="mx-auto grid w-full max-w-[90rem] flex-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:px-8">
-            <aside class="h-fit rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-24" aria-label="Admin sidebar">
-                <p class="px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-500">Hospital admin</p>
-                <nav aria-label="Admin navigation" class="grid grid-cols-2 gap-1 lg:grid-cols-1">
+            <aside class="h-fit rounded-2xl border border-slate-200/80 bg-white/90 p-3 shadow-sm shadow-slate-900/5 backdrop-blur-sm lg:sticky lg:top-24" aria-label="Admin sidebar">
+                <div class="mb-2 flex items-center gap-3 px-3 py-2">
+                    @if (hospital_branding()['logo_url'])
+                        <img class="h-9 w-9 rounded-xl border border-slate-100 object-contain" src="{{ hospital_branding()['logo_url'] }}" alt="">
+                    @else
+                        <span class="grid h-9 w-9 place-items-center rounded-xl bg-[var(--hospital-primary)] text-sm font-bold text-white" aria-hidden="true">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr(hospital()?->name ?? 'H', 0, 1)) }}</span>
+                    @endif
+                    <div class="min-w-0">
+                        <p class="truncate text-sm font-bold text-slate-900">{{ hospital()?->name }}</p>
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Hospital admin</p>
+                    </div>
+                </div>
+                <nav aria-label="Admin navigation" class="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-1">
                     <a href="{{ route('admin.dashboard') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Dashboard</a>
                     <a href="{{ route('admin.users.index') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Users</a>
                     @if (hospital()?->hasFeature('booking'))
@@ -75,7 +92,9 @@
         </main>
     @endif
 
-    <x-site-footer />
+    @unless ($isAuthSurface)
+        <x-site-footer />
+    @endunless
     @stack('scripts')
 </body>
 </html>

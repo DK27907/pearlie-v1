@@ -4,7 +4,7 @@
 @section('meta_description', 'MediDesk Assistant is the 24/7 digital front desk for hospitals. Answer patient questions, manage appointments, collect M-Pesa deposits, and connect patients with staff.')
 
 @section('content')
-    <header class="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur">
+    <header data-marketing-nav class="marketing-nav sticky top-0 z-50 backdrop-blur">
         <nav aria-label="Main navigation" class="mx-auto flex min-h-18 max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] items-center justify-between gap-5 px-4 py-3 sm:px-6 lg:px-8">
             <a href="#home" class="flex shrink-0 items-center gap-3">
                 <img class="h-11 w-11 rounded-xl object-cover" src="{{ asset('images/medidesk-assistant-logo.jpg') }}" alt="">
@@ -38,10 +38,10 @@
     </header>
 
     <main id="home">
-        <section class="relative isolate overflow-hidden bg-gradient-to-br from-[#f4f9fc] via-white to-[#e9f4f8]">
+        <section class="marketing-hero relative isolate overflow-hidden">
             <div class="absolute -right-32 -top-28 -z-10 h-96 w-96 rounded-full bg-cyan-100/60 blur-3xl" aria-hidden="true"></div>
-            <div class="relative z-10 mx-auto grid max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] items-center gap-8 px-4 py-10 sm:px-6 sm:py-14 lg:grid-cols-[1.04fr_.96fr] lg:gap-12 lg:px-8 lg:py-20">
-                <figure class="relative order-first mx-auto w-full max-w-2xl lg:order-last">
+            <div class="relative z-10 mx-auto grid grid-cols-1 max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] items-center gap-8 px-4 py-10 sm:px-6 sm:py-14 lg:grid-cols-[1.04fr_.96fr] lg:gap-12 lg:px-8 lg:py-20">
+                <figure class="marketing-hero-visual relative order-first mx-auto w-full max-w-2xl lg:order-last">
                     <div class="absolute -inset-3 rounded-[2.25rem] bg-gradient-to-br from-cyan-200 via-sky-100 to-emerald-100 blur-sm" aria-hidden="true"></div>
                     <div class="relative overflow-hidden rounded-[1.75rem] border border-white bg-white shadow-2xl shadow-[#0a2f44]/20 sm:rounded-[2rem]">
                         <img
@@ -53,7 +53,7 @@
                             fetchpriority="high"
                         >
                         <div class="absolute left-3 top-3 inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/95 px-3 py-2 text-xs font-bold text-[#0a2f44] shadow-lg sm:left-5 sm:top-5 sm:text-sm">
-                            <span class="relative flex h-2.5 w-2.5"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span></span>
+                            <span class="relative flex h-2.5 w-2.5"><span class="status-pulse absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span></span>
                             Always here for patients
                         </div>
                         <div class="absolute inset-x-3 bottom-3 flex items-end justify-between gap-3 sm:inset-x-5 sm:bottom-5">
@@ -76,20 +76,20 @@
                 </figure>
 
                 <div class="max-w-2xl">
-                    <p class="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-white/90 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-[#1a5276] shadow-sm">
+                    <p class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-cyan-100 shadow-sm">
                         <span class="h-2 w-2 rounded-full bg-emerald-500"></span> Built for Kenyan healthcare
                     </p>
-                    <h1 class="mt-5 text-4xl font-extrabold leading-[1.08] tracking-tight text-[#0a2f44] sm:text-5xl lg:text-6xl">Your Hospital's 24/7 <span class="text-[#1a5276]">Digital Front Desk</span></h1>
-                    <p class="mt-5 max-w-xl text-lg leading-8 text-slate-600">MediDesk Assistant answers patient questions, books appointments, takes M-Pesa deposits, and connects patients to your staff — through WhatsApp and web chat, in English and Kiswahili.</p>
+                    <h1 class="mt-5 text-4xl font-extrabold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-6xl">Your Hospital's 24/7 <span class="text-cyan-200">Digital Front Desk</span></h1>
+                    <p class="mt-5 max-w-xl text-lg leading-8 text-slate-300">MediDesk Assistant answers patient questions, books appointments, takes M-Pesa deposits, and connects patients to your staff — through WhatsApp and web chat, in English and Kiswahili.</p>
                     <div class="mt-7 flex flex-col gap-3 sm:flex-row">
                         <a href="#demo" class="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1a5276] px-6 py-3.5 text-base font-bold text-white shadow-lg shadow-[#1a5276]/20 transition hover:-translate-y-0.5 hover:bg-[#0a2f44]">Book a Free Demo <span aria-hidden="true">→</span></a>
-                        <a href="#how-it-works" class="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white/90 px-6 py-3.5 text-base font-bold text-[#0a2f44] transition hover:border-[#1a5276] hover:bg-white">See How It Works</a>
+                        <a href="#how-it-works" class="inline-flex items-center justify-center rounded-xl border border-white/25 bg-white/10 px-6 py-3.5 text-base font-bold text-white transition hover:border-white/50 hover:bg-white/15">See How It Works</a>
                     </div>
-                    <p class="mt-4 text-sm text-slate-500">No pressure. See how the digital front desk fits your hospital.</p>
-                    <div class="mt-7 flex flex-wrap gap-2 text-xs font-semibold text-slate-700 sm:gap-3 sm:text-sm">
-                        <span class="rounded-full border border-white bg-white/80 px-3 py-2 shadow-sm">24/7 answers</span>
-                        <span class="rounded-full border border-white bg-white/80 px-3 py-2 shadow-sm">WhatsApp + web</span>
-                        <span class="rounded-full border border-white bg-white/80 px-3 py-2 shadow-sm">English + Kiswahili</span>
+                    <p class="mt-4 text-sm text-slate-400">No pressure. See how the digital front desk fits your hospital.</p>
+                    <div class="mt-7 flex flex-wrap gap-2 text-xs font-semibold text-slate-100 sm:gap-3 sm:text-sm">
+                        <span class="rounded-full border border-white/15 bg-white/10 px-3 py-2">24/7 answers</span>
+                        <span class="rounded-full border border-white/15 bg-white/10 px-3 py-2">WhatsApp + web</span>
+                        <span class="rounded-full border border-white/15 bg-white/10 px-3 py-2">English + Kiswahili</span>
                     </div>
                 </div>
             </div>

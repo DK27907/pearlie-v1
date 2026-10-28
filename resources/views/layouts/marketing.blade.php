@@ -9,7 +9,7 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('styles')
 </head>
-<body class="bg-white font-sans antialiased text-slate-900">
+<body class="marketing-page bg-white font-sans antialiased text-slate-900">
     @yield('content')
     @stack('scripts')
 </body>

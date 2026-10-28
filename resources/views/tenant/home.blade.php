@@ -12,8 +12,8 @@
 
 @section('content')
     <header class="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <nav class="mx-auto flex max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-            <a href="{{ $homeRoute }}" class="flex items-center gap-3">
+        <nav class="mx-auto flex w-full min-w-0 max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+            <a href="{{ $homeRoute }}" class="flex min-w-0 flex-1 items-center gap-3">
                 @if ($branding['logo_url'])
                     <img class="h-11 w-11 rounded-xl object-contain" src="{{ $branding['logo_url'] }}" alt="">
                 @else
@@ -21,8 +21,8 @@
                         {{ strtoupper(substr($hospital->name, 0, 1)) }}
                     </div>
                 @endif
-                <div>
-                    <div class="text-base font-extrabold tracking-tight" style="color: {{ $primary }};">{{ $branding['header_text'] }}</div>
+                <div class="min-w-0">
+                    <div class="truncate text-base font-extrabold tracking-tight" style="color: {{ $primary }};">{{ $branding['header_text'] }}</div>
                     <div class="text-[10px] uppercase tracking-[0.16em] text-slate-500">Digital Front Desk</div>
                 </div>
             </a>
@@ -51,16 +51,17 @@
                 <a href="#contact" class="text-sm font-semibold text-slate-600 hover:text-slate-900">Contact</a>
             </div>
 
-            <a href="{{ $chatRoute }}" class="inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:opacity-95" style="background: {{ $secondary }};">
-                Talk to MediDesk
+            <a href="{{ $chatRoute }}" aria-label="Talk to MediDesk" class="inline-flex shrink-0 items-center justify-center rounded-xl px-3 py-2.5 text-xs font-bold text-white shadow-sm transition hover:opacity-95 sm:px-4 sm:text-sm" style="background: {{ $secondary }};">
+                <span class="sm:hidden">Chat</span>
+                <span class="hidden sm:inline">Talk to MediDesk</span>
             </a>
         </nav>
     </header>
 
     <main>
-        <section class="bg-gradient-to-br from-white to-slate-100">
-            <div class="mx-auto grid max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:px-8 lg:py-24">
-                <div>
+        <section class="relative isolate overflow-hidden bg-gradient-to-br from-white via-sky-50 to-slate-100">
+            <div class="mx-auto grid grid-cols-1 max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:px-8 lg:py-24">
+                <div class="min-w-0">
                     <p class="inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-sky-700">Healthcare made simple</p>
                     <h1 class="mt-6 text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">
                         Healthcare information and appointments, made simpler.
@@ -74,8 +75,18 @@
                     </div>
                 </div>
 
-                <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <div class="rounded-2xl border border-slate-200 p-5">
+                <figure class="group relative min-w-0 min-h-[25rem] overflow-hidden rounded-[2rem] border border-white bg-slate-900 shadow-2xl shadow-slate-900/15">
+                    <img
+                        src="{{ asset('images/medidesk-assistant-logo.jpg') }}"
+                        alt="Healthcare professional ready to support patients"
+                        class="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
+                        width="320"
+                        height="320"
+                        fetchpriority="high"
+                    >
+                    <div class="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/10 to-slate-950/5"></div>
+                    <figcaption class="absolute inset-x-0 bottom-0 p-4 sm:p-6">
+                        <div class="rounded-2xl border border-white/60 bg-white/95 p-4 shadow-xl backdrop-blur-sm sm:p-5">
                         <div class="flex items-center justify-between border-b border-slate-200 pb-4">
                             <div>
                                 <p class="text-sm font-semibold text-slate-500">Today at {{ $hospital?->name ?? 'MediDesk Assistant' }}</p>
@@ -85,17 +96,18 @@
                         </div>
                         <div class="mt-5 space-y-3 text-sm text-slate-600">
                             @if ($hospital->address)
-                                <div class="rounded-xl bg-slate-50 p-3">📍 {{ $hospital->address }}</div>
+                                <div class="break-words rounded-xl bg-slate-50 p-3">📍 {{ $hospital->address }}</div>
                             @endif
                             @if ($hospital->phone)
-                                <div class="rounded-xl bg-slate-50 p-3">📞 {{ $hospital->phone }}</div>
+                                <div class="break-words rounded-xl bg-slate-50 p-3">📞 {{ $hospital->phone }}</div>
                             @endif
                             @if ($hospital->hours_outpatient)
                                 <div class="rounded-xl bg-slate-50 p-3">🕐 {{ $hospital->hours_outpatient }}</div>
                             @endif
                         </div>
                     </div>
-                </div>
+                    </figcaption>
+                </figure>
             </div>
         </section>
 
