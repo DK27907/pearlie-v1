@@ -22,7 +22,7 @@
             name="{{ $name }}"
             id="{{ $inputId }}"
             autocomplete="{{ $autocomplete }}"
-            {{ $attributes->merge(['class' => 'block w-full rounded-lg border-slate-300 pr-11 text-sm shadow-sm focus:border-sky-700 focus:ring-sky-700']) }}
+            {{ $attributes->merge(['class' => 'input-premium pr-11']) }}
         >
         <button
             type="button"

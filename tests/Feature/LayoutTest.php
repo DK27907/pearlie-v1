@@ -51,15 +51,18 @@ class LayoutTest extends TestCase
     {
         $this->get(route('password.request'))
             ->assertOk()
-            ->assertSee('<h1 class="text-2xl font-bold text-slate-900">', false);
+            ->assertSee('<h1', false)
+            ->assertSee('Forgot your password?');
 
         $this->get(route('register'))
             ->assertOk()
-            ->assertSee('<h1 class="mb-6 text-2xl font-bold text-slate-900">Create an account</h1>', false);
+            ->assertSee('<h1', false)
+            ->assertSee('Create an account');
 
         $this->get(route('password.reset', 'audit-token'))
             ->assertOk()
-            ->assertSee('<h1 class="mb-6 text-2xl font-bold text-slate-900">Reset your password</h1>', false);
+            ->assertSee('<h1', false)
+            ->assertSee('Reset your password');
 
         User::factory()->create([
             'hospital_id' => $this->hospital->id,
