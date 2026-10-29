@@ -2,25 +2,20 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Http\Requests\Admin\Concerns\AuthorizesHospitalSettings;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateBrandingSettingsRequest extends FormRequest
 {
+    use AuthorizesHospitalSettings;
+
     /**
      * Determine if the user is authorized to make this request.
      */
     public function authorize(): bool
     {
-        $user = $this->user();
-        $hospital = hospital();
-
-        return $user !== null
-            && $user->isAdmin()
-            && ! $user->isSuperAdmin()
-            && ! $user->isDoctor()
-            && $hospital !== null
-            && (int) $user->hospital_id === (int) $hospital->id;
+        return $this->canManageHospitalSettings();
     }
 
     /**

@@ -2,22 +2,17 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Http\Requests\Admin\Concerns\AuthorizesHospitalSettings;
 use App\Services\HospitalSettings;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateSmsSettingsRequest extends FormRequest
 {
+    use AuthorizesHospitalSettings;
+
     public function authorize(): bool
     {
-        $user = $this->user();
-        $hospital = hospital();
-
-        return $user !== null
-            && $user->isAdmin()
-            && ! $user->isSuperAdmin()
-            && ! $user->isDoctor()
-            && $hospital !== null
-            && (int) $user->hospital_id === (int) $hospital->id;
+        return $this->canManageHospitalSettings();
     }
 
     public function rules(): array
