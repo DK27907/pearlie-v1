@@ -23,7 +23,13 @@ class ChatLanguageDetector
     ];
 
     private const STRONG_SWAHILI_CUES = [
-        'naomba', 'nataka', 'nisaidie', 'ninataka', 'mko', 'mnatoa',
+        'asante', 'habari', 'hujambo', 'jambo', 'naomba', 'nataka',
+        'nisaidie', 'ninataka', 'mko', 'mnatoa', 'nashukuru', 'shikamoo',
+        'shukran',
+    ];
+
+    private const STRONG_ENGLISH_CUES = [
+        'bye', 'goodbye', 'hello', 'hey', 'hi', 'thank', 'thanks',
     ];
 
     public function detectLanguage(string $message): string
@@ -40,14 +46,17 @@ class ChatLanguageDetector
         $tokens = $matches[0];
         $swahiliIndicators = array_intersect($tokens, self::SWAHILI_WORDS);
         $englishIndicators = array_intersect($tokens, self::ENGLISH_WORDS);
+        $isSingleWordCue = count($tokens) === 1
+            && (in_array($tokens[0], self::STRONG_SWAHILI_CUES, true)
+                || in_array($tokens[0], self::STRONG_ENGLISH_CUES, true));
 
         $winningSignalCount = $swahiliScore > $englishScore
             ? count($swahiliIndicators)
             : count($englishIndicators);
 
-        return count($tokens) >= 2
+        return $isSingleWordCue || (count($tokens) >= 2
             && abs($swahiliScore - $englishScore) >= 2
-            && $winningSignalCount >= 2;
+            && $winningSignalCount >= 2);
     }
 
     /**

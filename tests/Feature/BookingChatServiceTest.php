@@ -17,6 +17,7 @@ use App\Services\PearlieServiceV2;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
@@ -298,7 +299,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertDatabaseCount('appointment_requests', 0);
     }
 
-    public function test_chat_state_expires_after_two_minutes_of_inactivity_and_starts_with_a_greeting(): void
+    public function test_chat_state_expires_after_two_minutes_without_explaining_the_timeout(): void
     {
         $this->createContext();
         $chat = app(BookingChatService::class);
@@ -309,7 +310,8 @@ class BookingChatServiceTest extends TestCase
 
         $this->assertSame('IDLE', $response->state);
         $this->assertSame('session_timeout', $response->source);
-        $this->assertStringContainsString('previous chat expired', mb_strtolower($response->message));
+        $this->assertStringNotContainsString('expired', mb_strtolower($response->message));
+        $this->assertStringContainsString("Hello! 👋🏾 I'm", $response->message);
         $this->assertNull($response->collectedFields['service_id']);
         $this->assertSame('IDLE', $chat->getState('expired-booking-session')['state']);
         $this->assertDatabaseCount('appointment_requests', 0);
@@ -433,7 +435,7 @@ class BookingChatServiceTest extends TestCase
         $chat = app(BookingChatService::class);
         Http::preventStrayRequests();
 
-        app(PearlieServiceV2::class)->handleEscalationIntent('help me', $sessionId, 'web');
+        app(PearlieServiceV2::class)->handleEscalationIntent('I need a human', $sessionId, 'web');
 
         $servicePrompt = $chat->handle($sessionId, 'I want to book an appointment', 'web');
         $datePrompt = $chat->handle($sessionId, 'Dental Cleaning', 'web');
@@ -1269,6 +1271,147 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame('social', $response->source);
         $this->assertStringContainsString('Asante', $response->message);
         $this->assertStringContainsString('ready to assist you', mb_strtolower($response->message));
+        $this->assertDatabaseCount('escalations', 0);
+    }
+
+    public function test_how_are_you_gets_a_natural_reply_without_escalation(): void
+    {
+        $this->createContext();
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'how-are-you-session',
+            'How are you?',
+            'web',
+        );
+
+        $this->assertSame("I'm doing well, Asante! How are you feeling today?", $response->message);
+        $this->assertSame('social', $response->source);
+        $this->assertDatabaseCount('escalations', 0);
+    }
+
+    public function test_self_introduction_is_saved_and_does_not_escalate(): void
+    {
+        $this->createContext();
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'self-introduction-session',
+            "Hello, I'm Dominic",
+            'web',
+        );
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertDatabaseHas('patients', [
+            'name' => 'Dominic',
+            'channel' => 'web',
+            'preferred_language' => 'en',
+        ]);
+        $this->assertDatabaseCount('escalations', 0);
+    }
+
+    public function test_patient_language_is_remembered_between_sessions_and_can_be_switched(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $profileIdentity = 'stable-profile-for-language-memory';
+
+        $swahili = $chat->handle(
+            'language-memory-swahili-session',
+            'Nisaidie',
+            'web',
+            $profileIdentity,
+        );
+        $remembered = $chat->handle(
+            'language-memory-returning-session',
+            '...',
+            'web',
+            $profileIdentity,
+        );
+        $switched = $chat->handle(
+            'language-memory-english-session',
+            'Hello',
+            'web',
+            $profileIdentity,
+        );
+
+        $this->assertSame('sw', $swahili->collectedFields['language']);
+        $this->assertStringContainsString('Tafadhali tuma swali', $remembered->message);
+        $this->assertSame('en', $switched->collectedFields['language']);
+        $this->assertStringContainsString("Hello! 👋🏾 I'm", $switched->message);
+        $this->assertDatabaseHas('patients', [
+            'identity_hash' => hash('sha256', implode(':', [
+                hospital()->id,
+                'web',
+                $profileIdentity,
+            ])),
+            'preferred_language' => 'en',
+        ]);
+    }
+
+    public function test_correction_uses_recent_history_and_does_not_create_a_booking(): void
+    {
+        [$hospital] = $this->createContext();
+        $sessionId = 'correction-history-session';
+        foreach ([
+            ['I need help with the hospital services.', 'I can help with hospital services.'],
+            ['What services are available?', 'You asked me to book Digital X-Ray.'],
+            ['I did not say I wanted a booking.', 'I understand.'],
+        ] as [$userMessage, $aiResponse]) {
+            Conversation::query()->create([
+                'session_id' => $sessionId,
+                'user_message' => $userMessage,
+                'ai_response' => $aiResponse,
+                'channel' => 'web',
+            ]);
+        }
+
+        $capturedMessages = [];
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://api.groq.com/openai/v1/chat/completions' => function (ClientRequest $request) use (&$capturedMessages) {
+                $capturedMessages = $request->data()['messages'];
+
+                return Http::response([
+                    'choices' => [[
+                        'message' => [
+                            'content' => "You're right, I'm sorry for assuming that. What would you like help with?",
+                        ],
+                    ]],
+                ]);
+            },
+        ]);
+
+        $response = app(BookingChatService::class)->handle(
+            $sessionId,
+            'I did not say that',
+            'web',
+        );
+
+        $this->assertStringContainsString('my apologies', mb_strtolower($response->message));
+        $this->assertStringNotContainsString('Digital X-Ray', $response->message);
+        $this->assertSame('IDLE', $response->state);
+        $this->assertTrue(collect($capturedMessages)->contains(
+            fn (array $message): bool => $message['content'] === 'You asked me to book Digital X-Ray.',
+        ));
+        $this->assertCount(7, $capturedMessages);
+        $this->assertDatabaseCount('appointment_requests', 0);
+        $this->assertDatabaseCount('escalations', 0);
+    }
+
+    public function test_greeting_after_timeout_is_sent_once(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $chat->handle('timeout-greeting-session', 'How are you?', 'web');
+        $this->travel(2)->minutes();
+
+        $response = $chat->handle('timeout-greeting-session', 'Hello', 'web');
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertSame('session_timeout', $response->source);
+        $this->assertSame(1, substr_count($response->message, "Hello! 👋🏾 I'm"));
+        $this->assertStringNotContainsString('expired', mb_strtolower($response->message));
         $this->assertDatabaseCount('escalations', 0);
     }
 

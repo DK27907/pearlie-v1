@@ -7,6 +7,7 @@ use App\Exceptions\MissingProviderCredentialsException;
 use App\Models\AppointmentRequest;
 use App\Models\Conversation;
 use App\Models\Hospital;
+use App\Models\Patient;
 use App\Models\Receipt;
 use App\Models\Service;
 use App\Models\SlotHold;
@@ -183,8 +184,12 @@ class BookingChatService
         return $appointment->fresh();
     }
 
-    public function handle(string $channelId, string $message, string $channel = 'web'): ChatResponse
-    {
+    public function handle(
+        string $channelId,
+        string $message,
+        string $channel = 'web',
+        ?string $profileIdentity = null,
+    ): ChatResponse {
         $hospital = hospital();
         if (! $hospital instanceof Hospital) {
             throw new RuntimeException('A hospital context is required to process a booking conversation.');
@@ -201,6 +206,7 @@ class BookingChatService
                 $message,
                 $channel,
                 $hospital,
+                $profileIdentity ?? $channelId,
             ),
         );
     }
@@ -262,21 +268,46 @@ class BookingChatService
         string $message,
         string $channel,
         Hospital $hospital,
+        string $profileIdentity,
     ): ChatResponse {
         $latestConversation = $this->latestStateConversation($sessionId, $channel);
         $previousState = $latestConversation && is_array($latestConversation->chat_state)
             ? $this->validatedState($latestConversation->chat_state, $channelId, $channel)
             : $this->emptyState();
 
-        if ($this->conversationHasExpired($latestConversation)) {
-            $state = $this->emptyState(
+        $sessionExpired = $this->conversationHasExpired($latestConversation);
+        $state = $sessionExpired
+            ? $this->emptyState(
                 language: $previousState['language'],
                 stateVersion: $previousState['state_version'],
+            )
+            : $this->reconcilePaymentState($previousState);
+        $patient = $this->rememberPatient($profileIdentity, $channel, $message, $state);
+        $patientWasReturning = $patient->exists && $patient->last_interaction_at !== null;
+        $patientName = $this->extractIntroducedName($message);
+        if ($patientName !== null && blank($patient->name)) {
+            $patient->name = $patientName;
+        }
+        $state['language'] = $this->resolveReplyLanguage($message, $state);
+        if ($patientWasReturning && ! $this->languageDetector->hasConfidentLanguageSignal($message)) {
+            $state['language'] = $patient->preferred_language;
+        }
+        $patient->forceFill([
+            'preferred_language' => $state['language'],
+            'last_interaction_at' => now(),
+        ])->save();
+
+        if ($sessionExpired) {
+            $state = $this->emptyState(
+                language: $state['language'],
+                stateVersion: $previousState['state_version'],
             );
-            $greeting = $this->greetingResponse($hospital, $state['language'])
-                .($state['language'] === self::LANGUAGE_SWAHILI
-                    ? ' Mazungumzo yako ya awali yameisha kwa kutotumika, kwa hivyo tuanze upya.'
-                    : ' Your previous chat expired due to inactivity, so let us start fresh.');
+            $greeting = $this->greetingResponse(
+                $hospital,
+                $state['language'],
+                $patient->name,
+                returning: $patientWasReturning && filled($patient->name),
+            );
 
             return $this->respond(
                 $sessionId,
@@ -287,9 +318,6 @@ class BookingChatService
                 source: 'session_timeout',
             );
         }
-
-        $state = $this->reconcilePaymentState($previousState);
-        $state['language'] = $this->resolveReplyLanguage($message, $state);
 
         if (preg_match('/^__service_page:(\d{1,4})__$/', $message, $matches) === 1
             && $state['state'] === self::STATE_COLLECTING
@@ -425,6 +453,37 @@ class BookingChatService
         }
 
         $intent = $this->extractIntent($message, (string) $state['state']);
+
+        if ($this->isCorrectionMessage($message)) {
+            $state = $this->emptyState(
+                language: $state['language'],
+                stateVersion: $state['state_version'],
+            );
+
+            return $this->delegateToAssistant($sessionId, $channel, $message, $state, $patient);
+        }
+
+        if ($state['state'] === self::STATE_IDLE && $this->isSelfIntroduction($message)) {
+            $this->assistant->clearPendingEscalation($sessionId);
+            $state = $this->emptyState(
+                language: $state['language'],
+                stateVersion: $state['state_version'],
+            );
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $this->greetingResponse(
+                    $hospital,
+                    $state['language'],
+                    $patient->name,
+                    returning: $patientWasReturning,
+                ),
+                $state,
+                source: 'hospital_greeting',
+            );
+        }
 
         if ($this->isFaqTopicChangeDuringCollection($message, $intent, $state)) {
             $serviceName = filled($state['service_id'] ?? null)
@@ -781,7 +840,7 @@ class BookingChatService
             && ! $this->containsEscalationPhrase($message)
             && $this->extractService($message, $hospital) === null
         ) {
-            return $this->delegateToAssistant($sessionId, $channel, $message, $state);
+            return $this->delegateToAssistant($sessionId, $channel, $message, $state, $patient);
         }
 
         if ($intent === 'pricing') {
@@ -806,7 +865,23 @@ class BookingChatService
             );
         }
 
-        if ($intent === 'greeting') {
+        $isNameForActiveBooking = $state['state'] === self::STATE_COLLECTING
+            && $this->extractName($message) !== null;
+
+        if ($intent === 'greeting' && ! $isNameForActiveBooking) {
+            if ($this->recentAssistantGreeting($latestConversation)) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Niko hapa kukusaidia. Ungependa kuuliza nini?'
+                        : "I'm here to help. What would you like to know?",
+                    $state,
+                    source: 'greeting_acknowledgement',
+                );
+            }
+
             if ($state['state'] === self::STATE_COLLECTING) {
                 return $this->respond(
                     $sessionId,
@@ -822,16 +897,26 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                $this->greetingResponse($hospital, $state['language']),
+                $this->greetingResponse(
+                    $hospital,
+                    $state['language'],
+                    $patient->name,
+                    returning: $patientWasReturning,
+                ),
                 $state,
                 source: 'hospital_greeting',
             );
         }
 
         if ($intent === 'social') {
+            $isHowAreYou = preg_match('/\bhow\s+are\s+you\b/iu', $message) === 1;
             $response = $state['language'] === self::LANGUAGE_SWAHILI
-                ? 'Niko vizuri, asante kwa kuuliza! Niko hapa kukusaidia. Ungependa nikusaidie nini?'
-                : "I'm doing great, Asante! I'm ready to assist you. What can I do for you today?";
+                ? ($isHowAreYou
+                    ? 'Niko vizuri, asante! Unajisikiaje leo?'
+                    : 'Niko vizuri, asante! Niko hapa kukusaidia. Ungependa nikusaidie nini?')
+                : ($isHowAreYou
+                    ? "I'm doing well, Asante! How are you feeling today?"
+                    : "I'm doing great, Asante! Ready to assist you. What can I do for you today?");
 
             return $this->respond($sessionId, $channel, $message, $response, $state, source: 'social');
         }
@@ -1215,7 +1300,7 @@ class BookingChatService
             && $this->extractService($message, $hospital) === null
             && ! $this->containsBookingKeyword($message)
         ) {
-            return $this->delegateToAssistant($sessionId, $channel, $message, $state);
+            return $this->delegateToAssistant($sessionId, $channel, $message, $state, $patient);
         }
 
         $this->assistant->clearPendingEscalation($sessionId);
@@ -2464,6 +2549,10 @@ class BookingChatService
     {
         $normalized = $this->normalizeIntentKeywords($message);
 
+        if ($this->isSelfIntroduction($message)) {
+            return 'greeting';
+        }
+
         if (preg_match('/\b(cancel|cancell?ation|futa|ghairi)\b.{0,30}\b(my\s+)?(appointment|booking|miadi)\b|\b(futa|ghairi)\s+(miadi|appointment)\b/u', $normalized) === 1) {
             return 'cancel_appointment';
         }
@@ -3540,6 +3629,7 @@ class BookingChatService
         string $channel,
         string $message,
         array $state,
+        Patient $patient,
     ): ChatResponse {
         $previousConversationId = Conversation::query()
             ->where('session_id', $sessionId)
@@ -3555,6 +3645,8 @@ class BookingChatService
             $channel,
             $patientPhone,
             $state['language'],
+            $patient,
+            ! $this->conversationHasExpired($this->latestStateConversation($sessionId, $channel)),
         );
         $response = (string) ($result['response'] ?? (
             $state['language'] === self::LANGUAGE_SWAHILI
@@ -4085,8 +4177,18 @@ class BookingChatService
         ) === 1;
     }
 
-    private function greetingResponse(Hospital $hospital, string $language): string
-    {
+    private function greetingResponse(
+        Hospital $hospital,
+        string $language,
+        ?string $patientName = null,
+        bool $returning = false,
+    ): string {
+        if ($returning && filled($patientName)) {
+            return $language === self::LANGUAGE_SWAHILI
+                ? sprintf('Karibu tena, %s! Nikusaidie nini leo?', $patientName)
+                : sprintf('Welcome back, %s! How can I help you today?', $patientName);
+        }
+
         return $language === self::LANGUAGE_SWAHILI
             ? sprintf(
                 'Habari! 👋🏾 Mimi ni %s, msaidizi wa afya wa %s. Naweza kukusaidia kuweka miadi, kuangalia upatikanaji wa daktari, au kujibu maswali kuhusu huduma zetu.',
@@ -4098,6 +4200,86 @@ class BookingChatService
                 $hospital->chatbotName() ?? 'Assistant',
                 $hospital->name,
             );
+    }
+
+    private function rememberPatient(
+        string $profileIdentity,
+        string $channel,
+        string $message,
+        array $state,
+    ): Patient {
+        $hospital = hospital();
+        if (! $hospital instanceof Hospital) {
+            throw new RuntimeException('A hospital context is required to remember chat preferences.');
+        }
+
+        $identityHash = hash('sha256', implode(':', [
+            $hospital->id,
+            $channel,
+            $profileIdentity,
+        ]));
+        $patient = Patient::query()->firstOrNew([
+            'channel' => $channel,
+            'identity_hash' => $identityHash,
+        ]);
+        if (! $patient->exists) {
+            $patient->preferred_language = $state['language'];
+        }
+
+        $introducedName = $this->extractIntroducedName($message);
+        if ($introducedName !== null && blank($patient->name)) {
+            $patient->name = $introducedName;
+        }
+
+        return $patient;
+    }
+
+    private function extractIntroducedName(string $message): ?string
+    {
+        if (preg_match(
+            '/^\s*(?:(?:hello|hi)\s*,?\s*)?(?:my name is|call me|i am|i\'m|am)\s+([\pL][\pL\'’-]*(?:\s+[\pL][\pL\'’-]*){0,2})\s*[.!?]*\s*$/iu',
+            $message,
+            $matches,
+        ) !== 1) {
+            return null;
+        }
+
+        $name = trim($matches[1]);
+        $firstName = mb_strtolower(strtok($name, ' ') ?: '');
+
+        return in_array($firstName, [
+            'doing', 'feeling', 'fine', 'good', 'here', 'having', 'looking',
+            'not', 'okay', 'ready', 'sick', 'sorry', 'tired', 'unwell', 'well',
+        ], true)
+            ? null
+            : $name;
+    }
+
+    private function isSelfIntroduction(string $message): bool
+    {
+        return $this->extractIntroducedName($message) !== null;
+    }
+
+    private function isCorrectionMessage(string $message): bool
+    {
+        return preg_match(
+            '/\b(?:i\s+did\s+not\s+say\s+that|i\s+didn[\'’]t\s+say\s+that|i\s+never\s+said\s+that|that[\'’]s\s+not\s+what\s+i\s+said|that\s+is\s+not\s+what\s+i\s+said|you\s+misunderstood)\b/iu',
+            $message,
+        ) === 1;
+    }
+
+    private function recentAssistantGreeting(?Conversation $conversation): bool
+    {
+        if ($conversation === null
+            || $conversation->created_at === null
+            || $conversation->created_at->lessThan(now()->subMinutes(self::SESSION_TIMEOUT_MINUTES))
+        ) {
+            return false;
+        }
+
+        $response = ltrim((string) $conversation->ai_response);
+
+        return Str::startsWith($response, ['Hello! 👋🏾', 'Welcome back, ', 'Habari! 👋🏾', 'Karibu tena, ']);
     }
 
     /**

@@ -56,6 +56,7 @@ class ChatController extends Controller
             $sessionId,
             $validated['message'] ?? '',
             'web',
+            $this->chatPatientId($request, $hospital),
         );
 
         return response()->json([
@@ -162,6 +163,19 @@ class ChatController extends Controller
         }
 
         return $sessionId;
+    }
+
+    private function chatPatientId(Request $request, Hospital $hospital): string
+    {
+        $key = 'tenant_chat_patient_id_'.$hospital->id;
+        $patientId = $request->session()->get($key);
+
+        if (! is_string($patientId) || $patientId === '') {
+            $patientId = (string) Str::uuid();
+            $request->session()->put($key, $patientId);
+        }
+
+        return $patientId;
     }
 
     private function latestConversationId(Hospital $hospital, string $sessionId): int

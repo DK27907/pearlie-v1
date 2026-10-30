@@ -264,6 +264,11 @@ class Hospital extends Model
         return $this->hasMany(Conversation::class);
     }
 
+    public function patients(): HasMany
+    {
+        return $this->hasMany(Patient::class);
+    }
+
     public function escalations(): HasMany
     {
         return $this->hasMany(Escalation::class);

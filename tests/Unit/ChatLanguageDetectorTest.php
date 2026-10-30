@@ -47,6 +47,8 @@ class ChatLanguageDetectorTest extends TestCase
     {
         $this->assertTrue($this->detector->hasConfidentLanguageSignal('Habari yako'));
         $this->assertTrue($this->detector->hasConfidentLanguageSignal('What services do you offer'));
+        $this->assertTrue($this->detector->hasConfidentLanguageSignal('Asante'));
+        $this->assertTrue($this->detector->hasConfidentLanguageSignal('Hello'));
         $this->assertFalse($this->detector->hasConfidentLanguageSignal('Dental'));
     }
 }

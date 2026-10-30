@@ -36,7 +36,7 @@ class EscalationFlowTest extends TestCase
         );
     }
 
-    public function test_escalation_triggers_on_low_confidence(): void
+    public function test_low_confidence_does_not_escalate_without_an_explicit_request(): void
     {
         Mail::fake();
         $this->disableNotificationProviders();
@@ -56,23 +56,12 @@ class EscalationFlowTest extends TestCase
 
         $this->assertSame(0.45, $result['confidence']);
         $this->assertFalse($result['escalated']);
-        $this->assertStringContainsString('please share your phone number', $result['response']);
+        $this->assertStringNotContainsString('please share your phone number', $result['response']);
         $this->assertDatabaseMissing('escalations', [
             'session_id' => 'low-confidence-session',
         ]);
 
-        $phoneResponse = app(PearlieServiceV2::class)->processMessage(
-            '0712345678',
-            'low-confidence-session',
-        );
-
-        $this->assertTrue($phoneResponse['escalated']);
-        $this->assertDatabaseHas('escalations', [
-            'session_id' => 'low-confidence-session',
-            'user_message' => 'Can you explain this symptom?',
-            'user_phone' => '0712345678',
-            'status' => Escalation::STATUS_PENDING,
-        ]);
+        $this->assertFalse($result['escalated']);
     }
 
     public function test_escalation_triggers_on_human_help_keyword_and_returns_handoff(): void
@@ -240,7 +229,7 @@ class EscalationFlowTest extends TestCase
         ]);
     }
 
-    public function test_escalation_triggers_when_a_patient_repeats_a_message_within_two_minutes(): void
+    public function test_repeated_messages_do_not_escalate_without_an_explicit_request(): void
     {
         Mail::fake();
         $this->disableNotificationProviders();
@@ -266,9 +255,8 @@ class EscalationFlowTest extends TestCase
             'repeated-message-session',
         );
 
-        $this->assertSame('human_escalation', $result['source']);
-        $this->assertSame(true, $result['escalated']);
-        $this->assertDatabaseHas('escalations', [
+        $this->assertFalse($result['escalated']);
+        $this->assertDatabaseMissing('escalations', [
             'session_id' => 'repeated-message-session',
         ]);
     }
