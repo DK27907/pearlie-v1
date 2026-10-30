@@ -645,8 +645,9 @@ class BookingChatServiceTest extends TestCase
         $secondResponse = $chat->handle($sessionId, 'blah', 'web');
         $recoveryMenu = $chat->handle($sessionId, 'blah', 'web');
 
-        $this->assertStringContainsString("Sorry, I didn't catch that", $firstResponse->message);
-        $this->assertStringContainsString("Sorry, I didn't catch that", $secondResponse->message);
+        $this->assertStringContainsString("I didn't quite catch that", $firstResponse->message);
+        $this->assertStringContainsString("I'm still not sure I understood", $secondResponse->message);
+        $this->assertNotSame($firstResponse->message, $secondResponse->message);
         $this->assertSame(1, $firstResponse->collectedFields['unrecognized_message_count']);
         $this->assertSame(2, $secondResponse->collectedFields['unrecognized_message_count']);
         $this->assertSame('IDLE', $recoveryMenu->state);
@@ -1230,6 +1231,99 @@ class BookingChatServiceTest extends TestCase
         $response = app(BookingChatService::class)->handle('idle-greeting', 'hello', 'web');
 
         $this->assertStringContainsString('Pearlie', $response->message);
+    }
+
+    public function test_hi_gets_one_warm_personalized_greeting(): void
+    {
+        [$hospital] = $this->createContext();
+        $hospital->forceFill([
+            'name' => 'Pearl Hospital',
+            'chatbot_name' => 'Pearlie',
+        ])->save();
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle('254748249811', 'Hi', 'whatsapp');
+
+        $this->assertSame(
+            "Hello! 👋🏾 I'm Pearlie, Pearl Hospital's AI health assistant. How can I help you today? I can help you book an appointment, check doctor availability, or answer any questions about our services.",
+            $response->message,
+        );
+        $this->assertSame('hospital_greeting', $response->source);
+        $this->assertSame(1, Conversation::query()
+            ->where('session_id', 'whatsapp:254748249811')
+            ->where('channel', 'whatsapp')
+            ->count());
+    }
+
+    public function test_are_you_okay_gets_a_casual_reply_without_escalation(): void
+    {
+        $this->createContext();
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            '254748249812',
+            'Are you okay?',
+            'whatsapp',
+        );
+
+        $this->assertSame('social', $response->source);
+        $this->assertStringContainsString('Asante', $response->message);
+        $this->assertStringContainsString('ready to assist you', mb_strtolower($response->message));
+        $this->assertDatabaseCount('escalations', 0);
+    }
+
+    public function test_direction_keyword_returns_the_hospital_location(): void
+    {
+        [$hospital] = $this->createContext();
+        $hospital->forceFill([
+            'address' => 'Nyahururu, along the Nyahururu-Nakuru road',
+        ])->save();
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            '254748249813',
+            'Direction',
+            'whatsapp',
+        );
+
+        $this->assertSame('hospital_information', $response->source);
+        $this->assertStringContainsString('Nyahururu, along the Nyahururu-Nakuru road', $response->message);
+        $this->assertStringNotContainsString('There is no booking waiting', $response->message);
+    }
+
+    public function test_direction_question_during_date_collection_answers_and_resets_the_booking(): void
+    {
+        [$hospital] = $this->createContext(['Ultrasound Scan']);
+        $hospital->forceFill([
+            'address' => 'Nyahururu, along the Nyahururu-Nakuru road',
+        ])->save();
+        $chat = app(BookingChatService::class);
+        $chat->handle('direction-during-booking', 'Book Ultrasound Scan', 'web');
+
+        $response = $chat->handle('direction-during-booking', 'Direction', 'web');
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertStringContainsString('Nyahururu, along the Nyahururu-Nakuru road', $response->message);
+        $this->assertStringContainsString('would you still like to book Ultrasound Scan', $response->message);
+        $this->assertNull($response->collectedFields['service_id']);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_keyboard_gibberish_gets_a_polite_local_clarification(): void
+    {
+        $this->createContext();
+        Http::preventStrayRequests();
+
+        $chat = app(BookingChatService::class);
+        $response = $chat->handle('keyboard-gibberish', 'asdfgh', 'web');
+        $followUp = $chat->handle('keyboard-gibberish', 'asdfgh', 'web');
+
+        $this->assertSame('clarification', $response->source);
+        $this->assertStringContainsString('didn\'t quite catch that', $response->message);
+        $this->assertStringContainsString('book an appointment', mb_strtolower($response->message));
+        $this->assertStringContainsString('question about our services', mb_strtolower($response->message));
+        $this->assertNotSame($response->message, $followUp->message);
+        $this->assertDatabaseCount('escalations', 0);
     }
 
     public function test_greeting_during_booking_prompts_for_the_next_missing_field(): void

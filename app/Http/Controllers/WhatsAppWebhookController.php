@@ -97,7 +97,11 @@ class WhatsAppWebhookController extends Controller
                     $type = $message['type'] ?? null;
                     $incomingMessage = match ($type) {
                         'text' => data_get($message, 'text.body'),
-                        'interactive' => data_get($message, 'interactive.list_reply.id'),
+                        'interactive' => data_get($message, 'interactive.list_reply.id')
+                            ?? data_get($message, 'interactive.button_reply.id')
+                            ?? data_get($message, 'interactive.button_reply.title'),
+                        'button' => data_get($message, 'button.payload')
+                            ?? data_get($message, 'button.text'),
                         default => null,
                     };
                     if (! is_string($incomingMessage) || $incomingMessage === '') {

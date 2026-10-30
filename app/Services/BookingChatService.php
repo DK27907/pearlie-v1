@@ -273,9 +273,10 @@ class BookingChatService
                 language: $previousState['language'],
                 stateVersion: $previousState['state_version'],
             );
-            $greeting = $state['language'] === self::LANGUAGE_SWAHILI
-                ? 'Mazungumzo yako ya awali yameisha kwa kutotumika. Tuanze upya. Nikusaidie nini?'
-                : "Your previous chat expired due to inactivity. Let's start fresh. How can I help?";
+            $greeting = $this->greetingResponse($hospital, $state['language'])
+                .($state['language'] === self::LANGUAGE_SWAHILI
+                    ? ' Mazungumzo yako ya awali yameisha kwa kutotumika, kwa hivyo tuanze upya.'
+                    : ' Your previous chat expired due to inactivity, so let us start fresh.');
 
             return $this->respond(
                 $sessionId,
@@ -425,7 +426,7 @@ class BookingChatService
 
         $intent = $this->extractIntent($message, (string) $state['state']);
 
-        if ($this->isFaqTopicChangeDuringDateCollection($message, $intent, $state)) {
+        if ($this->isFaqTopicChangeDuringCollection($message, $intent, $state)) {
             $serviceName = filled($state['service_id'] ?? null)
                 ? $hospital->services()->whereKey((int) $state['service_id'])->value('name')
                 : null;
@@ -436,6 +437,11 @@ class BookingChatService
                 $faqResponse = $service
                     ? $this->serviceInquiryResponse($service, $hospital, $state['language'])
                     : null;
+            }
+            if ($faqResponse === null && $intent === 'location' && filled($hospital->address)) {
+                $faqResponse = $state['language'] === self::LANGUAGE_SWAHILI
+                    ? $hospital->name.' iko katika '.$hospital->address.'.'
+                    : $hospital->name.' is located at '.$hospital->address.'.';
             }
 
             $faqResponse ??= $state['language'] === self::LANGUAGE_SWAHILI
@@ -751,8 +757,12 @@ class BookingChatService
             }
 
             $response = $state['language'] === self::LANGUAGE_SWAHILI
-                ? 'Samahani, sikuweza kuelewa. Tafadhali eleza unachohitaji.'
-                : "Sorry, I didn't catch that. Could you tell me a little more about what you need?";
+                ? ($state['unrecognized_message_count'] === 1
+                    ? 'Samahani, sikuelewa vizuri. Ungependa kuweka miadi, au una swali kuhusu huduma zetu?'
+                    : 'Bado sijakuelewa vizuri. Unaweza kusema "weka miadi" au kuniuliza kuhusu huduma, daktari, au eneo la hospitali.')
+                : ($state['unrecognized_message_count'] === 1
+                    ? "I didn't quite catch that. Are you looking to book an appointment, or do you have a question about our services?"
+                    : "I'm still not sure I understood. You can say 'book an appointment' or ask me about a hospital service, doctor, or location.");
 
             return $this->respond(
                 $sessionId,
@@ -808,29 +818,22 @@ class BookingChatService
                 );
             }
 
-            $isSwahiliGreeting = $state['language'] === self::LANGUAGE_SWAHILI;
-            $greeting = $isSwahiliGreeting
-                ? null
-                : $this->knowledgeBase->search($message);
-
             return $this->respond(
                 $sessionId,
                 $channel,
                 $message,
-                $greeting ?? ($isSwahiliGreeting
-                    ? sprintf(
-                        'Habari! Mimi ni %s, msaidizi wa afya wa %s. Naweza kukusaidia na huduma, taarifa za hospitali, au kuweka miadi.',
-                        $hospital->chatbotName(),
-                        $hospital->name,
-                    )
-                    : sprintf(
-                        "Hello! I'm %s, %s's healthcare assistant. I can help with services, hospital information, or booking an appointment.",
-                        $hospital->chatbotName(),
-                        $hospital->name,
-                    )),
+                $this->greetingResponse($hospital, $state['language']),
                 $state,
-                source: $greeting !== null ? 'knowledge_base' : 'hospital_greeting',
+                source: 'hospital_greeting',
             );
+        }
+
+        if ($intent === 'social') {
+            $response = $state['language'] === self::LANGUAGE_SWAHILI
+                ? 'Niko vizuri, asante kwa kuuliza! Niko hapa kukusaidia. Ungependa nikusaidie nini?'
+                : "I'm doing great, Asante! I'm ready to assist you. What can I do for you today?";
+
+            return $this->respond($sessionId, $channel, $message, $response, $state, source: 'social');
         }
 
         if ($intent === 'thanks') {
@@ -2388,7 +2391,7 @@ class BookingChatService
 
     private function isLowSignalInput(string $message): bool
     {
-        return preg_match('/^(?:blah|asdf|qwerty|zxcv|xyz)+[.!?]*$/iu', trim($message)) === 1;
+        return preg_match('/^(?:blah|asdf(?:gh)?|qwerty|zxcv|xyz)+[.!?]*$/iu', trim($message)) === 1;
     }
 
     private function isTimeOutsideHospitalHours(string $time): bool
@@ -2523,11 +2526,14 @@ class BookingChatService
         if (preg_match('/\b(opening hours|working hours|outpatient hours|emergency hours|what time|when do you open|when are you open|hours|saa ngapi|mnafunga)\b/iu', $normalized)) {
             return 'hours';
         }
-        if (preg_match('/\b(where are you|where is|location|address|directions|mko wapi|iko wapi|mnapatikana wapi)\b/iu', $normalized)) {
+        if (preg_match('/\b(where are you|where is|location|address|directions?|how do i get there|mko wapi|iko wapi|mnapatikana wapi)\b/iu', $normalized)) {
             return 'location';
         }
         if (preg_match('/\b(contact(?: the hospital)?|phone number|hospital phone|telephone number|email address|hospital email|website|whatsapp number|call the hospital|what is your phone number)\b/iu', $normalized)) {
             return 'contact';
+        }
+        if (preg_match('/\b(?:are you (?:okay|ok|well)|how are you|how(?:\'s| is) it going)\b/iu', $normalized)) {
+            return 'social';
         }
         if (preg_match('/^(?:hi|hello|hey|habari(?:\s+yako|\s+za\s+(?:asubuhi|mchana|jioni))?|hujambo|jambo|mambo(?:\s+vipi)?|vipi|niaje|sasa|shikamoo|marahaba|salama|poa|freshi|mzuri|nzuri|yo|sup|what\s+s\s+up|whats\s+up|good morning|good afternoon|good evening)[.!?,\s]*$/u', $normalized)) {
             return 'greeting';
@@ -4079,13 +4085,27 @@ class BookingChatService
         ) === 1;
     }
 
+    private function greetingResponse(Hospital $hospital, string $language): string
+    {
+        return $language === self::LANGUAGE_SWAHILI
+            ? sprintf(
+                'Habari! 👋🏾 Mimi ni %s, msaidizi wa afya wa %s. Naweza kukusaidia kuweka miadi, kuangalia upatikanaji wa daktari, au kujibu maswali kuhusu huduma zetu.',
+                $hospital->chatbotName() ?? 'Assistant',
+                $hospital->name,
+            )
+            : sprintf(
+                "Hello! 👋🏾 I'm %s, %s's AI health assistant. How can I help you today? I can help you book an appointment, check doctor availability, or answer any questions about our services.",
+                $hospital->chatbotName() ?? 'Assistant',
+                $hospital->name,
+            );
+    }
+
     /**
      * @param  array<string, mixed>  $state
      */
-    private function isFaqTopicChangeDuringDateCollection(string $message, string $intent, array $state): bool
+    private function isFaqTopicChangeDuringCollection(string $message, string $intent, array $state): bool
     {
         return $state['state'] === self::STATE_COLLECTING
-            && $this->nextMissingField($state) === 'date'
             && DateParser::parse($message) === null
             && (
                 in_array($intent, ['services', 'doctors', 'hours', 'location', 'contact', 'pricing'], true)

@@ -127,6 +127,54 @@ class WhatsAppIntegrationTest extends TestCase
             && $job->providerMessageId === 'wamid.interactive-42');
     }
 
+    public function test_whatsapp_webhook_queues_button_and_template_replies_for_chat_processing(): void
+    {
+        config([
+            'whatsapp.app_secret' => 'webhook-secret',
+            'whatsapp.phone_number_id' => 'phone-number-id',
+            'whatsapp.access_token' => 'whatsapp-token',
+        ]);
+        Queue::fake();
+        $payload = [
+            'object' => 'whatsapp_business_account',
+            'entry' => [[
+                'changes' => [[
+                    'value' => [
+                        'messages' => [
+                            [
+                                'id' => 'wamid.button-reply',
+                                'from' => '254712345678',
+                                'type' => 'interactive',
+                                'interactive' => [
+                                    'type' => 'button_reply',
+                                    'button_reply' => ['id' => 'directions', 'title' => 'Directions'],
+                                ],
+                            ],
+                            [
+                                'id' => 'wamid.template-button',
+                                'from' => '254712345679',
+                                'type' => 'button',
+                                'button' => ['payload' => 'Hello', 'text' => 'Send Message'],
+                            ],
+                        ],
+                    ],
+                ]],
+            ]],
+        ];
+        $body = json_encode($payload, JSON_THROW_ON_ERROR);
+        $signature = 'sha256='.hash_hmac('sha256', $body, 'webhook-secret');
+
+        $this->call('POST', '/api/whatsapp/webhook', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_X_HUB_SIGNATURE_256' => $signature,
+        ], $body)->assertOk();
+
+        Queue::assertPushed(ProcessWhatsAppInboundMessage::class, fn (ProcessWhatsAppInboundMessage $job): bool => $job->providerMessageId === 'wamid.button-reply'
+            && $job->message === 'directions');
+        Queue::assertPushed(ProcessWhatsAppInboundMessage::class, fn (ProcessWhatsAppInboundMessage $job): bool => $job->providerMessageId === 'wamid.template-button'
+            && $job->message === 'Hello');
+    }
+
     public function test_incoming_message_triggers_the_booking_flow(): void
     {
         config([

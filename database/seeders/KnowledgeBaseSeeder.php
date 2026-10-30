@@ -231,8 +231,15 @@ class KnowledgeBaseSeeder extends Seeder
             [
                 'category' => 'location',
                 'subcategory' => 'address',
-                'keywords' => ['location', 'where', 'address', 'directions', 'maps', 'located', 'find you'],
+                'keywords' => ['location', 'where', 'address', 'directions', 'direction', 'maps', 'located', 'find you'],
                 'question' => 'Where is '.$hospitalName.' located?',
+                'answer' => $hospitalName.' is located at '.$hospitalLocation.'.',
+            ],
+            [
+                'category' => 'location',
+                'subcategory' => 'directions',
+                'keywords' => ['direction', 'directions', 'route', 'how do i get there', 'way to the hospital'],
+                'question' => 'How do I get directions to '.$hospitalName.'?',
                 'answer' => $hospitalName.' is located at '.$hospitalLocation.'.',
             ],
             [

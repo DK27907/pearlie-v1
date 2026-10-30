@@ -548,8 +548,8 @@
         <!-- ─── Messages ─── -->
         <div class="chat-messages" id="messages">
             <div class="message ai"
-                data-welcome-en="👋 Hello! I'm {{ $aiName }}, {{ $hospital->name }}'s healthcare assistant. How can I help you today?"
-                data-welcome-sw="👋 Habari! Mimi ni {{ $aiName }}, msaidizi wa afya wa {{ $hospital->name }}. Naweza kukusaidia vipi leo?"></div>
+                data-welcome-en="Hello! 👋🏾 I'm {{ $aiName }}, {{ $hospital->name }}'s AI health assistant. How can I help you today? I can help you book an appointment, check doctor availability, or answer any questions about our services."
+                data-welcome-sw="Habari! 👋🏾 Mimi ni {{ $aiName }}, msaidizi wa afya wa {{ $hospital->name }}. Naweza kukusaidia kuweka miadi, kuangalia upatikanaji wa daktari, au kujibu maswali kuhusu huduma zetu."></div>
         </div>
 
         <div class="quick-replies" aria-label="Suggested questions">

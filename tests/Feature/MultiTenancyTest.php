@@ -218,7 +218,7 @@ class MultiTenancyTest extends TestCase
             ->assertSee('data-chat-url="'.route('tenant.chat.post', 'chat-alias').'"', false)
             ->assertSee('data-reset-url="'.route('tenant.chat.reset', 'chat-alias').'"', false)
             ->assertSee('href="'.route('tenant.home', 'chat-alias').'"', false)
-            ->assertSee('data-welcome-en="👋 Hello! I\'m Pearlie, Chat Alias\'s healthcare assistant.', false)
+            ->assertSee('data-welcome-en="Hello! 👋🏾 I\'m Pearlie, Chat Alias\'s AI health assistant.', false)
             ->assertSee('<title>Chat with Chat Alias | MediDesk Assistant</title>', false)
             ->assertSee('<meta name="csrf-token"', false);
     }
@@ -260,6 +260,7 @@ class MultiTenancyTest extends TestCase
         ]);
         app()->forgetInstance('currentHospital');
         Cache::put($pendingBookingKey, ['name' => 'Stale booking'], now()->addMinutes(30));
+        $expectedGreeting = "Hello! 👋🏾 I'm {$hospital->chatbotName()}, {$hospital->name}'s AI health assistant. How can I help you today? I can help you book an appointment, check doctor availability, or answer any questions about our services.";
 
         $this->withSession([$sessionKey => $previousSessionId])
             ->postJson(route('tenant.chat.reset', $hospital->slug))
@@ -271,13 +272,13 @@ class MultiTenancyTest extends TestCase
 
         $this->postJson(route('tenant.chat.post', $hospital->slug), ['message' => 'hello'])
             ->assertOk()
-            ->assertJsonPath('response', 'Welcome to Chat Reset Hospital.')
-            ->assertJsonPath('source', 'knowledge_base');
+            ->assertJsonPath('response', $expectedGreeting)
+            ->assertJsonPath('source', 'hospital_greeting');
 
         $this->assertTrue(Cache::has($pendingBookingKey));
     }
 
-    public function test_tenant_chat_post_uses_the_resolved_hospitals_knowledge_base(): void
+    public function test_tenant_chat_greeting_uses_the_resolved_hospital_instead_of_stale_knowledge_base_copy(): void
     {
         $hospital = $this->createHospital('chat-post');
         app()->instance('currentHospital', $hospital);
@@ -291,16 +292,17 @@ class MultiTenancyTest extends TestCase
             'last_updated' => now(),
         ]);
         app()->forgetInstance('currentHospital');
+        $expectedGreeting = "Hello! 👋🏾 I'm {$hospital->chatbotName()}, {$hospital->name}'s AI health assistant. How can I help you today? I can help you book an appointment, check doctor availability, or answer any questions about our services.";
 
         $this->postJson(route('tenant.chat.post', $hospital->slug), ['message' => 'hello'])
             ->assertOk()
-            ->assertJsonPath('response', 'Welcome to Chat Post Hospital.')
-            ->assertJsonPath('source', 'knowledge_base');
+            ->assertJsonPath('response', $expectedGreeting)
+            ->assertJsonPath('source', 'hospital_greeting');
 
         $this->assertDatabaseHas('conversations', [
             'hospital_id' => $hospital->id,
             'user_message' => 'hello',
-            'ai_response' => 'Welcome to Chat Post Hospital.',
+            'ai_response' => $expectedGreeting,
         ]);
     }
 
