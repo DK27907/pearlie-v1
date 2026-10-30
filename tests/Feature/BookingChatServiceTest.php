@@ -299,6 +299,116 @@ class BookingChatServiceTest extends TestCase
         $this->assertDatabaseCount('appointment_requests', 0);
     }
 
+    public function test_declining_to_book_during_date_collection_cancels_without_another_date_prompt(): void
+    {
+        [$hospital, $services] = $this->createContext();
+        $chat = app(BookingChatService::class);
+        $chat->handle('decline-booking-session', 'Book Dental Cleaning', 'web');
+
+        $response = $chat->handle('decline-booking-session', 'No am not booking', 'web');
+
+        $this->assertSame("No problem! I've cancelled that. What else can I help you with?", $response->message);
+        $this->assertSame('IDLE', $response->state);
+        $this->assertNull($response->collectedFields['service_id']);
+        $this->assertNull($response->collectedFields['date']);
+        $this->assertSame('IDLE', $chat->getState('decline-booking-session')['state']);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_asking_about_a_specific_service_uses_knowledge_base_instead_of_listing_every_service(): void
+    {
+        [$hospital] = $this->createContext(['Dental Cleaning', 'General Consultation', 'Digital X-Ray']);
+        $hospital->knowledgeBases()->create([
+            'category' => 'services',
+            'language' => 'en',
+            'subcategory' => 'maternity-child-health',
+            'keywords' => ['maternity', 'antenatal', 'prenatal', 'delivery'],
+            'question' => 'What maternity services do you offer?',
+            'answer' => 'Maternity services include antenatal clinics, delivery care, and postnatal support.',
+            'source' => 'Test Hospital',
+            'last_updated' => now()->toDateString(),
+        ]);
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'specific-maternity-inquiry',
+            'Do you offer Maternity services?',
+            'web',
+        );
+
+        $this->assertSame(
+            'Maternity services include antenatal clinics, delivery care, and postnatal support.',
+            $response->message,
+        );
+        $this->assertSame('IDLE', $response->state);
+        $this->assertStringNotContainsString('Available services at', $response->message);
+        $this->assertStringNotContainsString('Dental Cleaning', $response->message);
+    }
+
+    public function test_off_topic_question_during_date_collection_is_answered_without_preserving_booking_state(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $chat->handle('alcohol-question-session', 'Book Dental Cleaning', 'web');
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://api.groq.com/openai/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => "I'm just an AI, so I don't drink! 😄 But I'm here to help you with your health. Would you like to book an appointment, or ask about our services?",
+                    ],
+                ]],
+            ]),
+        ]);
+
+        $response = $chat->handle('alcohol-question-session', 'Do you take alcohol', 'web');
+
+        $this->assertStringContainsString("I'm just an AI, so I don't drink!", $response->message);
+        $this->assertStringNotContainsString('What date', $response->message);
+        $this->assertSame('IDLE', $response->state);
+        $this->assertNull($response->collectedFields['service_id']);
+        $this->assertDatabaseCount('escalations', 0);
+    }
+
+    public function test_doctor_schedule_question_during_date_collection_answers_and_clears_the_booking(): void
+    {
+        [, , $doctors] = $this->createContext();
+        $doctors[0]->update(['specialization' => 'ENT specialist']);
+        $chat = app(BookingChatService::class);
+        $chat->handle('ent-schedule-during-booking', 'Book Dental Cleaning', 'web');
+
+        $response = $chat->handle('ent-schedule-during-booking', 'When is ENT clinic?', 'web');
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertSame('topic_change', $response->source);
+        $this->assertStringContainsString('Dr. Amina Njeri', $response->message);
+        $this->assertStringContainsString('9:00 AM', $response->message);
+        $this->assertStringNotContainsString('What date', $response->message);
+        $this->assertNull($response->collectedFields['service_id']);
+    }
+
+    public function test_single_available_doctor_is_assigned_without_a_selection_prompt(): void
+    {
+        [, $services, $doctors] = $this->createContext(
+            serviceNames: ['Ultrasound Scan'],
+            doctorNames: ['Dr. Amina Njeri'],
+        );
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'single-doctor-service-booking',
+            'Book Ultrasound Scan',
+            'web',
+        );
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertSame($services[0]->id, $response->collectedFields['service_id']);
+        $this->assertSame($doctors[0]->id, $response->collectedFields['doctor_id']);
+        $this->assertStringNotContainsString('Which doctor would you prefer', $response->message);
+        $this->assertStringContainsString('Dr. Amina Njeri', $response->message);
+        $this->assertStringContainsString('What date', $response->message);
+    }
+
     public function test_chat_state_expires_after_two_minutes_without_explaining_the_timeout(): void
     {
         $this->createContext();
@@ -962,8 +1072,9 @@ class BookingChatServiceTest extends TestCase
             "I didn't quite catch the date. Could you please format it as DD/MM/YYYY, or say 'tomorrow'?",
             $firstClarification->message,
         );
-        $this->assertStringContainsString('I still need a date', $recovery->message);
-        $this->assertStringContainsString("I didn't quite catch the date", $recovery->message);
+        $this->assertStringContainsString('cancel this booking', $recovery->message);
+        $this->assertStringContainsString('speak to a human', $recovery->message);
+        $this->assertStringNotContainsString("I didn't quite catch the date", $recovery->message);
         $this->assertStringNotContainsString('Available services at', $recovery->message);
         $this->assertSame('COLLECTING', $state['state']);
         $this->assertSame($services[0]->id, $state['service_id']);
@@ -1210,8 +1321,9 @@ class BookingChatServiceTest extends TestCase
         $response = app(BookingChatService::class)->handle('cancel-booking', 'Book Dental Cleaning', 'web');
         $cancelled = app(BookingChatService::class)->handle('cancel-booking', 'cancel', 'web');
 
-        $this->assertStringContainsString('Your booking has been cancelled', $cancelled->message);
-        $this->assertSame('CANCELLED', $cancelled->state);
+        $this->assertSame("No problem! I've cancelled that. What else can I help you with?", $cancelled->message);
+        $this->assertSame('IDLE', $cancelled->state);
+        $this->assertNull($cancelled->collectedFields['service_id']);
     }
 
     public function test_idle_cancel_does_not_cancel_a_nonexistent_booking(): void
@@ -1394,7 +1506,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertTrue(collect($capturedMessages)->contains(
             fn (array $message): bool => $message['content'] === 'You asked me to book Digital X-Ray.',
         ));
-        $this->assertCount(7, $capturedMessages);
+        $this->assertCount(8, $capturedMessages);
         $this->assertDatabaseCount('appointment_requests', 0);
         $this->assertDatabaseCount('escalations', 0);
     }

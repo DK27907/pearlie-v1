@@ -485,11 +485,36 @@ class BookingChatService
             );
         }
 
+        if ($this->isAwaitingBookingDateOrTime($state)
+            && $this->isBookingCancellationMessage($message, $intent)
+        ) {
+            $this->assistant->clearPendingEscalation($sessionId);
+            $state = $this->emptyState(
+                language: $state['language'],
+                stateVersion: $state['state_version'],
+            );
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                "No problem! I've cancelled that. What else can I help you with?",
+                $state,
+                source: 'booking_cancelled',
+            );
+        }
+
         if ($this->isFaqTopicChangeDuringCollection($message, $intent, $state)) {
             $serviceName = filled($state['service_id'] ?? null)
                 ? $hospital->services()->whereKey((int) $state['service_id'])->value('name')
                 : null;
-            $faqResponse = $this->knowledgeBase->search($message);
+            $faqResponse = $intent === 'doctors' && $this->isDoctorScheduleQuestion($message)
+                ? $this->doctorWeeklyScheduleResponse(
+                    $hospital,
+                    $this->doctorsMatchingIntent($hospital, $message),
+                    $state['language'],
+                )
+                : $this->knowledgeBase->search($message);
 
             if ($faqResponse === null && $intent === 'services') {
                 $service = $this->extractService($message, $hospital);
@@ -523,6 +548,20 @@ class BookingChatService
                 $state,
                 source: 'topic_change',
             );
+        }
+
+        if ($this->isAwaitingBookingDateOrTime($state)
+            && DateParser::parse($message) === null
+            && $this->isQuestionLikeMessage($message)
+        ) {
+            $state = $this->emptyState(
+                language: $state['language'],
+                stateVersion: $state['state_version'],
+            );
+
+            if (! in_array($intent, ['greeting', 'social', 'thanks', 'out_of_scope'], true)) {
+                return $this->delegateToAssistant($sessionId, $channel, $message, $state, $patient);
+            }
         }
 
         if ($this->isServiceInquiry($message)
@@ -957,6 +996,31 @@ class BookingChatService
                 );
             }
 
+            if (! $this->isBroadServicesOverview($message)) {
+                $knowledgeAnswer = $this->knowledgeBase->search($message);
+                if ($knowledgeAnswer !== null) {
+                    return $this->respond(
+                        $sessionId,
+                        $channel,
+                        $message,
+                        $knowledgeAnswer,
+                        $state,
+                        source: 'knowledge_base',
+                    );
+                }
+
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Sina taarifa zilizothibitishwa kuhusu huduma hiyo kwa sasa. Ungependa kuuliza kuhusu huduma maalum au kuweka miadi?'
+                        : "I don't have confirmed details about that service right now. Would you like to ask about another specific service or book an appointment?",
+                    $state,
+                    source: 'service_clarification',
+                );
+            }
+
             $services = $hospital->services()->active()->orderBy('name')->pluck('name');
             $response = $services->isEmpty()
                 ? sprintf(
@@ -977,7 +1041,6 @@ class BookingChatService
         }
 
         if ($intent === 'doctors') {
-            $normalizedMessage = mb_strtolower($message);
             $asksAvailability = preg_match(
                 '/\b(?:who|which)\s+(?:is\s+)?available\s+(?:today|tomorrow|on\s+[\pL\d-]+)/iu',
                 $message,
@@ -1021,35 +1084,8 @@ class BookingChatService
                 ->where('is_active', true)
                 ->orderBy('name')
                 ->get();
-            $doctors = $listedDoctors;
-            $specialtyTerms = match (true) {
-                preg_match('/\b(dentist|dentists|dental|daktari wa meno|madaktari wa meno)\b/iu', $normalizedMessage) === 1 => ['dent', 'oral'],
-                preg_match('/\b(ob\/gyn|obstetrician|gynecologist|gynaecologist)\b/iu', $normalizedMessage) === 1 => ['obstetric', 'gynec', 'gynaec'],
-                preg_match('/\b(radiologist|radiology)\b/iu', $normalizedMessage) === 1 => ['radiolog'],
-                preg_match('/\b(physiotherapist|physiotherapy)\b/iu', $normalizedMessage) === 1 => ['physiotherap'],
-                preg_match('/\b(oncolo(?:gist|gy))\b/iu', $normalizedMessage) === 1 => ['oncolog'],
-                preg_match('/\b(?:pediatrician|paediatrician|pediatrics|paediatrics)\b/iu', $normalizedMessage) === 1 => ['pediatric', 'paediatric'],
-                preg_match('/\b(neurolog(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['neurolog'],
-                preg_match('/\b(psychiatr(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['psychiatr'],
-                preg_match('/\b(urolog(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['urolog'],
-                preg_match('/\b(orthopedic|orthopaedic|orthopedist|orthopaedist)\b/iu', $normalizedMessage) === 1 => ['orthop', 'orthopaed'],
-                preg_match('/\b(cardiolog(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['cardiolog'],
-                preg_match('/\b(nephrolog(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['nephrolog'],
-                preg_match('/\b(gastroenterolog(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['gastroenterolog'],
-                preg_match('/\b(fertility specialist|fertility)\b/iu', $normalizedMessage) === 1 => ['fertility'],
-                preg_match('/\b(optometrist|optometry)\b/iu', $normalizedMessage) === 1 => ['optometr'],
-                preg_match('/\b(occupational therapist|occupational therapy)\b/iu', $normalizedMessage) === 1 => ['occupational therapist'],
-                preg_match('/\b(pharmacist|pharmacy)\b/iu', $normalizedMessage) === 1 => ['pharmac'],
-                preg_match('/\b(surgeon|surgery)\b/iu', $normalizedMessage) === 1 => ['surgeon'],
-                preg_match('/\bENT(?:\s+specialist)?\b/iu', $normalizedMessage) === 1 => ['ent specialist'],
-                default => [],
-            };
-            if ($specialtyTerms !== []) {
-                $doctors = $doctors->filter(
-                    fn (User $doctor): bool => collect($specialtyTerms)
-                        ->contains(fn (string $term): bool => str_contains(mb_strtolower((string) $doctor->specialization), $term)),
-                );
-            }
+            $doctors = $this->doctorsMatchingIntent($hospital, $message);
+            $specialtyTerms = $this->specialtyTermsForMessage($message);
 
             if ($this->isDoctorScheduleQuestion($message)) {
                 return $this->respond(
@@ -1205,12 +1241,12 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                sprintf(
-                    $state['language'] === self::LANGUAGE_SWAHILI
-                        ? 'Naweza kukusaidia kuhusu huduma za %s, miadi na taarifa za hospitali. Nikusaidie nini?'
-                        : 'I can help with %s services, appointments, and hospital information. What can I help you with?',
-                    $hospital->name,
-                ),
+                $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Sina uhakika kuhusu hilo, lakini naweza kukusaidia kuhusu huduma za hospitali, ratiba za madaktari au maelekezo. Ungependa kujua nini?'
+                    : sprintf(
+                        "I'm not sure about that, but I can help with %s services, appointments, and hospital information, including doctor schedules and directions. What would you like to know?",
+                        $hospital->name,
+                    ),
                 $state,
             );
         }
@@ -1540,13 +1576,7 @@ class BookingChatService
                 );
             }
 
-            $serviceTokens = $this->meaningfulTokens($service->name);
-            $messageTokens = $this->meaningfulTokens($message);
-            $serviceNameInMessage = collect($serviceTokens)
-                ->intersect($messageTokens)
-                ->isNotEmpty();
-
-            if ($doctors->count() === 1 && $serviceNameInMessage) {
+            if ($doctors->count() === 1) {
                 $state['doctor_id'] = $doctors->first()->id;
                 $automaticallySelectedDoctor = $doctors->first();
             } elseif ($doctors->isEmpty()) {
@@ -2585,6 +2615,11 @@ class BookingChatService
         if ($this->containsBookingKeyword($normalized)) {
             return 'book';
         }
+        if ($this->isDoctorScheduleQuestion($message)
+            && $this->specialtyTermsForMessage($message) !== []
+        ) {
+            return 'doctors';
+        }
         if ($state !== self::STATE_IDLE && preg_match('/^\s*miadi\s*[?!.]*\s*$/iu', $normalized) === 1) {
             return 'book';
         }
@@ -3274,6 +3309,12 @@ class BookingChatService
         }
 
         if ($field === 'date') {
+            if (($state['unrecognized_message_count'] ?? 0) >= 2) {
+                return $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Samahani, bado sijapata tarehe. Ungependa kughairi miadi hii au kuzungumza na mhudumu wa afya?'
+                    : 'I may not have understood. Would you like to cancel this booking or speak to a human? Reply “cancel” or “I want to speak to a human.”';
+            }
+
             return ($state['language'] === self::LANGUAGE_SWAHILI
                 ? 'Bado nahitaji tarehe ili kuendelea. '
                 : 'I still need a date to continue. ').$this->datePrompt(
@@ -4293,6 +4334,83 @@ class BookingChatService
                 in_array($intent, ['services', 'doctors', 'hours', 'location', 'contact', 'pricing'], true)
                 || $this->isServiceInquiry($message)
             );
+    }
+
+    private function isAwaitingBookingDateOrTime(array $state): bool
+    {
+        return $state['state'] === self::STATE_COLLECTING
+            && in_array($this->nextMissingField($state), ['date', 'time'], true);
+    }
+
+    private function isBookingCancellationMessage(string $message, string $intent): bool
+    {
+        return in_array($intent, ['cancel', 'no'], true)
+            || preg_match(
+                '/\b(?:not\s+booking|not\s+going\s+to\s+book|do\s+not\s+want\s+to\s+book|don[\'’]t\s+want\s+to\s+book|stop\s+booking)\b/iu',
+                $message,
+            ) === 1;
+    }
+
+    private function isQuestionLikeMessage(string $message): bool
+    {
+        return str_contains($message, '?')
+            || preg_match(
+                '/^\s*(?:am|are|can|could|did|do|does|has|have|how|is|was|were|what|when|where|which|who|why|will|would)\b/iu',
+                $message,
+            ) === 1;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function specialtyTermsForMessage(string $message): array
+    {
+        $normalizedMessage = mb_strtolower($message);
+
+        return match (true) {
+            preg_match('/\b(dentist|dentists|dental|daktari wa meno|madaktari wa meno)\b/iu', $normalizedMessage) === 1 => ['dent', 'oral'],
+            preg_match('/\b(ob\/gyn|obstetrician|gynecologist|gynaecologist|maternity)\b/iu', $normalizedMessage) === 1 => ['obstetric', 'gynec', 'gynaec'],
+            preg_match('/\b(radiologist|radiology)\b/iu', $normalizedMessage) === 1 => ['radiolog'],
+            preg_match('/\b(physiotherapist|physiotherapy)\b/iu', $normalizedMessage) === 1 => ['physiotherap'],
+            preg_match('/\b(oncolo(?:gist|gy))\b/iu', $normalizedMessage) === 1 => ['oncolog'],
+            preg_match('/\b(?:pediatrician|paediatrician|pediatrics|paediatrics)\b/iu', $normalizedMessage) === 1 => ['pediatric', 'paediatric'],
+            preg_match('/\b(neurolog(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['neurolog'],
+            preg_match('/\b(psychiatr(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['psychiatr'],
+            preg_match('/\b(urolog(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['urolog'],
+            preg_match('/\b(orthopedic|orthopaedic|orthopedist|orthopaedist)\b/iu', $normalizedMessage) === 1 => ['orthop', 'orthopaed'],
+            preg_match('/\b(cardiolog(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['cardiolog'],
+            preg_match('/\b(nephrolog(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['nephrolog'],
+            preg_match('/\b(gastroenterolog(?:ist|y))\b/iu', $normalizedMessage) === 1 => ['gastroenterolog'],
+            preg_match('/\b(fertility specialist|fertility)\b/iu', $normalizedMessage) === 1 => ['fertility'],
+            preg_match('/\b(optometrist|optometry)\b/iu', $normalizedMessage) === 1 => ['optometr'],
+            preg_match('/\b(occupational therapist|occupational therapy)\b/iu', $normalizedMessage) === 1 => ['occupational therapist'],
+            preg_match('/\b(pharmacist|pharmacy)\b/iu', $normalizedMessage) === 1 => ['pharmac'],
+            preg_match('/\b(surgeon|surgery)\b/iu', $normalizedMessage) === 1 => ['surgeon'],
+            preg_match('/\bENT(?:\s+specialist|\s+clinic)?\b/iu', $normalizedMessage) === 1 => ['ent'],
+            default => [],
+        };
+    }
+
+    /**
+     * @return Collection<int, User>
+     */
+    private function doctorsMatchingIntent(Hospital $hospital, string $message): Collection
+    {
+        $doctors = $hospital->doctors()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+        $specialtyTerms = $this->specialtyTermsForMessage($message);
+
+        return $specialtyTerms === []
+            ? $doctors
+            : $doctors->filter(
+                fn (User $doctor): bool => collect($specialtyTerms)
+                    ->contains(fn (string $term): bool => str_contains(
+                        mb_strtolower((string) $doctor->specialization),
+                        $term,
+                    )),
+            )->values();
     }
 
     private function isVagueServiceRequest(string $message): bool
