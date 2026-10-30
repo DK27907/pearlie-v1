@@ -34,6 +34,13 @@ class KnowledgeBaseSeeder extends Seeder
             ],
             [
                 'category' => 'services',
+                'subcategory' => 'general-consultation',
+                'keywords' => ['general consultation', 'stomach', 'tummy', 'belly', 'abdominal pain', 'tumbo', 'general doctor'],
+                'question' => 'Which service can help with general symptoms or stomach concerns?',
+                'answer' => 'A General Consultation can help assess general symptoms. Ultrasound imaging may be appropriate for some abdominal concerns; a clinician can advise whether it is needed.',
+            ],
+            [
+                'category' => 'services',
                 'subcategory' => 'outpatient',
                 'keywords' => ['outpatient', 'opd', 'clinic', 'consultation', 'general doctor', 'triage', 'clinical officer', 'walk-in'],
                 'question' => 'What outpatient services are available?',
@@ -105,7 +112,7 @@ class KnowledgeBaseSeeder extends Seeder
             [
                 'category' => 'services',
                 'subcategory' => 'ultrasound',
-                'keywords' => ['ultrasound', 'scan', 'sonography', 'doppler', 'color doppler', '3d scan', '4d scan', 'pregnancy scan'],
+                'keywords' => ['ultrasound', 'scan', 'sonography', 'doppler', 'color doppler', '3d scan', '4d scan', 'pregnancy scan', 'stomach', 'tummy', 'belly', 'abdomen', 'tumbo'],
                 'question' => 'What ultrasound scanning services are available?',
                 'answer' => $hospitalName.' provides ultrasound imaging, including 2D, 3D/4D, and Doppler scans. Contact '.$appointmentPhone.' to confirm availability.',
             ],

@@ -3,12 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\MissingProviderCredentialsException;
-use App\Services\BookingChatService;
+use App\Jobs\ProcessWhatsAppInboundMessage;
+use App\Models\Hospital;
 use App\Services\ProviderCredentialResolver;
-use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
 
 class WhatsAppWebhookController extends Controller
 {
@@ -41,11 +42,8 @@ class WhatsAppWebhookController extends Controller
         return response((string) $request->query('hub_challenge'), 200);
     }
 
-    public function receive(
-        Request $request,
-        BookingChatService $booking,
-        WhatsAppService $whatsApp,
-    ): Response {
+    public function receive(Request $request): Response
+    {
         try {
             $secret = (string) $this->whatsappCredential('whatsapp_app_secret', 'app_secret');
         } catch (MissingProviderCredentialsException $exception) {
@@ -84,6 +82,11 @@ class WhatsAppWebhookController extends Controller
             return response('Ignored', 200);
         }
 
+        $hospital = hospital();
+        if (! $hospital instanceof Hospital) {
+            throw new RuntimeException('A hospital context is required to queue an inbound WhatsApp message.');
+        }
+
         foreach ($payload['entry'] ?? [] as $entry) {
             foreach ($entry['changes'] ?? [] as $change) {
                 foreach ($change['value']['messages'] ?? [] as $message) {
@@ -101,34 +104,13 @@ class WhatsAppWebhookController extends Controller
                         continue;
                     }
 
-                    try {
-                        $result = $booking->handle(
-                            (string) $message['from'],
-                            $incomingMessage,
-                            'whatsapp',
-                        );
-                        if ($result->quickReplies !== []) {
-                            $whatsApp->sendInteractiveList(
-                                (string) $message['from'],
-                                $result->message,
-                                $result->quickReplies,
-                            );
-                        } else {
-                            $whatsApp->sendMessage((string) $message['from'], $result->message);
-                        }
-                    } catch (MissingProviderCredentialsException $exception) {
-                        Log::error('WhatsApp inbound message could not be handled because provider credentials are missing.', [
-                            'from' => $message['from'],
-                            'exception' => $exception,
-                        ]);
-
-                        return response($exception->getMessage(), 503);
-                    } catch (\Throwable $e) {
-                        Log::error('WhatsApp inbound message failed.', [
-                            'from' => $message['from'],
-                            'error' => $e->getMessage(),
-                        ]);
-                    }
+                    ProcessWhatsAppInboundMessage::dispatch(
+                        (int) $hospital->id,
+                        (string) $message['from'],
+                        $incomingMessage,
+                        isset($message['id']) ? (string) $message['id'] : null,
+                        isset($message['timestamp']) ? (string) $message['timestamp'] : null,
+                    );
                 }
             }
         }
@@ -136,12 +118,9 @@ class WhatsAppWebhookController extends Controller
         return response('EVENT_RECEIVED', 200);
     }
 
-    public function handle(
-        Request $request,
-        BookingChatService $booking,
-        WhatsAppService $whatsApp,
-    ): Response {
-        return $this->receive($request, $booking, $whatsApp);
+    public function handle(Request $request): Response
+    {
+        return $this->receive($request);
     }
 
     private function whatsappCredential(string $tenantAttribute, string $credentialKey): ?string

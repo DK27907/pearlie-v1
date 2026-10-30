@@ -110,6 +110,31 @@ class KnowledgeBaseService
             ->implode("\n");
     }
 
+    /**
+     * @return array<int, string>
+     */
+    public function suggestServices(string $query, int $limit = 3): array
+    {
+        $normalizedQuery = $this->normalize($query);
+        $queryWords = preg_split('/[^\pL\pN]+/u', $normalizedQuery, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $entries = KnowledgeBase::query()
+            ->whereIn('category', ['service', 'services'])
+            ->whereNotIn('subcategory', ['services_overview', 'general', 'complete-service-list-swahili'])
+            ->get();
+
+        return collect($this->rankMatches($normalizedQuery, $queryWords, $entries))
+            ->map(fn (array $match): string => Str::headline(str_replace(
+                '_',
+                '-',
+                (string) $match['entry']->subcategory,
+            )))
+            ->filter()
+            ->unique()
+            ->take(max(0, $limit))
+            ->values()
+            ->all();
+    }
+
     private function rankMatches(string $query, array $queryWords, $entries): array
     {
         $matches = [];

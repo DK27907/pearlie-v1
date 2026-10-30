@@ -191,6 +191,165 @@ class BookingChatServiceTest extends TestCase
         $this->assertDatabaseCount('appointment_requests', 0);
     }
 
+    public function test_ultrasound_inquiry_confirms_service_without_starting_a_booking_or_asking_for_a_date(): void
+    {
+        $this->createContext(['Ultrasound Scan']);
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            '254748249811',
+            'Do you have ultrasound?',
+            'whatsapp',
+        );
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertStringContainsString('Ultrasound Scan', $response->message);
+        $this->assertStringContainsString('KES 1.00', $response->message);
+        $this->assertStringContainsString('usually takes 30 minutes', $response->message);
+        $this->assertStringContainsString('book', mb_strtolower($response->message));
+        $this->assertStringNotContainsString('What date', $response->message);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_misspelled_ultrasound_inquiry_matches_the_hospital_service(): void
+    {
+        $this->createContext(['Ultrasound Scan', 'General Consultation']);
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            '254748249812',
+            'Do you have ultrasoud?',
+            'whatsapp',
+        );
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertStringContainsString('Ultrasound Scan', $response->message);
+        $this->assertStringNotContainsString('What date', $response->message);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_ent_availability_question_returns_the_specialist_weekly_schedule_without_booking(): void
+    {
+        [$hospital, , $doctors] = $this->createContext(
+            doctorNames: ['Dr. Amina Njeri', 'Dr. Brian Otieno'],
+        );
+        $doctors[0]->update(['specialization' => 'ENT Specialist']);
+        $doctors[1]->update(['specialization' => 'General Practitioner']);
+        DoctorAvailability::query()
+            ->where('hospital_id', $hospital->id)
+            ->where('doctor_id', $doctors[0]->id)
+            ->whereNotIn('day_of_week', [1, 3])
+            ->update(['is_active' => false]);
+        DoctorAvailability::query()
+            ->where('hospital_id', $hospital->id)
+            ->where('doctor_id', $doctors[0]->id)
+            ->whereIn('day_of_week', [1, 3])
+            ->update([
+                'start_time' => '09:00',
+                'end_time' => '13:00',
+            ]);
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            '254748249813',
+            'When is the ENT doctor available?',
+            'whatsapp',
+        );
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertStringContainsString('Dr. Amina Njeri', $response->message);
+        $this->assertStringContainsString('Monday', $response->message);
+        $this->assertStringContainsString('Wednesday', $response->message);
+        $this->assertStringContainsString('9:00 AM', $response->message);
+        $this->assertStringContainsString('1:00 PM', $response->message);
+        $this->assertStringNotContainsString('Dr. Brian Otieno', $response->message);
+        $this->assertStringNotContainsString('What date', $response->message);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_vague_stomach_service_request_uses_knowledge_base_suggestions_without_booking(): void
+    {
+        [$hospital] = $this->createContext(['General Consultation', 'Ultrasound Scan']);
+        $hospital->knowledgeBases()->create([
+            'category' => 'services',
+            'language' => 'en',
+            'subcategory' => 'general-consultation',
+            'keywords' => ['stomach', 'tummy', 'abdominal pain'],
+            'question' => 'Which service can help with stomach concerns?',
+            'answer' => 'A general consultation can help assess symptoms.',
+            'source' => 'Test Hospital',
+            'last_updated' => now()->toDateString(),
+        ]);
+        $hospital->knowledgeBases()->create([
+            'category' => 'services',
+            'language' => 'en',
+            'subcategory' => 'ultrasound',
+            'keywords' => ['stomach', 'abdomen', 'ultrasound'],
+            'question' => 'Which imaging service may help with abdominal concerns?',
+            'answer' => 'A clinician may recommend an ultrasound.',
+            'source' => 'Test Hospital',
+            'last_updated' => now()->toDateString(),
+        ]);
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            '254748249814',
+            'I need the thing for my stomach',
+            'whatsapp',
+        );
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertSame('clarification', $response->source);
+        $this->assertStringContainsString('General Consultation', $response->message);
+        $this->assertStringContainsString('Ultrasound', $response->message);
+        $this->assertStringNotContainsString('What date', $response->message);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_unmatched_service_inquiry_can_still_be_answered_from_the_hospital_knowledge_base(): void
+    {
+        [$hospital] = $this->createContext(['Ultrasound Scan']);
+        $hospital->knowledgeBases()->create([
+            'category' => 'amenities',
+            'language' => 'en',
+            'subcategory' => 'parking',
+            'keywords' => ['parking', 'park'],
+            'question' => 'Is parking available?',
+            'answer' => 'Visitor parking is available at the hospital entrance.',
+            'source' => 'Test Hospital',
+            'last_updated' => now()->toDateString(),
+        ]);
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'knowledge-base-parking-inquiry',
+            'Do you have parking?',
+            'web',
+        );
+
+        $this->assertSame('knowledge_base', $response->source);
+        $this->assertStringContainsString('Visitor parking is available', $response->message);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_booking_accepts_a_minor_typo_in_a_doctor_name(): void
+    {
+        [, $services, $doctors] = $this->createContext(
+            doctorNames: ['Dr. Amina Njeri', 'Dr. Brian Otieno'],
+        );
+
+        app(BookingChatService::class)->handle(
+            'doctor-name-typo',
+            'Book Dental Cleaning with Dr. Amna tomorrow at 9am',
+            'web',
+        );
+
+        $state = $this->state('doctor-name-typo');
+
+        $this->assertSame($services[0]->id, $state['service_id']);
+        $this->assertSame($doctors[0]->id, $state['doctor_id']);
+    }
+
     public function test_booking_state_machine_survives_repeated_intent_during_active_flow(): void
     {
         [, $services] = $this->createContext();

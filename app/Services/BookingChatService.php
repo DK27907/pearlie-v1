@@ -400,6 +400,56 @@ class BookingChatService
 
         $intent = $this->extractIntent($message, (string) $state['state']);
 
+        if ($this->isServiceInquiry($message)
+            && ! $this->containsBookingKeyword($message)
+            && ! in_array($intent, ['doctors', 'services'], true)
+        ) {
+            $service = $this->extractService($message, $hospital);
+
+            if ($service !== null) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $this->serviceInquiryResponse($service, $hospital, $state['language']),
+                    $state,
+                    source: 'hospital_services',
+                );
+            }
+
+            $knowledgeAnswer = $this->knowledgeBase->search($message);
+            if ($knowledgeAnswer !== null) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $knowledgeAnswer,
+                    $state,
+                    source: 'knowledge_base',
+                );
+            }
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $this->serviceClarificationResponse($message, $hospital, $state['language']),
+                $state,
+                source: 'clarification',
+            );
+        }
+
+        if ($state['state'] === self::STATE_IDLE && $this->isVagueServiceRequest($message)) {
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $this->serviceClarificationResponse($message, $hospital, $state['language']),
+                $state,
+                source: 'clarification',
+            );
+        }
+
         if (in_array($state['state'], [
             self::STATE_LIFECYCLE_SELECT,
             self::STATE_LIFECYCLE_CANCEL_CONFIRM,
@@ -839,6 +889,17 @@ class BookingChatService
                 $doctors = $doctors->filter(
                     fn (User $doctor): bool => collect($specialtyTerms)
                         ->contains(fn (string $term): bool => str_contains(mb_strtolower((string) $doctor->specialization), $term)),
+                );
+            }
+
+            if ($this->isDoctorScheduleQuestion($message)) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $this->doctorWeeklyScheduleResponse($hospital, $doctors, $state['language']),
+                    $state,
+                    source: 'hospital_doctor_availability',
                 );
             }
 
@@ -1809,6 +1870,7 @@ class BookingChatService
             'renal' => 'Renal Dialysis Session',
             'antenatal' => 'Antenatal Clinic Visit',
             'prenatal' => 'Antenatal Clinic Visit',
+            'ultra sound' => 'Ultrasound Scan (Obstetric)',
             'oncology' => 'Oncology Consultation',
             'cancer' => 'Oncology Consultation',
             'optical' => 'Optical Eye Checkup',
@@ -1994,11 +2056,24 @@ class BookingChatService
         $doctors = $this->eligibleDoctors($hospital, $service);
         $tokens = collect($this->meaningfulTokens($searchText));
         $matches = $doctors->filter(function (User $doctor) use ($tokens): bool {
-            $nameTokens = collect(explode(' ', $this->normalize(preg_replace('/^(?:dr|doctor)\s+/i', '', $doctor->name) ?? $doctor->name)));
+            $nameTokens = collect(explode(
+                ' ',
+                $this->normalize(preg_replace('/^(?:dr|doctor)\s+/i', '', $doctor->name) ?? $doctor->name),
+            ));
             $distinctMatches = $nameTokens->intersect($tokens)->unique();
 
-            return $distinctMatches->isNotEmpty()
-                && $nameTokens->contains(fn (string $token): bool => mb_strlen($token) >= 3 && $distinctMatches->contains($token));
+            if ($distinctMatches->isNotEmpty()) {
+                return true;
+            }
+
+            return $nameTokens->contains(function (string $nameToken) use ($tokens): bool {
+                if (mb_strlen($nameToken) < 4) {
+                    return false;
+                }
+
+                return $tokens->contains(fn (string $token): bool => abs(mb_strlen($nameToken) - mb_strlen($token)) <= 1
+                    && levenshtein($nameToken, $token) <= 1);
+            });
         });
 
         return $matches->count() === 1 ? $matches->first() : null;
@@ -3914,6 +3989,141 @@ class BookingChatService
             '/\b(what services|which services|list (?:all )?services|all services|full service list|services overview|services are available|huduma zenu|huduma gani)\b/iu',
             $message,
         ) === 1;
+    }
+
+    private function isServiceInquiry(string $message): bool
+    {
+        return preg_match(
+            '/\b(?:do you have|do you offer|do you provide|is there|are there|is .* available)\b/iu',
+            $message,
+        ) === 1;
+    }
+
+    private function isVagueServiceRequest(string $message): bool
+    {
+        return preg_match(
+            '/\b(?:thing|something|service)\b.{0,50}\b(?:stomach|abdomen|tummy|belly|tumbo)\b|\b(?:stomach|abdomen|tummy|belly|tumbo)\b.{0,50}\b(?:thing|something|service)\b/iu',
+            $message,
+        ) === 1;
+    }
+
+    private function serviceInquiryResponse(Service $service, Hospital $hospital, string $language): string
+    {
+        $details = [];
+        if ((float) $service->price > 0) {
+            $details[] = 'KES '.number_format((float) $service->price, 2);
+        }
+        if ((int) $service->duration_minutes > 0) {
+            $details[] = sprintf('usually takes %d minutes', (int) $service->duration_minutes);
+        }
+
+        if ($language === self::LANGUAGE_SWAHILI) {
+            $detail = $details === [] ? '' : ' ('.implode('; ', $details).')';
+
+            return sprintf(
+                'Ndiyo, %s inapatikana katika %s%s. Je, ungependa kuweka miadi au una swali lingine?',
+                $service->name,
+                $hospital->name,
+                $detail,
+            );
+        }
+
+        $detail = $details === [] ? '' : ' ('.implode('; ', $details).')';
+
+        return sprintf(
+            'Yes, we offer %s%s at %s. Would you like to book an appointment, or do you have another question?',
+            $service->name,
+            $detail,
+            $hospital->name,
+        );
+    }
+
+    private function serviceClarificationResponse(string $message, Hospital $hospital, string $language): string
+    {
+        $suggestions = $this->knowledgeBase->suggestServices($message);
+        if ($suggestions === []) {
+            $suggestions = $hospital->services()
+                ->active()
+                ->orderBy('name')
+                ->limit(3)
+                ->pluck('name')
+                ->all();
+        }
+
+        if ($suggestions === []) {
+            return $language === self::LANGUAGE_SWAHILI
+                ? 'Sina uhakika unamaanisha huduma gani. Tafadhali eleza zaidi, au wasiliana na hospitali kwa msaada.'
+                : "I'm not sure which service you mean. Could you tell me a little more, or contact the hospital for help?";
+        }
+
+        $suggestedServices = implode(', ', $suggestions);
+
+        return $language === self::LANGUAGE_SWAHILI
+            ? 'Sina uhakika unamaanisha huduma gani. Je, unamaanisha '.$suggestedServices.' au huduma nyingine?'
+            : "I'm not sure which service you mean. Do you mean ".$suggestedServices.', or something else?';
+    }
+
+    private function isDoctorScheduleQuestion(string $message): bool
+    {
+        return preg_match('/\b(?:when|what days?|which days?|weekly schedule|schedule|availability|available)\b/iu', $message) === 1;
+    }
+
+    /**
+     * @param  Collection<int, User>  $doctors
+     */
+    private function doctorWeeklyScheduleResponse(Hospital $hospital, Collection $doctors, string $language): string
+    {
+        $doctorIds = $doctors->pluck('id')->all();
+        $availabilities = $doctorIds === []
+            ? collect()
+            : $hospital->availabilities()
+                ->where('hospital_id', $hospital->id)
+                ->whereIn('doctor_id', $doctorIds)
+                ->where('is_active', true)
+                ->whereHas('doctor', fn ($query) => $query
+                    ->where('hospital_id', $hospital->id)
+                    ->where('is_doctor', true)
+                    ->where('is_active', true))
+                ->with(['doctor' => fn ($query) => $query
+                    ->where('hospital_id', $hospital->id)
+                    ->where('is_doctor', true)
+                    ->where('is_active', true)])
+                ->orderBy('doctor_id')
+                ->orderBy('day_of_week')
+                ->orderBy('start_time')
+                ->get();
+
+        if ($availabilities->isEmpty()) {
+            $specialists = $doctors->pluck('name')->implode(', ');
+
+            return $language === self::LANGUAGE_SWAHILI
+                ? 'Saa za kila wiki za '.($specialists ?: 'madaktari hawa').' hazijaorodheshwa. Tafadhali wasiliana na hospitali kuthibitisha ratiba.'
+                : 'I could not find published weekly hours for '.($specialists ?: 'this specialist').'. Please contact the hospital to confirm the schedule.';
+        }
+
+        $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        $scheduleLines = $availabilities
+            ->filter(fn ($availability): bool => $availability->doctor !== null)
+            ->groupBy('doctor_id')
+            ->map(function (Collection $doctorAvailabilities) use ($days): string {
+                $doctorName = $doctorAvailabilities->first()->doctor->name;
+                $times = $doctorAvailabilities
+                    ->map(fn ($availability): string => sprintf(
+                        '%s %s to %s',
+                        $days[(int) $availability->day_of_week] ?? 'Day '.$availability->day_of_week,
+                        CarbonImmutable::parse($availability->start_time)->format('g:i A'),
+                        CarbonImmutable::parse($availability->end_time)->format('g:i A'),
+                    ))
+                    ->implode('; ');
+
+                return $doctorName.' is available '.$times;
+            })
+            ->values()
+            ->implode('. ');
+
+        return $language === self::LANGUAGE_SWAHILI
+            ? $scheduleLines.'. Tafadhali niambie ikiwa ungependa kuweka miadi.'
+            : $scheduleLines.'. Let me know if you would like to book an appointment.';
     }
 
     /**

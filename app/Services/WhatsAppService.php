@@ -131,14 +131,19 @@ class WhatsAppService
         }
     }
 
-    public function markAsRead(string $messageId): void
+    public function markAsRead(string $messageId, bool $showTypingIndicator = false): void
     {
         try {
-            $this->apiRequest()->post($this->messagesUrl(), [
+            $payload = [
                 'messaging_product' => 'whatsapp',
                 'status' => 'read',
                 'message_id' => $messageId,
-            ])->throw();
+            ];
+            if ($showTypingIndicator) {
+                $payload['typing_indicator'] = ['type' => 'text'];
+            }
+
+            $this->apiRequest()->post($this->messagesUrl(), $payload)->throw();
         } catch (Throwable $exception) {
             Log::error('Unable to mark a WhatsApp message as read.', [
                 'exception_class' => $exception::class,

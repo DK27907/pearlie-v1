@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Conversation;
+use App\Jobs\ProcessWhatsAppInboundMessage;
 use App\Models\Hospital;
 use App\Services\BookingChatService;
 use App\Services\Chat\ChatResponse;
@@ -11,6 +11,7 @@ use App\Services\WhatsAppService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class WhatsAppIntegrationTest extends TestCase
@@ -94,24 +95,14 @@ class WhatsAppIntegrationTest extends TestCase
             'whatsapp.phone_number_id' => 'phone-number-id',
             'whatsapp.access_token' => 'whatsapp-token',
         ]);
-        $booking = \Mockery::mock(BookingChatService::class);
-        $booking->shouldReceive('handle')
-            ->once()
-            ->with('254712345678', '__service:42__', 'whatsapp')
-            ->andReturn(new ChatResponse('Which date do you prefer?', 'COLLECTING'));
-        $whatsApp = \Mockery::mock(WhatsAppService::class);
-        $whatsApp->shouldReceive('sendMessage')
-            ->once()
-            ->with('254712345678', 'Which date do you prefer?')
-            ->andReturn(['success' => true, 'message' => 'sent']);
-        $this->app->instance(BookingChatService::class, $booking);
-        $this->app->instance(WhatsAppService::class, $whatsApp);
+        Queue::fake();
         $payload = [
             'object' => 'whatsapp_business_account',
             'entry' => [[
                 'changes' => [[
                     'value' => [
                         'messages' => [[
+                            'id' => 'wamid.interactive-42',
                             'from' => '254712345678',
                             'type' => 'interactive',
                             'interactive' => [
@@ -130,6 +121,10 @@ class WhatsAppIntegrationTest extends TestCase
             'CONTENT_TYPE' => 'application/json',
             'HTTP_X_HUB_SIGNATURE_256' => $signature,
         ], $body)->assertOk();
+
+        Queue::assertPushed(ProcessWhatsAppInboundMessage::class, fn (ProcessWhatsAppInboundMessage $job): bool => $job->from === '254712345678'
+            && $job->message === '__service:42__'
+            && $job->providerMessageId === 'wamid.interactive-42');
     }
 
     public function test_incoming_message_triggers_the_booking_flow(): void
@@ -139,10 +134,7 @@ class WhatsAppIntegrationTest extends TestCase
             'whatsapp.phone_number_id' => 'phone-number-id',
             'whatsapp.access_token' => 'whatsapp-token',
         ]);
-        Http::preventStrayRequests();
-        Http::fake([
-            'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.response']]]),
-        ]);
+        Queue::fake();
 
         $payload = [
             'object' => 'whatsapp_business_account',
@@ -150,6 +142,7 @@ class WhatsAppIntegrationTest extends TestCase
                 'changes' => [[
                     'value' => [
                         'messages' => [[
+                            'id' => 'wamid.incoming',
                             'from' => '254712345678',
                             'type' => 'text',
                             'text' => ['body' => 'Book an appointment'],
@@ -170,20 +163,67 @@ class WhatsAppIntegrationTest extends TestCase
             'phone' => '254712345678',
             'session_id' => 'whatsapp:254712345678',
         ]);
-        $this->assertDatabaseHas('conversations', [
+        $this->assertDatabaseMissing('conversations', [
             'session_id' => 'whatsapp:254712345678',
             'channel' => 'whatsapp',
         ]);
-        $this->assertSame(
-            'COLLECTING',
-            Conversation::query()
-                ->where('session_id', 'whatsapp:254712345678')
-                ->latest('id')
-                ->firstOrFail()
-                ->chat_state['state'],
+        Queue::assertPushed(ProcessWhatsAppInboundMessage::class, fn (ProcessWhatsAppInboundMessage $job): bool => $job->message === 'Book an appointment'
+            && $job->providerMessageId === 'wamid.incoming');
+    }
+
+    public function test_queued_whatsapp_job_shows_typing_before_processing_and_restores_tenant_context(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $previousHospital = Hospital::factory()->create();
+        app()->instance('currentHospital', $previousHospital);
+        $booking = \Mockery::mock(BookingChatService::class);
+        $booking->shouldReceive('handle')
+            ->once()
+            ->with('254712345678', 'Do you have ultrasound?', 'whatsapp')
+            ->andReturnUsing(function () use ($hospital): ChatResponse {
+                $this->assertSame($hospital->id, hospital()->id);
+
+                return new ChatResponse('Yes, we offer Ultrasound Scan.', 'IDLE');
+            });
+        $whatsApp = \Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('markAsRead')
+            ->once()
+            ->with('wamid.typing', true);
+        $whatsApp->shouldReceive('sendMessage')
+            ->once()
+            ->with('254712345678', 'Yes, we offer Ultrasound Scan.')
+            ->andReturn(['success' => true, 'message' => 'sent']);
+        $job = new ProcessWhatsAppInboundMessage(
+            (int) $hospital->id,
+            '254712345678',
+            'Do you have ultrasound?',
+            'wamid.typing',
+            '1793380000',
         );
-        Http::assertSent(fn ($request): bool => str_contains($request->url(), '/messages')
-            && $request['messaging_product'] === 'whatsapp');
+
+        $job->handle($booking, $whatsApp);
+
+        $this->assertSame($previousHospital->id, hospital()->id);
+    }
+
+    public function test_whatsapp_typing_indicator_is_sent_with_the_read_receipt(): void
+    {
+        app()->instance('currentHospital', Hospital::factory()->create());
+        config([
+            'whatsapp.access_token' => 'test-token',
+            'whatsapp.phone_number_id' => 'test-phone-number-id',
+            'whatsapp.api_version' => 'v20.0',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response(['success' => true]),
+        ]);
+
+        app(WhatsAppService::class)->markAsRead('wamid.typing', showTypingIndicator: true);
+
+        Http::assertSent(fn ($request): bool => $request['status'] === 'read'
+            && $request['message_id'] === 'wamid.typing'
+            && $request['typing_indicator'] === ['type' => 'text']);
     }
 
     public function test_booking_flow_collects_email_and_creates_an_appointment_with_payment(): void
