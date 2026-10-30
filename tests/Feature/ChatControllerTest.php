@@ -93,4 +93,37 @@ class ChatControllerTest extends TestCase
         ]))->assertUnprocessable()
             ->assertJsonValidationErrors('since_id');
     }
+
+    public function test_chat_page_starts_a_new_web_session_after_one_minute_of_inactivity(): void
+    {
+        $hospital = Hospital::factory()->create([
+            'slug' => 'expired-web-chat',
+            'is_active' => true,
+            'subscription_status' => 'active',
+        ]);
+        $sessionId = 'expired-web-session';
+        $sessionKey = 'tenant_chat_session_id_'.$hospital->id;
+        Conversation::withoutGlobalScopes()->forceCreate([
+            'hospital_id' => $hospital->id,
+            'session_id' => $sessionId,
+            'user_message' => 'Book Dental Cleaning',
+            'ai_response' => 'What date would you prefer?',
+            'channel' => 'web',
+            'chat_state' => [
+                'state' => 'COLLECTING',
+                'language' => 'en',
+                'state_version' => 1,
+                'service_id' => 1,
+                'date' => null,
+            ],
+            'chat_state_updated_at' => now()->subMinutes(2),
+        ]);
+        $this->withSession([$sessionKey => $sessionId]);
+
+        $response = $this->get(route('tenant.chat.page', ['slug' => $hospital->slug]));
+
+        $response->assertOk()
+            ->assertSee('data-last-message-id="0"', false);
+        $this->assertNotSame($sessionId, session($sessionKey));
+    }
 }

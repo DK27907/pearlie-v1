@@ -29,6 +29,9 @@ class ChatController extends Controller
         }
 
         $sessionId = $this->chatSessionId($request, $hospital);
+        if ($this->bookingChat->hasSessionExpired($sessionId, 'web')) {
+            $sessionId = $this->chatSessionId($request, $hospital, true);
+        }
 
         return view('tenant.chat', [
             'hospital' => $hospital,

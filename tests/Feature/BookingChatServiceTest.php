@@ -267,6 +267,82 @@ class BookingChatServiceTest extends TestCase
         $this->assertDatabaseCount('appointment_requests', 0);
     }
 
+    public function test_service_question_during_date_collection_answers_faq_and_resets_the_booking(): void
+    {
+        [$hospital] = $this->createContext(['Ultrasound Scan', 'Dental Cleaning']);
+        $hospital->knowledgeBases()->create([
+            'category' => 'services',
+            'language' => 'en',
+            'subcategory' => 'dental',
+            'keywords' => ['dental services', 'dental care', 'dentistry'],
+            'question' => 'Do you have dental services?',
+            'answer' => 'Yes, dental services are available at the hospital.',
+            'source' => 'Test Hospital',
+            'last_updated' => now()->toDateString(),
+        ]);
+        $chat = app(BookingChatService::class);
+        $datePrompt = $chat->handle('topic-change-during-date', 'Book Ultrasound Scan', 'web');
+
+        $response = $chat->handle(
+            'topic-change-during-date',
+            'Do you have dental services?',
+            'web',
+        );
+
+        $this->assertStringContainsString('What date', $datePrompt->message);
+        $this->assertSame('IDLE', $response->state);
+        $this->assertStringStartsWith('Yes, dental services are available at the hospital.', $response->message);
+        $this->assertStringContainsString('would you still like to book Ultrasound Scan', $response->message);
+        $this->assertNull($response->collectedFields['service_id']);
+        $this->assertNull($response->collectedFields['date']);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_chat_state_expires_after_two_minutes_of_inactivity_and_starts_with_a_greeting(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $chat->handle('expired-booking-session', 'Book Dental Cleaning', 'web');
+        $this->travel(2)->minutes();
+
+        $response = $chat->handle('expired-booking-session', 'tomorrow', 'web');
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertSame('session_timeout', $response->source);
+        $this->assertStringContainsString('previous chat expired', mb_strtolower($response->message));
+        $this->assertNull($response->collectedFields['service_id']);
+        $this->assertSame('IDLE', $chat->getState('expired-booking-session')['state']);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_chat_state_is_preserved_when_the_user_replies_within_one_minute(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $chat->handle('active-booking-session', 'Book Dental Cleaning', 'web');
+        $this->travel(59)->seconds();
+
+        $response = $chat->handle('active-booking-session', 'tomorrow', 'web');
+
+        $this->assertNotSame('session_timeout', $response->source);
+        $this->assertSame(CarbonImmutable::tomorrow()->toDateString(), $response->collectedFields['date']);
+    }
+
+    public function test_gibberish_while_waiting_for_a_date_gets_clear_date_format_guidance(): void
+    {
+        $this->createContext();
+        $chat = app(BookingChatService::class);
+        $chat->handle('date-gibberish', 'Book Dental Cleaning', 'web');
+
+        $response = $chat->handle('date-gibberish', 'banana spaceship', 'web');
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertSame(
+            "I didn't quite catch the date. Could you please format it as DD/MM/YYYY, or say 'tomorrow'?",
+            $response->message,
+        );
+    }
+
     public function test_vague_stomach_service_request_uses_knowledge_base_suggestions_without_booking(): void
     {
         [$hospital] = $this->createContext(['General Consultation', 'Ultrasound Scan']);
@@ -879,10 +955,12 @@ class BookingChatServiceTest extends TestCase
         $recovery = $chat->handle('unrecognized-booking-input', 'purple giraffe', 'web');
         $state = $chat->getState('unrecognized-booking-input');
 
-        $this->assertStringContainsString('What date would you prefer', $firstClarification->message);
-        $this->assertStringContainsString("Sorry, I didn't catch that", $firstClarification->message);
+        $this->assertSame(
+            "I didn't quite catch the date. Could you please format it as DD/MM/YYYY, or say 'tomorrow'?",
+            $firstClarification->message,
+        );
         $this->assertStringContainsString('I still need a date', $recovery->message);
-        $this->assertStringContainsString("Sorry, I didn't catch that", $recovery->message);
+        $this->assertStringContainsString("I didn't quite catch the date", $recovery->message);
         $this->assertStringNotContainsString('Available services at', $recovery->message);
         $this->assertSame('COLLECTING', $state['state']);
         $this->assertSame($services[0]->id, $state['service_id']);
