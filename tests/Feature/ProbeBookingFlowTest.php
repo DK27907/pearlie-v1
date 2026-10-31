@@ -43,6 +43,6 @@ class ProbeBookingFlowTest extends TestCase
         $servicePrompt = $chat->handle('probe-service-prompt', 'I want to book an appointment', 'web');
 
         $this->assertSame('COLLECTING', $servicePrompt->state);
-        $this->assertStringContainsString('What service do you need?', $servicePrompt->message);
+        $this->assertStringContainsString('Which service do you need?', $servicePrompt->message);
     }
 }

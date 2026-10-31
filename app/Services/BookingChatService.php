@@ -1497,7 +1497,8 @@ class BookingChatService
                 && ! $this->hasExplicitHumanPhrase($message)
                 && ! $isContinueBookingRequest
                 && $hasAdditionalBookingContent
-                ? $this->serviceUnavailablePrompt($hospital, $state['language'])
+                && ! $this->hasAmbiguousServiceMatch($message, $hospital)
+                ? $this->serviceUnavailablePrompt($hospital, $state['language'], $message)
                 : $this->servicePrompt($hospital, $state['language']);
 
             return $this->respond(
@@ -1996,7 +1997,7 @@ class BookingChatService
     private function containsBookingKeyword(string $message): bool
     {
         return preg_match(
-            '/\b(book|booking|appointment|schedule|reserve|see\s+(?:a\s+)?doctor|i want to book|need\s+(?:an?\s+)?appointment|need\s+to\s+book)\b|'
+            '/\b(book|booking|appointment|schedule|reserve|see\s+(?:a\s+)?doctor|i want to book|need\s+(?:an?\s+)?appointment|need\s+to\s+book|i\s+need\s+(?:to\s+see\s+)?(?:a\s+)?doctor)\b|'
                 .'\b(?:(?:ni)?nataka|naomba)\s+(?:kuweka|kupata|kuomba)\s+miadi\b|\bweka\s+miadi\b/iu',
             $message,
         ) === 1;
@@ -2009,10 +2010,10 @@ class BookingChatService
 
     private function isPlainBookingIntent(string $message): bool
     {
-        $trimmed = trim($message);
+        $trimmed = trim($message, " \t\n\r\0\x0B?.!");
 
         return preg_match(
-            '/^(?:i\s+want\s+to\s+book\s+an\s+appointment|i\s+need\s+an\s+appointment|i\s+need\s+a\s+booking|book(?:ing)?(?:\s+an\s+appointment)?|appointment|schedule(?:\s+an\s+appointment)?|reserve(?:\s+an\s+appointment)?|(?:(?:ni)?nataka|naomba)\s+(?:kuweka|kupata|kuomba)\s+miadi|weka\s+miadi)$/iu',
+            '/^(?:i\s+want(?:\s+to)?\s+book(?:\s+(?:an?\s+)?(?:appointment|service))?|i\s+need\s+(?:an?\s+appointment|a\s+booking|(?:to\s+see\s+)?(?:a\s+)?doctor)|can\s+i\s+book(?:\s+(?:an?\s+)?(?:appointment|service))?|book(?:ing)?(?:\s+(?:an?\s+)?(?:appointment|service))?|appointment|schedule(?:\s+an\s+appointment)?|reserve(?:\s+an\s+appointment)?|(?:(?:ni)?nataka|naomba)\s+(?:kuweka|kupata|kuomba)\s+miadi|weka\s+miadi)$/iu',
             $trimmed,
         ) === 1;
     }
@@ -2106,6 +2107,12 @@ class BookingChatService
         $matchedAliases = [];
         foreach ($this->serviceAliases() as $alias => $serviceName) {
             $normalizedAlias = $this->normalize($alias);
+            if ($normalizedAlias === 'scan'
+                && count($this->meaningfulTokens($this->requestedServicePhrase($message) ?? $message)) > 1
+            ) {
+                continue;
+            }
+
             if ($normalizedAlias !== ''
                 && preg_match('/(?<![\pL\pN])'.preg_quote($normalizedAlias, '/').'(?![\pL\pN])/u', $normalizedMessage)
             ) {
@@ -3908,20 +3915,26 @@ class BookingChatService
 
         return $language === self::LANGUAGE_SWAHILI
             ? sprintf("Sawa, naweza kukusaidia kupanga miadi katika %s.\n\nUnahitaji huduma gani?", $hospital->name)
-            : sprintf(
-                "Sure, I can help you book an appointment at %s.\n\nWhat service do you need?",
-                $hospital->name,
-            );
+            : "I'd be happy to help you book an appointment! Which service do you need?";
     }
 
-    private function serviceUnavailablePrompt(Hospital $hospital, string $language = self::LANGUAGE_ENGLISH): string
-    {
+    private function serviceUnavailablePrompt(
+        Hospital $hospital,
+        string $language = self::LANGUAGE_ENGLISH,
+        string $message = '',
+    ): string {
         $names = $hospital->services()->active()->orderBy('name')->pluck('name');
         if ($names->isEmpty()) {
             return $language === self::LANGUAGE_SWAHILI
                 ? 'Hakuna huduma zinazopatikana kwa sasa. Tafadhali wasiliana na hospitali.'
                 : 'There are no services available to book right now. Please contact the hospital.';
         }
+
+        $requestedService = $this->requestedServicePhrase($message);
+        $suggestions = $this->suggestedAvailableServices($requestedService, $names);
+        $suggestionPrompt = $suggestions === []
+            ? ' '
+            : ' Did you mean '.implode(' or ', $suggestions).'? ';
 
         return $language === self::LANGUAGE_SWAHILI
             ? sprintf(
@@ -3930,10 +3943,73 @@ class BookingChatService
                 $names->implode(', '),
             )
             : sprintf(
-                'I could not match that service. Available services at %s: %s. What service do you need?',
-                $hospital->name,
+                "I couldn't find '%s' in our services.%sHere is the full list of our available services: %s. Which service would you like?",
+                $requestedService ?? 'that service',
+                $suggestionPrompt,
                 $names->implode(', '),
             );
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, string>  $serviceNames
+     * @return array<int, string>
+     */
+    private function suggestedAvailableServices(
+        ?string $requestedService,
+        \Illuminate\Support\Collection $serviceNames,
+    ): array {
+        if ($requestedService === null) {
+            return [];
+        }
+
+        $requestedTokens = $this->meaningfulTokens($requestedService);
+        if ($requestedTokens === []) {
+            return [];
+        }
+
+        return $serviceNames
+            ->filter(fn (string $serviceName): bool => array_intersect(
+                $requestedTokens,
+                $this->meaningfulTokens($serviceName),
+            ) !== [])
+            ->take(2)
+            ->values()
+            ->all();
+    }
+
+    private function requestedServicePhrase(string $message): ?string
+    {
+        $phrase = preg_replace(
+            '/^\s*(?:(?:please\s+)?i\s+(?:want|would like)\s+to\s+book|i\s+need(?:\s+to\s+book)?|can\s+i\s+book|book|schedule|reserve)\s+/iu',
+            '',
+            trim($message),
+        );
+        $phrase = preg_replace('/^(?:a|an|the)\s+/iu', '', (string) $phrase);
+        $phrase = preg_replace('/\s+(?:appointment|for me|please)[?.!,;]*$/iu', '', (string) $phrase);
+        $phrase = trim((string) preg_replace('/[?.!,;]+$/u', '', (string) $phrase));
+
+        return in_array(mb_strtolower($phrase), ['service', 'services', 'doctor', 'appointment'], true)
+            ? null
+            : ($phrase !== '' ? $phrase : null);
+    }
+
+    private function hasAmbiguousServiceMatch(string $message, Hospital $hospital): bool
+    {
+        $requestedService = $this->requestedServicePhrase($message);
+        if ($requestedService === null) {
+            return false;
+        }
+
+        $normalizedRequest = $this->normalize($requestedService);
+        $matchingServices = $hospital->services()
+            ->active()
+            ->get()
+            ->filter(fn (Service $service): bool => preg_match(
+                '/(?<![\pL\pN])'.preg_quote($normalizedRequest, '/').'(?![\pL\pN])/u',
+                $this->normalize($service->name),
+            ) === 1);
+
+        return $matchingServices->count() > 1;
     }
 
     private function bookingSummary(array $state, Hospital $hospital): string

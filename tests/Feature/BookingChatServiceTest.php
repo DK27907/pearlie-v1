@@ -67,16 +67,24 @@ class BookingChatServiceTest extends TestCase
         $response = app(BookingChatService::class)->handle('extract-service-ambiguous', 'Book a cleaning', 'web');
 
         $this->assertNull($this->state('extract-service-ambiguous')['service_id']);
-        $this->assertStringContainsString('What service do you need', $response->message);
+        $this->assertStringContainsString('Which service do you need?', $response->message);
     }
 
     public function test_unknown_service_returns_null_and_lists_available_services(): void
     {
-        $this->createContext();
+        $this->createContext([
+            'CT Scan (Head/Chest/Abdomen)',
+            'Ultrasound Scan (Obstetric)',
+            'Dental Cleaning',
+        ]);
 
-        $response = app(BookingChatService::class)->handle('extract-service-unknown', 'Book a rocket launch', 'web');
+        $response = app(BookingChatService::class)->handle('extract-service-unknown', 'I want to book a brain scan', 'web');
 
         $this->assertNull($this->state('extract-service-unknown')['service_id']);
+        $this->assertStringContainsString("I couldn't find 'brain scan' in our services.", $response->message);
+        $this->assertStringContainsString('Did you mean CT Scan (Head/Chest/Abdomen) or Ultrasound Scan (Obstetric)?', $response->message);
+        $this->assertStringContainsString('Here is the full list of our available services:', $response->message);
+        $this->assertStringNotContainsString('I could not match that service', $response->message);
         $this->assertStringContainsString('Dental Cleaning', $response->message);
     }
 
@@ -86,9 +94,37 @@ class BookingChatServiceTest extends TestCase
 
         $response = app(BookingChatService::class)->handle('want-book', 'I want to book an appointment', 'web');
 
-        $this->assertStringContainsString('What service do you need', $response->message);
+        $this->assertStringContainsString('Which service do you need?', $response->message);
         $this->assertStringNotContainsString('health worker', mb_strtolower($response->message));
         $this->assertStringNotContainsString('phone number', mb_strtolower($response->message));
+    }
+
+    #[DataProvider('generalBookingMessages')]
+    public function test_general_booking_request_without_a_service_shows_service_selection(string $message): void
+    {
+        $this->createContext(['Dental Cleaning', 'General Consultation']);
+
+        $response = app(BookingChatService::class)->handle(
+            'general-booking-service-'.md5($message),
+            $message,
+            'web',
+        );
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertStringContainsString("I'd be happy to help you book an appointment!", $response->message);
+        $this->assertStringContainsString('Which service do you need?', $response->message);
+        $this->assertStringNotContainsString('I could not match that service', $response->message);
+        $this->assertNotEmpty($response->quickReplies);
+        $this->assertSame(['Dental Cleaning', 'General Consultation'], array_column($response->quickReplies, 'label'));
+    }
+
+    public static function generalBookingMessages(): array
+    {
+        return [
+            'generic service' => ['I want to book a service'],
+            'booking question' => ['Can I book?'],
+            'doctor request' => ['I need a doctor'],
+        ];
     }
 
     public function test_service_quick_replies_are_tenant_scoped_and_paginated(): void
@@ -556,7 +592,7 @@ class BookingChatServiceTest extends TestCase
         $restartedDatePrompt = $chat->handle($sessionId, 'Dental Cleaning', 'web');
         $restartedNamePrompt = $chat->handle($sessionId, 'tomorrow', 'web');
 
-        $this->assertStringContainsString('What service do you need', $servicePrompt->message);
+        $this->assertStringContainsString('Which service do you need?', $servicePrompt->message);
         $this->assertStringContainsString('DD/MM/YYYY', $datePrompt->message);
         $this->assertStringContainsString('full name', mb_strtolower($namePrompt->message));
         $this->assertStringContainsString('mobile number', mb_strtolower($phonePrompt->message));
@@ -871,7 +907,7 @@ class BookingChatServiceTest extends TestCase
         );
 
         $this->assertSame('COLLECTING', $response->state);
-        $this->assertStringContainsString('What service do you need', $response->message);
+        $this->assertStringContainsString('Which service do you need?', $response->message);
     }
 
     public function test_typoed_service_name_is_recognized_during_booking(): void
@@ -1038,7 +1074,7 @@ class BookingChatServiceTest extends TestCase
         $confirmation = $chat->handle($sessionId, '9am', 'web');
         $state = $chat->getState($sessionId);
 
-        $this->assertStringContainsString('What service do you need', $servicePrompt->message);
+        $this->assertStringContainsString('Which service do you need?', $servicePrompt->message);
         $this->assertSame($services[0]->id, $state['service_id']);
         $this->assertSame($doctors[0]->id, $state['doctor_id']);
         $this->assertStringContainsString('What date would you prefer', $datePrompt->message);
@@ -1234,7 +1270,7 @@ class BookingChatServiceTest extends TestCase
 
         $response = app(BookingChatService::class)->handle('book-no-service-list', 'I want to book an appointment', 'web');
 
-        $this->assertStringContainsString('What service do you need', $response->message);
+        $this->assertStringContainsString('Which service do you need?', $response->message);
         $this->assertStringNotContainsString('Available services at', $response->message);
     }
 
@@ -1244,7 +1280,7 @@ class BookingChatServiceTest extends TestCase
 
         $response = app(BookingChatService::class)->handle('book-beats-escalation', 'I need a human and I want to book an appointment', 'web');
 
-        $this->assertStringContainsString('What service do you need', $response->message);
+        $this->assertStringContainsString('Which service do you need?', $response->message);
         $this->assertStringNotContainsString('best phone number', mb_strtolower($response->message));
     }
 
@@ -1255,7 +1291,7 @@ class BookingChatServiceTest extends TestCase
         $response = app(BookingChatService::class)->handle('service-ambiguous', 'Book a cleaning', 'web');
 
         $this->assertNull($this->state('service-ambiguous')['service_id']);
-        $this->assertStringContainsString('What service do you need', $response->message);
+        $this->assertStringContainsString('Which service do you need?', $response->message);
     }
 
     public function test_multi_field_message_skips_matching_prompt(): void
@@ -1310,7 +1346,7 @@ class BookingChatServiceTest extends TestCase
         $chat->handle('continue-booking-after-escalation', 'I need to speak to someone', 'web');
         $continue = $chat->handle('continue-booking-after-escalation', 'continue booking', 'web');
 
-        $this->assertStringContainsString('What service do you need', $continue->message);
+        $this->assertStringContainsString('Which service do you need?', $continue->message);
         $this->assertStringNotContainsString('Available services at', $continue->message);
     }
 
@@ -2320,7 +2356,7 @@ class BookingChatServiceTest extends TestCase
             'web',
         );
 
-        $this->assertStringContainsString('What service do you need', $response->message);
+        $this->assertStringContainsString('Which service do you need?', $response->message);
         $this->assertSame('COLLECTING', $response->state);
     }
 
@@ -2349,7 +2385,7 @@ class BookingChatServiceTest extends TestCase
         $time = $chat->handle('fields-one-at-a-time', '254748249882', 'web');
         $confirmation = $chat->handle('fields-one-at-a-time', '9am', 'web');
 
-        $this->assertStringContainsString('What service do you need', $service->message);
+        $this->assertStringContainsString('Which service do you need?', $service->message);
         $this->assertStringContainsString('What date', $date->message);
         $this->assertStringContainsString('What time', $time->message);
         $this->assertStringContainsString('full name', $name->message);
