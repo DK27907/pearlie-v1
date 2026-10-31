@@ -81,11 +81,92 @@ class BookingChatServiceTest extends TestCase
         $response = app(BookingChatService::class)->handle('extract-service-unknown', 'I want to book a brain scan', 'web');
 
         $this->assertNull($this->state('extract-service-unknown')['service_id']);
-        $this->assertStringContainsString("I couldn't find 'brain scan' in our services.", $response->message);
+        $this->assertStringContainsString("I'm not quite sure what you meant by 'brain scan'.", $response->message);
         $this->assertStringContainsString('Did you mean CT Scan (Head/Chest/Abdomen) or Ultrasound Scan (Obstetric)?', $response->message);
-        $this->assertStringContainsString('Here is the full list of our available services:', $response->message);
-        $this->assertStringNotContainsString('I could not match that service', $response->message);
+        $this->assertStringContainsString('Here is a list of our available services to choose from:', $response->message);
+        $this->assertStringNotContainsString("I couldn't find", $response->message);
         $this->assertStringContainsString('Dental Cleaning', $response->message);
+    }
+
+    public function test_typoed_appointment_word_starts_service_selection(): void
+    {
+        $this->createContext(['Dental Cleaning', 'General Consultation']);
+
+        $response = app(BookingChatService::class)->handle(
+            'typo-appointment-intent',
+            'Book appointmen',
+            'web',
+        );
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertStringContainsString('Which service do you need?', $response->message);
+        $this->assertStringNotContainsString("I couldn't find", $response->message);
+        $this->assertSame(['Dental Cleaning', 'General Consultation'], array_column($response->quickReplies, 'label'));
+    }
+
+    public function test_transposed_service_typo_matches_dental_cleaning(): void
+    {
+        [, $services] = $this->createContext(['Dental Checkup & Cleaning', 'General Consultation']);
+
+        $response = app(BookingChatService::class)->handle(
+            'transposed-service-typo',
+            'I want dnetal',
+            'web',
+        );
+
+        $this->assertSame($services[0]->id, $this->state('transposed-service-typo')['service_id']);
+        $this->assertStringContainsString('Dental Checkup & Cleaning', $response->message);
+        $this->assertStringNotContainsString("I couldn't find", $response->message);
+    }
+
+    public function test_transposed_location_question_returns_current_hospital_address(): void
+    {
+        [$hospital] = $this->createContext();
+        $hospital->forceFill(['address' => 'Updated clinic address, Nyahururu'])->save();
+        $hospital->knowledgeBases()->create([
+            'category' => 'location',
+            'language' => 'en',
+            'subcategory' => 'address',
+            'keywords' => ['where are you located', 'location', 'address'],
+            'question' => 'Where is the hospital located?',
+            'answer' => $hospital->name.' is located at '.$hospital->address.'.',
+            'source' => 'Test Hospital',
+            'last_updated' => now()->toDateString(),
+        ]);
+
+        $response = app(BookingChatService::class)->handle(
+            'transposed-location-question',
+            'whre r u located',
+            'web',
+        );
+
+        $this->assertSame('knowledge_base', $response->source);
+        $this->assertStringContainsString('Updated clinic address, Nyahururu', $response->message);
+        $this->assertStringNotContainsString('What date', $response->message);
+    }
+
+    public function test_knowledge_base_matches_a_typo_in_parking_keyword(): void
+    {
+        [$hospital] = $this->createContext();
+        $hospital->knowledgeBases()->create([
+            'category' => 'location',
+            'language' => 'en',
+            'subcategory' => 'parking',
+            'keywords' => ['parking', 'car park'],
+            'question' => 'Where can I park?',
+            'answer' => 'Visitor parking is available at the hospital entrance.',
+            'source' => 'Test Hospital',
+            'last_updated' => now()->toDateString(),
+        ]);
+
+        $response = app(BookingChatService::class)->handle(
+            'typo-parking-knowledge',
+            'Where is the parkin?',
+            'web',
+        );
+
+        $this->assertSame('knowledge_base', $response->source);
+        $this->assertStringContainsString('Visitor parking is available', $response->message);
     }
 
     public function test_i_want_to_book_asks_for_service_not_phone(): void

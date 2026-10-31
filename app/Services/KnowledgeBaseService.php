@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\KnowledgeBase;
+use App\Support\FuzzyMatcher;
 use Illuminate\Support\Str;
 
 class KnowledgeBaseService
@@ -256,6 +257,34 @@ class KnowledgeBaseService
                 if ($queryWord === $keyword) {
                     $score += 60 + mb_strlen($keyword);
                 }
+            }
+
+            $keywordWords = preg_split('/[^\pL\pN]+/u', $keyword, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            $fuzzyMatch = 0.0;
+
+            foreach ($queryWords as $queryWord) {
+                if (mb_strlen($queryWord) < 4) {
+                    continue;
+                }
+
+                foreach ($keywordWords as $keywordWord) {
+                    if (mb_strlen($keywordWord) < 4) {
+                        continue;
+                    }
+
+                    if ($queryWord === $keywordWord) {
+                        continue;
+                    }
+
+                    $similarity = FuzzyMatcher::similarityPercentage($queryWord, $keywordWord);
+                    if ($similarity >= 75) {
+                        $fuzzyMatch = max($fuzzyMatch, $similarity);
+                    }
+                }
+            }
+
+            if ($fuzzyMatch > 0) {
+                $score += 60 + (int) round($fuzzyMatch);
             }
         }
 

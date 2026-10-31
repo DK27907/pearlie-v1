@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Services\Chat\ChatResponse;
 use App\Support\CacheLockRunner;
 use App\Support\DateParser;
+use App\Support\FuzzyMatcher;
 use Carbon\CarbonImmutable;
 use Closure;
 use DateTimeImmutable;
@@ -1996,11 +1997,26 @@ class BookingChatService
 
     private function containsBookingKeyword(string $message): bool
     {
-        return preg_match(
-            '/\b(book|booking|appointment|schedule|reserve|see\s+(?:a\s+)?doctor|i want to book|need\s+(?:an?\s+)?appointment|need\s+to\s+book|i\s+need\s+(?:to\s+see\s+)?(?:a\s+)?doctor)\b|'
+        if (preg_match(
+            '/\b(book|booking|appointment|appt|schedule|reserve|see\s+(?:a\s+)?doctor|i want to book|need\s+(?:an?\s+)?appointment|need\s+to\s+book|i\s+need\s+(?:to\s+see\s+)?(?:a\s+)?doctor)\b|'
                 .'\b(?:(?:ni)?nataka|naomba)\s+(?:kuweka|kupata|kuomba)\s+miadi\b|\bweka\s+miadi\b/iu',
             $message,
-        ) === 1;
+        ) === 1) {
+            return true;
+        }
+
+        $bookingKeywords = ['book', 'booking', 'appointment', 'schedule', 'reserve'];
+
+        return collect(preg_split('/[^\pL\pN]+/u', $this->normalize($message), -1, PREG_SPLIT_NO_EMPTY) ?: [])
+            ->contains(function (string $token) use ($bookingKeywords): bool {
+                foreach ($bookingKeywords as $keyword) {
+                    if (FuzzyMatcher::similarityPercentage($token, $keyword) > 80) {
+                        return true;
+                    }
+                }
+
+                return false;
+            });
     }
 
     private function looksLikeSpecificServiceRequest(string $message): bool
@@ -2010,10 +2026,10 @@ class BookingChatService
 
     private function isPlainBookingIntent(string $message): bool
     {
-        $trimmed = trim($message, " \t\n\r\0\x0B?.!");
+        $trimmed = trim($this->normalizeIntentKeywords($message), " \t\n\r\0\x0B?.!");
 
         return preg_match(
-            '/^(?:i\s+want(?:\s+to)?\s+book(?:\s+(?:an?\s+)?(?:appointment|service))?|i\s+need\s+(?:an?\s+appointment|a\s+booking|(?:to\s+see\s+)?(?:a\s+)?doctor)|can\s+i\s+book(?:\s+(?:an?\s+)?(?:appointment|service))?|book(?:ing)?(?:\s+(?:an?\s+)?(?:appointment|service))?|appointment|schedule(?:\s+an\s+appointment)?|reserve(?:\s+an\s+appointment)?|(?:(?:ni)?nataka|naomba)\s+(?:kuweka|kupata|kuomba)\s+miadi|weka\s+miadi)$/iu',
+            '/^(?:i\s+want(?:\s+to)?\s+book(?:\s+(?:an?\s+)?(?:appointment|appt|service))?|i\s+need\s+(?:an?\s+appointment|a\s+booking|(?:to\s+see\s+)?(?:a\s+)?doctor)|can\s+i\s+book(?:\s+(?:an?\s+)?(?:appointment|appt|service))?|book(?:ing)?(?:\s+(?:an?\s+)?(?:appointment|appt|service))?|appointment|appt|schedule(?:\s+an\s+appointment)?|reserve(?:\s+an\s+appointment)?|(?:(?:ni)?nataka|naomba)\s+(?:kuweka|kupata|kuomba)\s+miadi|weka\s+miadi)$/iu',
             $trimmed,
         ) === 1;
     }
@@ -2204,8 +2220,8 @@ class BookingChatService
             foreach ($serviceTokens as $serviceToken) {
                 foreach ($messageTokens as $messageToken) {
                     if ($serviceToken === $messageToken
-                        || (abs(mb_strlen($serviceToken) - mb_strlen($messageToken)) <= 1
-                            && levenshtein($serviceToken, $messageToken) <= 1)
+                        || (mb_strlen($messageToken) >= 4
+                            && FuzzyMatcher::similarityPercentage($serviceToken, $messageToken) > 70)
                     ) {
                         $matchedCount++;
                         $matchedTokens[] = $serviceToken;
@@ -2685,6 +2701,7 @@ class BookingChatService
     private function normalizeIntentKeywords(string $message): string
     {
         $normalized = $this->normalize($message);
+        $normalized = preg_replace('/\br\b/u', 'are', $normalized) ?? $normalized;
         $normalized = preg_replace('/\bu\b/u', 'you', $normalized) ?? $normalized;
         $normalized = preg_replace('/\bwanna\b/u', 'want to', $normalized) ?? $normalized;
         $normalized = preg_replace('/\bgimme\b/u', 'give me', $normalized) ?? $normalized;
@@ -2714,20 +2731,19 @@ class BookingChatService
 
         foreach ($tokens as &$token) {
             $closestMatches = [];
-            $closestDistance = PHP_INT_MAX;
+            $closestSimilarity = 0.0;
 
             foreach ($keywords as $keyword) {
-                $distance = levenshtein($token, $keyword);
-                $maximumDistance = 1;
+                $similarity = FuzzyMatcher::similarityPercentage($token, $keyword);
 
-                if ($distance > $maximumDistance) {
+                if ($similarity < 75) {
                     continue;
                 }
 
-                if ($distance < $closestDistance) {
+                if ($similarity > $closestSimilarity) {
                     $closestMatches = [$keyword];
-                    $closestDistance = $distance;
-                } elseif ($distance === $closestDistance) {
+                    $closestSimilarity = $similarity;
+                } elseif ($similarity === $closestSimilarity) {
                     $closestMatches[] = $keyword;
                 }
             }
@@ -3943,9 +3959,9 @@ class BookingChatService
                 $names->implode(', '),
             )
             : sprintf(
-                "I couldn't find '%s' in our services.%sHere is the full list of our available services: %s. Which service would you like?",
+                "I'm not quite sure what you meant by '%s'.%s Here is a list of our available services to choose from: %s. Which service would you like?",
                 $requestedService ?? 'that service',
-                $suggestionPrompt,
+                rtrim($suggestionPrompt),
                 $names->implode(', '),
             );
     }
