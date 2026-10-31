@@ -180,6 +180,123 @@ class BookingChatServiceTest extends TestCase
         $this->assertStringNotContainsString('phone number', mb_strtolower($response->message));
     }
 
+    #[DataProvider('affirmativeBookingReplies')]
+    public function test_affirmative_reply_to_service_offer_starts_that_service_booking(string $affirmation): void
+    {
+        [, $services] = $this->createContext(['Dental Checkup & Cleaning']);
+        $chat = app(BookingChatService::class);
+        $chat->handle('service-offer-affirmation', 'Do you have dental?', 'web');
+
+        $response = $chat->handle('service-offer-affirmation', $affirmation, 'web');
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertSame($services[0]->id, $response->collectedFields['service_id']);
+        $this->assertStringContainsString('What date would you prefer', $response->message);
+        $this->assertStringNotContainsString('There is no booking waiting', $response->message);
+    }
+
+    public static function affirmativeBookingReplies(): array
+    {
+        return [
+            'yes' => ['Yes'],
+            'yeah' => ['Yeah'],
+            'sure' => ['Sure'],
+            'Swahili' => ['Ndio'],
+        ];
+    }
+
+    public function test_i_want_to_book_without_a_service_shows_the_service_menu(): void
+    {
+        $this->createContext(['Dental Cleaning', 'General Consultation']);
+
+        $response = app(BookingChatService::class)->handle(
+            'generic-booking-intent',
+            'I want to book',
+            'web',
+        );
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertStringContainsString('Which service do you need?', $response->message);
+        $this->assertStringNotContainsString('I could not match that service', $response->message);
+        $this->assertSame(['Dental Cleaning', 'General Consultation'], array_column($response->quickReplies, 'label'));
+    }
+
+    public function test_booking_request_with_a_typoed_appointment_word_shows_the_service_menu(): void
+    {
+        $this->createContext(['Dental Cleaning', 'General Consultation']);
+
+        $response = app(BookingChatService::class)->handle(
+            'typoed-appointment-booking',
+            'I want to book appointmen',
+            'web',
+        );
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertStringContainsString('Which service do you need?', $response->message);
+        $this->assertStringNotContainsString('could not match', mb_strtolower($response->message));
+    }
+
+    public function test_services_message_lists_catalog_without_escalating(): void
+    {
+        $this->createContext(['Dental Cleaning', 'General Consultation']);
+
+        $response = app(BookingChatService::class)->handle(
+            'services-catalog-request',
+            'Services',
+            'web',
+        );
+
+        $this->assertSame('hospital_services', $response->source);
+        $this->assertStringContainsString('Dental Cleaning', $response->message);
+        $this->assertStringContainsString('General Consultation', $response->message);
+        $this->assertDatabaseCount('escalations', 0);
+    }
+
+    public function test_parking_question_during_booking_answers_and_preserves_a_resume_offer(): void
+    {
+        [$hospital, $services] = $this->createContext(['Dental Cleaning']);
+        $hospital->knowledgeBases()->create([
+            'category' => 'location',
+            'language' => 'en',
+            'subcategory' => 'parking',
+            'keywords' => ['parking', 'car park'],
+            'question' => 'Where is parking?',
+            'answer' => 'Visitor parking is at 12 Hospital Road, Nyahururu.',
+            'source' => 'Test Hospital',
+            'last_updated' => now()->toDateString(),
+        ]);
+        $chat = app(BookingChatService::class);
+        $chat->handle('parking-during-booking', 'Book Dental Cleaning', 'web');
+
+        $response = $chat->handle('parking-during-booking', 'Where is parking?', 'web');
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertSame('topic_change', $response->source);
+        $this->assertStringContainsString('12 Hospital Road, Nyahururu', $response->message);
+        $this->assertStringContainsString('would you still like to book Dental Cleaning', $response->message);
+
+        $resumed = $chat->handle('parking-during-booking', 'Yes', 'web');
+
+        $this->assertSame('COLLECTING', $resumed->state);
+        $this->assertSame($services[0]->id, $resumed->collectedFields['service_id']);
+        $this->assertStringContainsString('What date would you prefer', $resumed->message);
+    }
+
+    public function test_random_affirmation_starts_with_service_selection_instead_of_booking_error(): void
+    {
+        $this->createContext(['Dental Cleaning', 'General Consultation']);
+
+        $response = app(BookingChatService::class)->handle(
+            'random-affirmation',
+            'Yes',
+            'web',
+        );
+
+        $this->assertSame('COLLECTING', $response->state);
+        $this->assertStringContainsString('Great! What service would you like to book?', $response->message);
+        $this->assertSame(['Dental Cleaning', 'General Consultation'], array_column($response->quickReplies, 'label'));
+    }
+
     #[DataProvider('generalBookingMessages')]
     public function test_general_booking_request_without_a_service_shows_service_selection(string $message): void
     {
@@ -964,17 +1081,15 @@ class BookingChatServiceTest extends TestCase
         $this->assertDatabaseCount('escalations', 0);
     }
 
-    public function test_yes_without_pending_confirmation_explains_no_confirmation_exists(): void
+    public function test_yes_without_booking_context_starts_service_selection(): void
     {
-        $this->createContext();
+        $this->createContext(['Dental Cleaning', 'General Consultation']);
 
         $response = app(BookingChatService::class)->handle('yes-without-confirmation', 'yes', 'web');
 
-        $this->assertStringContainsString(
-            'no booking waiting for confirmation',
-            $response->message,
-        );
-        $this->assertSame('IDLE', $response->state);
+        $this->assertStringContainsString('Great! What service would you like to book?', $response->message);
+        $this->assertStringNotContainsString('There is no booking waiting', $response->message);
+        $this->assertSame('COLLECTING', $response->state);
     }
 
     public function test_typoed_booking_request_starts_the_booking_flow(): void
@@ -2500,7 +2615,8 @@ class BookingChatServiceTest extends TestCase
 
         $this->assertStringContainsString('Habari!', $greeting->message);
         $this->assertSame('sw', $greeting->collectedFields['language']);
-        $this->assertStringContainsString('Hakuna miadi', $followUp->message);
+        $this->assertStringContainsString('Ungependa kuweka miadi ya huduma gani?', $followUp->message);
+        $this->assertSame('COLLECTING', $followUp->state);
         $this->assertSame('sw', $followUp->collectedFields['language']);
         $this->assertSame('sw', $chat->getState('swahili-language-session')['language']);
     }

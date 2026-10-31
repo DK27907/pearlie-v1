@@ -455,6 +455,12 @@ class BookingChatService
 
         $intent = $this->extractIntent($message, (string) $state['state']);
 
+        if (filled($state['offered_service_id'] ?? null)
+            && ! in_array($intent, ['yes', 'no'], true)
+        ) {
+            $state['offered_service_id'] = null;
+        }
+
         if ($this->isCorrectionMessage($message)) {
             $state = $this->emptyState(
                 language: $state['language'],
@@ -506,8 +512,11 @@ class BookingChatService
         }
 
         if ($this->isFaqTopicChangeDuringCollection($message, $intent, $state)) {
-            $serviceName = filled($state['service_id'] ?? null)
-                ? $hospital->services()->whereKey((int) $state['service_id'])->value('name')
+            $serviceId = filled($state['service_id'] ?? null)
+                ? (int) $state['service_id']
+                : null;
+            $serviceName = $serviceId !== null
+                ? $hospital->services()->whereKey($serviceId)->value('name')
                 : null;
             $faqResponse = $intent === 'doctors' && $this->isDoctorScheduleQuestion($message)
                 ? $this->doctorWeeklyScheduleResponse(
@@ -537,6 +546,7 @@ class BookingChatService
                 language: $state['language'],
                 stateVersion: $state['state_version'],
             );
+            $state['offered_service_id'] = $serviceId;
             $nudge = $state['language'] === self::LANGUAGE_SWAHILI
                 ? 'Kwa njia, bado ungependa kuweka miadi ya '.($serviceName ?: 'huduma yako').', au nikusaidie na swali hili jipya?'
                 : 'By the way, would you still like to book '.($serviceName ?: 'your appointment').', or can I help with your new question?';
@@ -555,13 +565,31 @@ class BookingChatService
             && DateParser::parse($message) === null
             && $this->isQuestionLikeMessage($message)
         ) {
+            $serviceId = filled($state['service_id'] ?? null)
+                ? (int) $state['service_id']
+                : null;
+            $serviceName = $serviceId !== null
+                ? $hospital->services()->whereKey($serviceId)->value('name')
+                : null;
             $state = $this->emptyState(
                 language: $state['language'],
                 stateVersion: $state['state_version'],
             );
+            $state['offered_service_id'] = $serviceId;
 
             if (! in_array($intent, ['greeting', 'social', 'thanks', 'out_of_scope'], true)) {
-                return $this->delegateToAssistant($sessionId, $channel, $message, $state, $patient);
+                $followUpMessage = $state['language'] === self::LANGUAGE_SWAHILI
+                    ? 'Kwa njia, bado ungependa kuendelea na miadi ya '.($serviceName ?: 'huduma hiyo').'?'
+                    : 'By the way, would you still like to continue booking '.($serviceName ?: 'that service').'?';
+
+                return $this->delegateToAssistant(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $state,
+                    $patient,
+                    $followUpMessage,
+                );
             }
         }
 
@@ -572,6 +600,8 @@ class BookingChatService
             $service = $this->extractService($message, $hospital);
 
             if ($service !== null) {
+                $state['offered_service_id'] = $service->id;
+
                 return $this->respond(
                     $sessionId,
                     $channel,
@@ -820,11 +850,64 @@ class BookingChatService
         // This prevents "yes" or "no" in IDLE state from triggering escalation
         // But skip this check if in CONFIRMING state (handled specially below)
         if (in_array($intent, ['yes', 'no'], true) && $state['state'] !== self::STATE_CONFIRMING) {
+            if ($state['state'] === self::STATE_IDLE && $intent === 'yes') {
+                $offeredService = filled($state['offered_service_id'] ?? null)
+                    ? $hospital->services()
+                        ->active()
+                        ->whereKey((int) $state['offered_service_id'])
+                        ->first()
+                    : null;
+
+                if ($offeredService !== null) {
+                    $bookingState = $this->emptyState(
+                        language: $state['language'],
+                        stateVersion: $state['state_version'],
+                    );
+                    $bookingState['state'] = self::STATE_IDENTIFYING;
+                    $bookingState['service_id'] = $offeredService->id;
+                    if ($channel === 'whatsapp') {
+                        $bookingState['patient_phone'] = substr($sessionId, strlen('whatsapp:'));
+                    }
+
+                    return $this->advanceState(
+                        $sessionId,
+                        $channel,
+                        $message,
+                        $hospital,
+                        $bookingState,
+                        intent: $intent,
+                    );
+                }
+
+                $state = $this->emptyState(
+                    language: $state['language'],
+                    stateVersion: $state['state_version'],
+                );
+                $state['state'] = self::STATE_COLLECTING;
+
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Sawa! Ungependa kuweka miadi ya huduma gani?'
+                        : 'Great! What service would you like to book?',
+                    $state,
+                );
+            }
+
+            if ($state['state'] === self::STATE_IDLE && $intent === 'no') {
+                $state = $this->emptyState(
+                    language: $state['language'],
+                    stateVersion: $state['state_version'],
+                );
+            }
+
             $response = $state['state'] === self::STATE_COLLECTING
                 ? $this->promptForNextField($state, $hospital, $message, $sessionId, $channel)
                 : ($state['language'] === self::LANGUAGE_SWAHILI
-                    ? 'Hakuna miadi inayosubiri uthibitisho. Je, ungependa kuweka miadi?'
-                    : 'There is no booking waiting for confirmation. Would you like to book an appointment?');
+                    ? 'Sawa, hakuna tatizo. Naweza kukusaidia nini kingine?'
+                    : 'No problem. What else can I help you with?');
 
             return $this->respond($sessionId, $channel, $message, $response, $state, source: 'clarification');
         }
@@ -975,6 +1058,7 @@ class BookingChatService
                 : $this->extractService($message, $hospital);
 
             if ($requestedService !== null) {
+                $state['offered_service_id'] = $requestedService->id;
                 $response = $state['language'] === self::LANGUAGE_SWAHILI
                     ? sprintf(
                         'Ndiyo, %s imeorodheshwa kama huduma inayopatikana katika %s. Je, ungependa msaada wa kuweka miadi?',
@@ -2623,7 +2707,7 @@ class BookingChatService
             return 'cancel';
         }
         // Extract yes/no in all states, but handle specially based on state
-        if (preg_match('/^\s*(?:yes|y|yeah|yep|ok|confirm|book it|proceed|ndiyo|ndio|sawa)\b/u', $normalized)) {
+        if (preg_match('/^\s*(?:yes|y|yeah|yep|sure|certainly|absolutely|of course|ok|confirm|book it|proceed|ndiyo|ndio|sawa)\b/u', $normalized)) {
             return 'yes';
         }
         if (preg_match('/^\s*(?:no|n|nope)\b/u', $normalized)) {
@@ -2653,6 +2737,9 @@ class BookingChatService
             return 'pricing';
         }
         if (preg_match('/\b(what services|which services|services do you offer|services are available|hospital services|huduma zenu|huduma gani)\b/iu', $normalized)) {
+            return 'services';
+        }
+        if (preg_match('/^\s*(?:services?|huduma)\s*[?!.]*\s*$/iu', $normalized)) {
             return 'services';
         }
         if (
@@ -3295,6 +3382,7 @@ class BookingChatService
             'language' => $language,
             'state_version' => $stateVersion,
             'service_id' => null,
+            'offered_service_id' => null,
             'doctor_id' => null,
             'date' => null,
             'time' => null,
@@ -3694,6 +3782,7 @@ class BookingChatService
         string $message,
         array $state,
         Patient $patient,
+        ?string $followUpMessage = null,
     ): ChatResponse {
         $previousConversationId = Conversation::query()
             ->where('session_id', $sessionId)
@@ -3717,6 +3806,10 @@ class BookingChatService
                 ? 'Sikuweza kuchakata ujumbe huo. Tafadhali jaribu tena.'
                 : 'I could not process that message. Please try again.'
         ));
+        if ($followUpMessage !== null && ! ($result['escalated'] ?? false)) {
+            $response = rtrim($response).' '.$followUpMessage;
+        }
+
         $conversation = Conversation::query()
             ->where('session_id', $sessionId)
             ->where('channel', $channel)
@@ -3726,6 +3819,10 @@ class BookingChatService
             ->first();
 
         if ($conversation) {
+            if ($followUpMessage !== null && ! ($result['escalated'] ?? false)) {
+                $conversation->forceFill(['ai_response' => $response])->save();
+            }
+
             if (! $this->persistStateOnConversation(
                 $conversation,
                 $state,
@@ -4297,7 +4394,7 @@ class BookingChatService
     private function isBroadServicesOverview(string $message): bool
     {
         return preg_match(
-            '/\b(what services|which services|list (?:all )?services|all services|full service list|services overview|services are available|huduma zenu|huduma gani)\b/iu',
+            '/^\s*(?:services?|huduma)\s*[?!.]*\s*$|\b(what services|which services|list (?:all )?services|all services|full service list|services overview|services are available|huduma zenu|huduma gani)\b/iu',
             $message,
         ) === 1;
     }
@@ -4740,6 +4837,7 @@ class BookingChatService
             'language',
             'state_version',
             'service_id',
+            'offered_service_id',
             'doctor_id',
             'date',
             'time',
@@ -4778,7 +4876,7 @@ class BookingChatService
             ? DateTimeImmutable::createFromFormat('!Y-m-d', $date, new DateTimeZone(config('app.timezone')))
             : false;
         $idsAreValid = true;
-        foreach (['service_id', 'doctor_id', 'appointment_id'] as $idKey) {
+        foreach (['service_id', 'offered_service_id', 'doctor_id', 'appointment_id'] as $idKey) {
             if (array_key_exists($idKey, $state)
                 && $state[$idKey] !== null
                 && (! is_int($state[$idKey]) || $state[$idKey] < 1)

@@ -69,20 +69,23 @@ class ChatIntentTest extends TestCase
     public static function unconfirmedYesNoMessages(): array
     {
         return [
-            'yes' => ['yes'],
-            'no' => ['no'],
+            'yes' => ['yes', 'Great! What service would you like to book?', 'COLLECTING'],
+            'no' => ['no', 'No problem. What else can I help you with?', 'IDLE'],
         ];
     }
 
     #[DataProvider('unconfirmedYesNoMessages')]
-    public function test_yes_or_no_without_a_pending_confirmation_does_not_start_booking(string $message): void
-    {
+    public function test_yes_or_no_without_pending_context_does_not_create_an_appointment(
+        string $message,
+        string $expectedReply,
+        string $expectedState,
+    ): void {
         $this->createHospital();
 
         $response = app(BookingChatService::class)->handle('intent-unconfirmed-'.$message, $message, 'web');
 
-        $this->assertStringContainsString('no booking waiting for confirmation', mb_strtolower($response->message));
-        $this->assertSame('IDLE', $response->state);
+        $this->assertStringContainsString($expectedReply, $response->message);
+        $this->assertSame($expectedState, $response->state);
         $this->assertDatabaseCount('appointment_requests', 0);
     }
 
