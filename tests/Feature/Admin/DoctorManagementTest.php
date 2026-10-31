@@ -208,6 +208,116 @@ class DoctorManagementTest extends TestCase
         $this->assertModelExists($otherDoctor);
     }
 
+    public function test_admin_can_set_a_doctors_password_from_the_edit_form(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $doctor = User::factory()->create([
+            'is_doctor' => true,
+            'role' => 'doctor',
+            'must_change_password' => true,
+            'password' => 'old-doctor-password',
+            'remember_token' => 'existing-remember-token',
+        ]);
+        $newPassword = 'new-doctor-password';
+
+        $this->actingAs($admin)
+            ->get(route('admin.doctors.edit', $doctor))
+            ->assertOk()
+            ->assertSee('name="password"', false)
+            ->assertSee('name="password_confirmation"', false)
+            ->assertSee('Leave blank to keep the current password.');
+
+        $response = $this->put(route('admin.doctors.update', $doctor), [
+            'name' => $doctor->name,
+            'email' => $doctor->email,
+            'specialization' => $doctor->specialization ?? 'General Medicine',
+            'phone' => $doctor->phone ?? '+254 712 345 678',
+            'password' => $newPassword,
+            'password_confirmation' => $newPassword,
+        ]);
+
+        $response->assertRedirect(route('admin.doctors.index'))
+            ->assertSessionHas('status', 'Doctor details updated.');
+
+        $doctor->refresh();
+        $this->assertTrue(Hash::check($newPassword, $doctor->password));
+        $this->assertFalse($doctor->must_change_password);
+        $this->assertNull($doctor->remember_token);
+
+        $this->post(route('logout'));
+        $this->post(route('tenant.login', ['hospital' => 'pearl']), [
+            'email' => $doctor->email,
+            'password' => $newPassword,
+        ])->assertRedirect(route('doctor.dashboard'));
+    }
+
+    public function test_admin_can_leave_a_doctors_password_blank_to_keep_the_current_password(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $doctor = User::factory()->create([
+            'is_doctor' => true,
+            'password' => 'existing-doctor-password',
+            'must_change_password' => true,
+        ]);
+
+        $response = $this->actingAs($admin)->put(route('admin.doctors.update', $doctor), [
+            'name' => $doctor->name,
+            'email' => $doctor->email,
+            'specialization' => $doctor->specialization ?? 'General Medicine',
+            'phone' => $doctor->phone ?? '+254 712 345 678',
+            'password' => '',
+            'password_confirmation' => '',
+        ]);
+
+        $response->assertRedirect(route('admin.doctors.index'));
+
+        $doctor->refresh();
+        $this->assertTrue(Hash::check('existing-doctor-password', $doctor->password));
+        $this->assertTrue($doctor->must_change_password);
+    }
+
+    public function test_admin_cannot_set_a_doctors_password_without_matching_confirmation(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $doctor = User::factory()->create([
+            'is_doctor' => true,
+            'password' => 'existing-doctor-password',
+        ]);
+
+        $response = $this->actingAs($admin)->put(route('admin.doctors.update', $doctor), [
+            'name' => $doctor->name,
+            'email' => $doctor->email,
+            'specialization' => $doctor->specialization ?? 'General Medicine',
+            'phone' => $doctor->phone ?? '+254 712 345 678',
+            'password' => 'replacement-doctor-password',
+            'password_confirmation' => 'different-doctor-password',
+        ]);
+
+        $response->assertSessionHasErrors('password');
+        $this->assertTrue(Hash::check('existing-doctor-password', $doctor->refresh()->password));
+    }
+
+    public function test_admin_cannot_set_a_doctors_password_shorter_than_eight_characters(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $doctor = User::factory()->create([
+            'is_doctor' => true,
+            'password' => 'existing-doctor-password',
+        ]);
+
+        $response = $this->actingAs($admin)->put(route('admin.doctors.update', $doctor), [
+            'name' => $doctor->name,
+            'email' => $doctor->email,
+            'specialization' => $doctor->specialization ?? 'General Medicine',
+            'phone' => $doctor->phone ?? '+254 712 345 678',
+            'password' => 'short',
+            'password_confirmation' => 'short',
+        ]);
+
+        $response->assertSessionHasErrors('password');
+        $this->assertTrue(Hash::check('existing-doctor-password', $doctor->refresh()->password));
+    }
+
     public function test_doctor_invite_email_escapes_doctor_name(): void
     {
         $doctor = User::factory()->make([

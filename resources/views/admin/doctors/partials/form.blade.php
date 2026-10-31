@@ -71,9 +71,41 @@
     @enderror
 </div>
 
+@if ($doctor)
+        <div class="space-y-3 border-t border-slate-100 pt-5">
+            <h2 class="text-lg font-semibold text-slate-900">Change password</h2>
+            <div class="grid gap-5 sm:grid-cols-2">
+                <div>
+                    <x-password-input
+                        id="password"
+                        name="password"
+                        label="New password"
+                        label-class="block text-sm font-medium text-slate-700"
+                        autocomplete="new-password"
+                        class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-cyan-600 focus:ring-cyan-600"
+                    />
+                    @error('password')
+                        <p class="mt-1 text-sm text-rose-700">{{ $message }}</p>
+                    @enderror
+                </div>
+                <div>
+                    <x-password-input
+                        id="password_confirmation"
+                        name="password_confirmation"
+                        label="Confirm new password"
+                        label-class="block text-sm font-medium text-slate-700"
+                        autocomplete="new-password"
+                        class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-cyan-600 focus:ring-cyan-600"
+                    />
+                </div>
+            </div>
+            <p class="text-sm text-slate-600">Leave blank to keep the current password.</p>
+        </div>
+@endif
+
 <div class="rounded-lg border border-cyan-100 bg-cyan-50 p-4">
-    <label for="use_temporary_password" class="flex items-start gap-3">
-        <input
+        <label for="use_temporary_password" class="flex items-start gap-3">
+            <input
             id="use_temporary_password"
             name="use_temporary_password"
             type="checkbox"

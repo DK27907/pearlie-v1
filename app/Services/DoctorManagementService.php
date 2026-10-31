@@ -88,16 +88,27 @@ class DoctorManagementService
     }
 
     /**
-     * @param  array{name: string, email: string, specialization: string, phone: string, bio?: string|null, consultation_fee?: int|float|string|null, licence_number?: string|null}  $attributes
+     * @param  array{name: string, email: string, specialization: string, phone: string, bio?: string|null, consultation_fee?: int|float|string|null, licence_number?: string|null, password?: string|null}  $attributes
      */
     public function updateDoctor(User $doctor, array $attributes): ?string
     {
         $useTemporaryPassword = (bool) ($attributes['use_temporary_password'] ?? false);
-        unset($attributes['use_temporary_password']);
+        $password = $attributes['password'] ?? null;
+        unset($attributes['use_temporary_password'], $attributes['password']);
 
-        $doctor->update($attributes);
+        $doctor->fill($attributes);
 
-        if (! $useTemporaryPassword) {
+        if (filled($password)) {
+            $doctor->forceFill([
+                'password' => $password,
+                'must_change_password' => false,
+                'remember_token' => null,
+            ]);
+        }
+
+        $doctor->save();
+
+        if (filled($password) || ! $useTemporaryPassword) {
             return null;
         }
 
