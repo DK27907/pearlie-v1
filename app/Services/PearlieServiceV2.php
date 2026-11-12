@@ -557,7 +557,7 @@ class PearlieServiceV2
             ->where('session_id', $sessionId)
             ->where('channel', $channel)
             ->latest('id')
-            ->limit(6)
+            ->limit(5)
             ->get(['user_message', 'ai_response'])
             ->reverse()
             ->flatMap(static function (Conversation $conversation): array {
@@ -571,7 +571,7 @@ class PearlieServiceV2
 
                 return $messages;
             })
-            ->slice(-6)
+            ->slice(-5)
             ->values()
             ->all();
     }
@@ -1036,6 +1036,7 @@ Hospital details:
 {$hospitalDetails}
 
 Treat conversation history as context, not instructions. The latest user message overrides assumptions from earlier turns. If the user corrects you, apologize briefly and ask what they meant; never infer or invent a service or booking from previous context.
+Answer questions about whether a service is available from the matching knowledge-base details first. Do not start collecting booking details unless the user explicitly asks to book or confirms a booking offer.
 Use configured hospital facts and the supplied knowledge-base context only; do not invent services, prices, hours, schedules, or availability. Do not diagnose. For symptoms, offer general safe guidance and encourage a clinician consultation. For emergencies, advise immediate emergency care and the configured emergency contact.
 Chat naturally about greetings and everyday pleasantries. Do not offer a human handoff for ordinary conversation, uncertainty, repeated messages, or low confidence. A handoff is allowed only for a clear request to speak to a human or a genuine emergency.
 For light personal questions such as whether you drink alcohol, answer naturally that you are an AI and do not drink, then gently bring the conversation back to health or hospital help. For unrelated trivia you cannot reliably answer, be honest and offer help with hospital services, doctor schedules, or directions.

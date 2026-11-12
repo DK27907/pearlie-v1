@@ -454,6 +454,12 @@ class BookingChatService
         }
 
         $intent = $this->extractIntent($message, (string) $state['state']);
+        if ($intent === 'other'
+            && $this->isServiceInquiry($message)
+            && $this->extractService($message, $hospital) !== null
+        ) {
+            $intent = 'services';
+        }
 
         if (filled($state['offered_service_id'] ?? null)
             && ! in_array($intent, ['yes', 'no'], true)
@@ -512,25 +518,38 @@ class BookingChatService
         }
 
         if ($this->isFaqTopicChangeDuringCollection($message, $intent, $state)) {
-            $serviceId = filled($state['service_id'] ?? null)
+            $activeServiceId = filled($state['service_id'] ?? null)
                 ? (int) $state['service_id']
                 : null;
+            $requestedService = $intent === 'services'
+                ? $this->serviceForInquiry($message, $hospital)
+                : null;
+            $serviceId = $requestedService?->id ?? $activeServiceId;
             $serviceName = $serviceId !== null
                 ? $hospital->services()->whereKey($serviceId)->value('name')
                 : null;
-            $faqResponse = $intent === 'doctors' && $this->isDoctorScheduleQuestion($message)
-                ? $this->doctorWeeklyScheduleResponse(
-                    $hospital,
-                    $this->doctorsMatchingIntent($hospital, $message),
-                    $state['language'],
-                )
-                : $this->knowledgeBase->search($message);
-
-            if ($faqResponse === null && $intent === 'services') {
-                $service = $this->extractService($message, $hospital);
-                $faqResponse = $service
-                    ? $this->serviceInquiryResponse($service, $hospital, $state['language'])
-                    : null;
+            if ($intent === 'services') {
+                if ($requestedService !== null) {
+                    $faqResponse = $this->serviceInquiryResponse(
+                        $requestedService,
+                        $hospital,
+                        $state['language'],
+                        $this->knowledgeBase->search($message),
+                    );
+                } elseif ($this->isGeneralServiceCatalogQuestion($message, $hospital)) {
+                    $faqResponse = $this->serviceCatalogResponse($hospital, $state['language']);
+                } else {
+                    $faqResponse = $this->knowledgeBase->search($message)
+                        ?? $this->serviceClarificationResponse($message, $hospital, $state['language']);
+                }
+            } else {
+                $faqResponse = $intent === 'doctors' && $this->isDoctorScheduleQuestion($message)
+                    ? $this->doctorWeeklyScheduleResponse(
+                        $hospital,
+                        $this->doctorsMatchingIntent($hospital, $message),
+                        $state['language'],
+                    )
+                    : $this->knowledgeBase->search($message);
             }
             if ($faqResponse === null && $intent === 'location' && filled($hospital->address)) {
                 $faqResponse = $state['language'] === self::LANGUAGE_SWAHILI
@@ -547,6 +566,17 @@ class BookingChatService
                 stateVersion: $state['state_version'],
             );
             $state['offered_service_id'] = $serviceId;
+            if ($intent === 'services' && $requestedService !== null) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $faqResponse,
+                    $state,
+                    source: 'topic_change',
+                );
+            }
+
             $nudge = $state['language'] === self::LANGUAGE_SWAHILI
                 ? 'Kwa njia, bado ungependa kuweka miadi ya '.($serviceName ?: 'huduma yako').', au nikusaidie na swali hili jipya?'
                 : 'By the way, would you still like to book '.($serviceName ?: 'your appointment').', or can I help with your new question?';
@@ -555,9 +585,13 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                $faqResponse.' '.$nudge,
+                trim($faqResponse.' '.$nudge),
                 $state,
                 source: 'topic_change',
+                quickReplies: $intent === 'services'
+                    && $this->isGeneralServiceCatalogQuestion($message, $hospital)
+                    ? $this->serviceQuickReplies($hospital, $state['language'])
+                    : null,
             );
         }
 
@@ -1053,23 +1087,16 @@ class BookingChatService
         }
 
         if ($intent === 'services') {
-            $requestedService = $this->isBroadServicesOverview($message)
-                ? null
-                : $this->extractService($message, $hospital);
+            $requestedService = $this->serviceForInquiry($message, $hospital);
 
             if ($requestedService !== null) {
                 $state['offered_service_id'] = $requestedService->id;
-                $response = $state['language'] === self::LANGUAGE_SWAHILI
-                    ? sprintf(
-                        'Ndiyo, %s imeorodheshwa kama huduma inayopatikana katika %s. Je, ungependa msaada wa kuweka miadi?',
-                        $requestedService->name,
-                        $hospital->name,
-                    )
-                    : sprintf(
-                        'Yes, %s is listed as an available service at %s. Would you like help booking it?',
-                        $requestedService->name,
-                        $hospital->name,
-                    );
+                $response = $this->serviceInquiryResponse(
+                    $requestedService,
+                    $hospital,
+                    $state['language'],
+                    $this->knowledgeBase->search($message),
+                );
 
                 return $this->respond(
                     $sessionId,
@@ -1081,16 +1108,18 @@ class BookingChatService
                 );
             }
 
-            if (! $this->isBroadServicesOverview($message)) {
+            if (! $this->isGeneralServiceCatalogQuestion($message, $hospital)) {
                 $knowledgeAnswer = $this->knowledgeBase->search($message);
                 if ($knowledgeAnswer !== null) {
                     return $this->respond(
                         $sessionId,
                         $channel,
                         $message,
-                        $knowledgeAnswer,
+                        $knowledgeAnswer.' '.($state['language'] === self::LANGUAGE_SWAHILI
+                            ? 'Je, ungependa kuweka miadi ya huduma hii?'
+                            : 'Would you like help booking this service?'),
                         $state,
-                        source: 'knowledge_base',
+                        source: 'hospital_services',
                     );
                 }
 
@@ -1106,23 +1135,15 @@ class BookingChatService
                 );
             }
 
-            $services = $hospital->services()->active()->orderBy('name')->pluck('name');
-            $response = $services->isEmpty()
-                ? sprintf(
-                    $state['language'] === self::LANGUAGE_SWAHILI
-                        ? '%s haina huduma zilizoorodheshwa kwa sasa. Tafadhali wasiliana na hospitali kwa msaada.'
-                        : '%s has no active services listed right now. Please contact the hospital for help.',
-                    $hospital->name,
-                )
-                : sprintf(
-                    $state['language'] === self::LANGUAGE_SWAHILI
-                        ? 'Huduma zinazopatikana katika %s ni: %s.'
-                        : 'Available services at %s: %s.',
-                    $hospital->name,
-                    $services->implode(', '),
-                );
-
-            return $this->respond($sessionId, $channel, $message, $response, $state, source: 'hospital_services');
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $this->serviceCatalogResponse($hospital, $state['language']),
+                $state,
+                source: 'hospital_services',
+                quickReplies: $this->serviceQuickReplies($hospital, $state['language']),
+            );
         }
 
         if ($intent === 'doctors') {
@@ -2721,6 +2742,9 @@ class BookingChatService
         }
         if ($this->containsBookingKeyword($normalized)) {
             return 'book';
+        }
+        if ($this->isBroadServicesOverview($message)) {
+            return 'services';
         }
         if ($this->isDoctorScheduleQuestion($message)
             && $this->specialtyTermsForMessage($message) !== []
@@ -4394,15 +4418,89 @@ class BookingChatService
     private function isBroadServicesOverview(string $message): bool
     {
         return preg_match(
-            '/^\s*(?:services?|huduma)\s*[?!.]*\s*$|\b(what services|which services|list (?:all )?services|all services|full service list|services overview|services are available|huduma zenu|huduma gani)\b/iu',
+            '/^\s*(?:services?|huduma)\s*[?!.]*\s*$'
+                .'|\b(?:what|which|list|show|tell me|give me|i asked for)\b.{0,50}\b(?:services?|treatments?|huduma)\b'
+                .'|\b(?:services?|treatments?|huduma)\b.{0,50}\b(?:offered|available|offer|provide|list|zipo|ni zipi)\b'
+                .'|\b(?:all services|full service list|services overview|huduma zenu|huduma gani)\b/iu',
             $message,
         ) === 1;
+    }
+
+    private function isGeneralServiceCatalogQuestion(string $message, Hospital $hospital): bool
+    {
+        return $this->isBroadServicesOverview($message)
+            && ! $this->hasSpecificServiceReference($message, $hospital);
+    }
+
+    private function serviceForInquiry(string $message, Hospital $hospital): ?Service
+    {
+        if ($this->isGeneralServiceCatalogQuestion($message, $hospital)) {
+            return null;
+        }
+
+        return $this->extractService($message, $hospital);
+    }
+
+    private function hasSpecificServiceReference(string $message, Hospital $hospital): bool
+    {
+        $genericTerms = [
+            'all',
+            'asked',
+            'at',
+            'available',
+            'do',
+            'for',
+            'give',
+            'have',
+            'hospital',
+            'list',
+            'offer',
+            'offered',
+            'pearl',
+            'provide',
+            'service',
+            'services',
+            'show',
+            'tell',
+            'the',
+            'treatment',
+            'treatments',
+            'what',
+            'which',
+            'you',
+        ];
+        $queryTerms = array_values(array_diff($this->meaningfulTokens($message), $genericTerms));
+
+        if ($queryTerms === []) {
+            return false;
+        }
+
+        $serviceTerms = $hospital->services()
+            ->active()
+            ->pluck('name')
+            ->flatMap(fn (string $serviceName): array => $this->meaningfulTokens($serviceName))
+            ->unique()
+            ->all();
+
+        foreach ($queryTerms as $queryTerm) {
+            foreach ($serviceTerms as $serviceTerm) {
+                if ($queryTerm === $serviceTerm
+                    || (mb_strlen($queryTerm) >= 4
+                        && FuzzyMatcher::similarityPercentage($queryTerm, $serviceTerm) > 80)
+                ) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function isServiceInquiry(string $message): bool
     {
         return preg_match(
-            '/\b(?:do you have|do you offer|do you provide|is there|are there|is .* available)\b/iu',
+            '/\b(?:do you have|do you offer|do you provide|is there|are there|is .{1,50} available|tell me about)\b'
+                .'|\bwhat\b.{0,50}\b(?:services?|treatments?)\b/iu',
             $message,
         ) === 1;
     }
@@ -4610,9 +4708,22 @@ class BookingChatService
         ) === 1;
     }
 
-    private function serviceInquiryResponse(Service $service, Hospital $hospital, string $language): string
-    {
+    private function serviceInquiryResponse(
+        Service $service,
+        Hospital $hospital,
+        string $language,
+        ?string $knowledgeAnswer = null,
+    ): string {
+        if (filled($knowledgeAnswer)) {
+            return $language === self::LANGUAGE_SWAHILI
+                ? trim($knowledgeAnswer).' Je, ungependa kuweka miadi ya '.$service->name.'?'
+                : trim($knowledgeAnswer).' Would you like help booking '.$service->name.'?';
+        }
+
         $details = [];
+        if (filled($service->description)) {
+            $details[] = trim((string) $service->description);
+        }
         if ((float) $service->price > 0) {
             $details[] = 'KES '.number_format((float) $service->price, 2);
         }
@@ -4638,6 +4749,28 @@ class BookingChatService
             $service->name,
             $detail,
             $hospital->name,
+        );
+    }
+
+    private function serviceCatalogResponse(Hospital $hospital, string $language): string
+    {
+        $services = $hospital->services()->active()->orderBy('name')->pluck('name');
+
+        if ($services->isEmpty()) {
+            return sprintf(
+                $language === self::LANGUAGE_SWAHILI
+                    ? '%s haina huduma zilizoorodheshwa kwa sasa. Tafadhali wasiliana na hospitali kwa msaada.'
+                    : '%s has no active services listed right now. Please contact the hospital for help.',
+                $hospital->name,
+            );
+        }
+
+        return sprintf(
+            $language === self::LANGUAGE_SWAHILI
+                ? 'Huduma zinazopatikana katika %s ni: %s.'
+                : 'Available services at %s: %s.',
+            $hospital->name,
+            $services->implode(', '),
         );
     }
 

@@ -446,6 +446,133 @@ class BookingChatServiceTest extends TestCase
         $this->assertDatabaseCount('appointment_requests', 0);
     }
 
+    #[DataProvider('specificServiceQuestions')]
+    public function test_service_question_uses_knowledge_base_details_before_offering_booking(string $question): void
+    {
+        [$hospital] = $this->createContext(['Dental Cleaning']);
+        $hospital->knowledgeBases()->create([
+            'category' => 'services',
+            'language' => 'en',
+            'subcategory' => 'dental',
+            'keywords' => ['dental', 'dental services', 'dentistry'],
+            'question' => 'Do you offer dental services?',
+            'answer' => 'Dental care includes checkups, cleaning, and treatment for common oral health concerns.',
+            'source' => 'Test Hospital',
+            'last_updated' => now()->toDateString(),
+        ]);
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'dental-service-question-kb-first',
+            $question,
+            'web',
+        );
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertSame('hospital_services', $response->source);
+        $this->assertStringContainsString('Dental care includes checkups, cleaning, and treatment', $response->message);
+        $this->assertStringContainsString('Would you like', $response->message);
+        $this->assertStringContainsString('book', mb_strtolower($response->message));
+        $this->assertStringNotContainsString('What date', $response->message);
+        $this->assertSame(
+            $hospital->services()->firstOrFail()->id,
+            $this->state('dental-service-question-kb-first')['offered_service_id'],
+        );
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public static function specificServiceQuestions(): array
+    {
+        return [
+            'offer question' => ['Do you offer dental services?'],
+            'tell me question' => ['Tell me about dental'],
+            'what services question' => ['What dental services do you have?'],
+        ];
+    }
+
+    #[DataProvider('broadServiceCatalogQuestions')]
+    public function test_broad_service_catalog_phrases_list_services_without_escalating(string $question): void
+    {
+        $this->createContext(['Dental Cleaning', 'Optical Eye Checkup']);
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'broad-service-catalog',
+            $question,
+            'web',
+        );
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertSame('hospital_services', $response->source);
+        $this->assertStringContainsString('Dental Cleaning', $response->message);
+        $this->assertStringContainsString('Optical Eye Checkup', $response->message);
+        $this->assertCount(2, $response->quickReplies);
+        $this->assertDatabaseCount('escalations', 0);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public static function broadServiceCatalogQuestions(): array
+    {
+        return [
+            'offered at hospital' => ['Services offered at Pearl'],
+            'repeated request' => ['I asked for services'],
+        ];
+    }
+
+    public function test_service_question_uses_service_description_when_no_knowledge_base_answer_exists(): void
+    {
+        [, $services] = $this->createContext(['Optical Eye Checkup']);
+        $services[0]->update(['description' => 'A routine eye examination and vision screening.']);
+        Http::preventStrayRequests();
+
+        $response = app(BookingChatService::class)->handle(
+            'optical-service-description-fallback',
+            'Do you offer optical?',
+            'web',
+        );
+
+        $this->assertStringContainsString('A routine eye examination and vision screening.', $response->message);
+        $this->assertStringContainsString('Would you like to book an appointment', $response->message);
+        $this->assertStringNotContainsString('What date', $response->message);
+        $this->assertSame('IDLE', $response->state);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_service_question_during_booking_switches_context_to_the_asked_service(): void
+    {
+        [$hospital, $services] = $this->createContext(['Dental Cleaning', 'Optical Eye Checkup']);
+        $hospital->knowledgeBases()->create([
+            'category' => 'services',
+            'language' => 'en',
+            'subcategory' => 'optical',
+            'keywords' => ['optical', 'eye checkup', 'vision'],
+            'question' => 'Do you offer optical services?',
+            'answer' => 'Optical services include vision screening and eye checkups.',
+            'source' => 'Test Hospital',
+            'last_updated' => now()->toDateString(),
+        ]);
+        $chat = app(BookingChatService::class);
+        $chat->handle('switch-service-during-booking', 'Book Dental Cleaning', 'web');
+        Http::preventStrayRequests();
+
+        $response = $chat->handle(
+            'switch-service-during-booking',
+            'Do you offer optical?',
+            'web',
+        );
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertStringContainsString('Optical services include vision screening', $response->message);
+        $this->assertStringContainsString('booking Optical Eye Checkup', $response->message);
+        $this->assertStringNotContainsString('booking Dental Cleaning', $response->message);
+        $this->assertStringNotContainsString('What date', $response->message);
+        $this->assertSame(
+            $services[1]->id,
+            $chat->getState('switch-service-during-booking')['offered_service_id'],
+        );
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
     public function test_misspelled_ultrasound_inquiry_matches_the_hospital_service(): void
     {
         $this->createContext(['Ultrasound Scan', 'General Consultation']);
@@ -527,9 +654,13 @@ class BookingChatServiceTest extends TestCase
         $this->assertStringContainsString('What date', $datePrompt->message);
         $this->assertSame('IDLE', $response->state);
         $this->assertStringStartsWith('Yes, dental services are available at the hospital.', $response->message);
-        $this->assertStringContainsString('would you still like to book Ultrasound Scan', $response->message);
+        $this->assertStringContainsString('Would you like help booking Dental Cleaning?', $response->message);
         $this->assertNull($response->collectedFields['service_id']);
         $this->assertNull($response->collectedFields['date']);
+        $this->assertSame(
+            $hospital->services()->where('name', 'Dental Cleaning')->value('id'),
+            $response->collectedFields['offered_service_id'],
+        );
         $this->assertDatabaseCount('appointment_requests', 0);
     }
 
@@ -570,11 +701,13 @@ class BookingChatServiceTest extends TestCase
             'web',
         );
 
-        $this->assertSame(
+        $this->assertStringStartsWith(
             'Maternity services include antenatal clinics, delivery care, and postnatal support.',
             $response->message,
         );
+        $this->assertStringContainsString('Would you like help booking this service?', $response->message);
         $this->assertSame('IDLE', $response->state);
+        $this->assertStringNotContainsString('What date', $response->message);
         $this->assertStringNotContainsString('Available services at', $response->message);
         $this->assertStringNotContainsString('Dental Cleaning', $response->message);
     }
@@ -1738,7 +1871,10 @@ class BookingChatServiceTest extends TestCase
         $this->assertTrue(collect($capturedMessages)->contains(
             fn (array $message): bool => $message['content'] === 'You asked me to book Digital X-Ray.',
         ));
-        $this->assertCount(8, $capturedMessages);
+        $this->assertFalse(collect($capturedMessages)->contains(
+            fn (array $message): bool => $message['content'] === 'I need help with the hospital services.',
+        ));
+        $this->assertCount(7, $capturedMessages);
         $this->assertDatabaseCount('appointment_requests', 0);
         $this->assertDatabaseCount('escalations', 0);
     }
