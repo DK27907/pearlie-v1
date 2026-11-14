@@ -1448,7 +1448,9 @@ class BookingChatService
         $this->assistant->clearPendingEscalation($sessionId);
         $previousState = $state;
         $wasCollecting = $state['state'] === self::STATE_COLLECTING;
-        $dateWasRequested = $wasCollecting && $this->nextMissingField($previousState) === 'date';
+        $dateWasRequested = $wasCollecting
+            && filled($previousState['doctor_id'] ?? null)
+            && $this->nextMissingField($previousState) === 'date';
         $state['state'] = self::STATE_IDENTIFYING;
         if ($channel === 'whatsapp' && ! filled($state['patient_phone'])) {
             $state['patient_phone'] = substr($sessionId, strlen('whatsapp:'));
@@ -1627,6 +1629,13 @@ class BookingChatService
             $mentionedDoctor = $this->extractDoctor($message, $hospital);
 
             if ($mentionedDoctor !== null
+                && ($requiredSpecialty === null || ! $hasMatchingSpecialty)
+                && $doctors->contains('id', $mentionedDoctor->id)
+            ) {
+                $state['doctor_id'] = $mentionedDoctor->id;
+            }
+
+            if ($mentionedDoctor !== null
                 && $requiredSpecialty !== null
                 && $hasMatchingSpecialty
                 && ! $doctors->contains('id', $mentionedDoctor->id)
@@ -1656,6 +1665,7 @@ class BookingChatService
                     $message,
                     $this->doctorPrompt($state, $hospital),
                     $state,
+                    quickReplies: $this->doctorQuickReplies($state, $hospital),
                 );
             }
 
@@ -1663,6 +1673,7 @@ class BookingChatService
                 && ! $hasMatchingSpecialty
                 && $doctors->count() > 1
                 && $doctors->isNotEmpty()
+                && ! filled($state['doctor_id'] ?? null)
             ) {
                 return $this->respond(
                     $sessionId,
@@ -1680,6 +1691,18 @@ class BookingChatService
                             $doctors->pluck('name')->implode(', '),
                         ),
                     $state,
+                    quickReplies: $this->doctorQuickReplies($state, $hospital),
+                );
+            }
+
+            if ($requiredSpecialty === null && $doctors->count() > 1 && $mentionedDoctor === null) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $this->doctorPrompt($state, $hospital),
+                    $state,
+                    quickReplies: $this->doctorQuickReplies($state, $hospital),
                 );
             }
 
@@ -1726,6 +1749,49 @@ class BookingChatService
             }
         }
 
+        if ($dateWasRequested
+            && filled($state['doctor_id'] ?? null)
+            && filled($state['date'] ?? null)
+        ) {
+            $requestedDate = CarbonImmutable::parse((string) $state['date']);
+            $availableTimeReplies = $this->timeQuickReplies($state);
+
+            if ($availableTimeReplies === []) {
+                return $this->offerBookingAlternatives(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $hospital,
+                    $state,
+                );
+            }
+
+            $doctor = $hospital->users()->findOrFail((int) $state['doctor_id']);
+            $availableTimes = implode(', ', array_column($availableTimeReplies, 'label'));
+            $response = $state['language'] === self::LANGUAGE_SWAHILI
+                ? sprintf(
+                    'Hizi ndizo saa zinazopatikana kwa %s tarehe %s: %s. Ni muda gani unaokufaa?',
+                    $doctor->name,
+                    $requestedDate->format('l, d/m/Y'),
+                    $availableTimes,
+                )
+                : sprintf(
+                    'Here are the available times for %s on %s: %s. Which one works for you?',
+                    $doctor->name,
+                    $requestedDate->format('l, M j'),
+                    $availableTimes,
+                );
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $response,
+                $state,
+                quickReplies: $availableTimeReplies,
+            );
+        }
+
         if (filled($state['doctor_id'] ?? null)
             && filled($state['date'] ?? null)
             && filled($state['time'] ?? null)
@@ -1735,14 +1801,11 @@ class BookingChatService
             $doctor = $hospital->users()->find((int) $state['doctor_id']);
             $doctorName = $doctor?->name ?? 'the doctor';
             $requestedDate = CarbonImmutable::parse((string) $state['date']);
-            $availableTimes = collect($this->availability->getAvailableSlots(
-                (int) $doctor->id,
-                $requestedDate->toDateString(),
-            ))
-                ->filter(fn (bool $isAvailable): bool => $isAvailable)
-                ->keys()
-                ->take(5)
-                ->all();
+            $availableTimes = array_slice(
+                $this->availableTimesForDate((int) $doctor->id, $requestedDate->toDateString()),
+                0,
+                5,
+            );
 
             $state['state'] = self::STATE_COLLECTING;
             $state['time'] = null;
@@ -1831,10 +1894,34 @@ class BookingChatService
                     );
                 }
 
-                if ($field === 'time' && $this->looksLikeTimeAttempt($message)) {
+                if ($field === 'time') {
+                    $timeQuickReplies = $this->timeQuickReplies($state);
+                    if ($timeQuickReplies === []) {
+                        return $this->offerBookingAlternatives(
+                            $sessionId,
+                            $channel,
+                            $message,
+                            $hospital,
+                            $state,
+                        );
+                    }
+
                     $promptMessage = $state['language'] === self::LANGUAGE_SWAHILI
-                        ? 'Samahani, sikuweza kuelewa muda huo. Tafadhali tumia muundo kama 9am, 9:30am, 14:00, au 2pm. Ungependa miadi iwe saa ngapi?'
-                        : "I couldn't understand the time you entered. Please use a format like:\n- 9am or 9:30am\n- 14:00 or 14:30\n- 2pm or 2:30pm\n\nWhat time works for you?";
+                        ? ($this->looksLikeTimeAttempt($message)
+                            ? 'Muda huo haupo kwenye nafasi zinazopatikana. Tafadhali chagua muda kwenye orodha.'
+                            : 'Tafadhali chagua moja ya nafasi za muda zilizo hapa chini.')
+                        : ($this->looksLikeTimeAttempt($message)
+                            ? "That time isn't in the available slots. Please choose a time from the list."
+                            : 'Please choose one of the available times below.');
+
+                    return $this->respond(
+                        $sessionId,
+                        $channel,
+                        $message,
+                        $promptMessage,
+                        $state,
+                        quickReplies: $timeQuickReplies,
+                    );
                 }
 
                 return $this->respond($sessionId, $channel, $message, $promptMessage, $state);
@@ -2570,23 +2657,45 @@ class BookingChatService
         }
 
         if (preg_match('/\b([1-9]|1[0-2])(?::([0-5]\d))?\s*(a\.?m\.?|p\.?m\.?)\b/iu', $normalized, $matches)) {
-            $hour = (int) $matches[1] % 12;
-            if (str_starts_with(mb_strtolower($matches[3]), 'p')) {
-                $hour += 12;
-            }
-
-            return sprintf('%02d:%02d', $hour, (int) ($matches[2] ?? 0));
+            return $this->normalizeClockTime(
+                (int) $matches[1],
+                (int) ($matches[2] ?? 0),
+                str_starts_with(mb_strtolower($matches[3]), 'p') ? 'pm' : 'am',
+            );
         }
 
-        if (preg_match('/\b([01]\d|2[0-3])\s*(?:[:.]\s*([0-5]\d))\b/', $normalized, $matches)) {
-            return sprintf('%02d:%02d', (int) $matches[1], (int) ($matches[2] ?? 0));
+        if (preg_match('/(?<![\pL\pN])(\d{1,2})\s*[:.]\s*([0-5]\d)(?!\d)/u', $normalized, $matches)) {
+            return $this->normalizeClockTime((int) $matches[1], (int) $matches[2]);
+        }
+
+        if (preg_match('/(?<![\pL\pN])([01]?\d|2[0-3])\s*(?:[:.]\s*([0-5]\d))\b/u', $normalized, $matches)) {
+            return $this->normalizeClockTime((int) $matches[1], (int) ($matches[2] ?? 0));
         }
 
         if (preg_match('/\b([01]\d|2[0-3])\b/', $normalized, $matches)) {
-            return sprintf('%02d:00', (int) $matches[1]);
+            return $this->normalizeClockTime((int) $matches[1], 0);
         }
 
         return null;
+    }
+
+    private function normalizeClockTime(int $hour, int $minute, ?string $period = null): ?string
+    {
+        if ($minute > 59 || $hour > ($period === null ? 23 : 12) || $hour < ($period === null ? 0 : 1)) {
+            return null;
+        }
+
+        if ($period !== null) {
+            $hour %= 12;
+            if ($period === 'pm') {
+                $hour += 12;
+            }
+        }
+
+        return CarbonImmutable::parse(
+            sprintf('%02d:%02d', $hour, $minute),
+            config('app.timezone'),
+        )->format('H:i');
     }
 
     private function normalizeSwahiliTime(string $input): string
@@ -3544,7 +3653,7 @@ class BookingChatService
         return match ($this->nextMissingField($state)) {
             'service_id' => $this->serviceQuickReplies($hospital, $state['language']),
             'doctor_id' => $this->doctorQuickReplies($state, $hospital),
-            'date' => $this->dateQuickReplies($state['language']),
+            'date' => $this->dateQuickReplies($state),
             'time' => $this->timeQuickReplies($state),
             default => [],
         };
@@ -3608,23 +3717,37 @@ class BookingChatService
     /**
      * @return array<int, array{id: string, label: string, value: string}>
      */
-    private function dateQuickReplies(string $language): array
+    private function dateQuickReplies(array $state): array
     {
+        if (! filled($state['doctor_id'] ?? null)) {
+            return [];
+        }
+
+        $availableDates = [];
         $today = CarbonImmutable::today();
+        for ($dayOffset = 1; $dayOffset <= 90 && count($availableDates) < 5; $dayOffset++) {
+            $date = $today->addDays($dayOffset);
+            if ($this->availableTimesForDate((int) $state['doctor_id'], $date->toDateString()) !== []) {
+                $availableDates[] = $date;
+            }
+        }
 
-        return collect(range(1, 5))
-            ->map(function (int $daysAhead) use ($today, $language): array {
-                $date = $today->addDays($daysAhead);
+        return $this->dateQuickRepliesForDates($availableDates, $state['language']);
+    }
 
-                return [
-                    'id' => 'date-'.$date->toDateString(),
-                    'label' => $language === self::LANGUAGE_SWAHILI
-                        ? $date->format('d/m/Y')
-                        : $date->format('D, M j'),
-                    'value' => $date->toDateString(),
-                ];
-            })
-            ->all();
+    /**
+     * @param  array<int, CarbonImmutable>  $dates
+     * @return array<int, array{id: string, label: string, value: string}>
+     */
+    private function dateQuickRepliesForDates(array $dates, string $language): array
+    {
+        return array_map(fn (CarbonImmutable $date): array => [
+            'id' => 'date-'.$date->toDateString(),
+            'label' => $language === self::LANGUAGE_SWAHILI
+                ? $date->format('d/m/Y')
+                : $date->format('D, M j'),
+            'value' => $date->toDateString(),
+        ], $dates);
     }
 
     /**
@@ -3637,20 +3760,29 @@ class BookingChatService
             return [];
         }
 
-        $slots = $this->availability->getAvailableSlots(
+        return collect($this->availableTimesForDate(
             (int) $state['doctor_id'],
             CarbonImmutable::parse((string) $state['date'])->toDateString(),
-        );
-
-        return collect($slots)
-            ->filter(fn (bool $isAvailable): bool => $isAvailable)
-            ->keys()
+        ))
             ->take(8)
             ->map(fn (string $time): array => [
                 'id' => 'time-'.sha1($time),
                 'label' => $time,
                 'value' => $time,
             ])
+            ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function availableTimesForDate(int $doctorId, string $date): array
+    {
+        return collect($this->availability->getAvailableSlots($doctorId, $date))
+            ->filter(fn (bool $isAvailable, string $time): bool => $isAvailable
+                && ! $this->isTimeOutsideHospitalHours($time))
+            ->keys()
+            ->values()
             ->all();
     }
 
@@ -4310,14 +4442,11 @@ class BookingChatService
     ): ChatResponse {
         $doctor = $hospital->users()->findOrFail((int) $state['doctor_id']);
         $requestedDate = CarbonImmutable::parse((string) $state['date']);
-        $availableTimes = collect($this->availability->getAvailableSlots(
-            (int) $doctor->id,
-            $requestedDate->toDateString(),
-        ))
-            ->filter(fn (bool $isAvailable): bool => $isAvailable)
-            ->keys()
-            ->take(5)
-            ->all();
+        $availableTimes = array_slice(
+            $this->availableTimesForDate((int) $doctor->id, $requestedDate->toDateString()),
+            0,
+            5,
+        );
 
         if ($availableTimes !== []) {
             $state['state'] = self::STATE_COLLECTING;
@@ -4339,6 +4468,7 @@ class BookingChatService
                     $times,
                 ),
                 $state,
+                quickReplies: $this->timeQuickReplies($state),
             );
         }
 
@@ -4348,12 +4478,7 @@ class BookingChatService
         $availableDates = [];
         for ($dayOffset = 0; $dayOffset < 90 && count($availableDates) < 3; $dayOffset++) {
             $date = $searchFrom->addDays($dayOffset);
-            $hasAvailableSlot = collect($this->availability->getAvailableSlots(
-                (int) $doctor->id,
-                $date->toDateString(),
-            ))->contains(true);
-
-            if ($hasAvailableSlot) {
+            if ($this->availableTimesForDate((int) $doctor->id, $date->toDateString()) !== []) {
                 $availableDates[] = $date;
             }
         }
@@ -4371,7 +4496,7 @@ class BookingChatService
                     $requestedDate->format('d/m/Y'),
                 )
                 : sprintf(
-                    '%s is not available on %s, and no upcoming times were found. Please choose another doctor or contact the hospital.',
+                    '%s has no available slots on %s, and no upcoming times were found. Please choose another doctor or contact the hospital.',
                     $doctor->name,
                     $requestedDate->format('F j'),
                 );
@@ -4397,7 +4522,7 @@ class BookingChatService
                     ? $lastDate
                     : implode(', ', $formattedDates).' or '.$lastDate;
                 $response = sprintf(
-                    '%s is not available on %s. The next available days are %s. Which day works for you?',
+                    '%s has no available slots on %s. The next available dates are %s. Which date works for you?',
                     $doctor->name,
                     $requestedDate->format('l F j'),
                     $dateList,
@@ -4405,7 +4530,14 @@ class BookingChatService
             }
         }
 
-        return $this->respond($sessionId, $channel, $message, $response, $state);
+        return $this->respond(
+            $sessionId,
+            $channel,
+            $message,
+            $response,
+            $state,
+            quickReplies: $this->dateQuickRepliesForDates($availableDates, $state['language']),
+        );
     }
 
     private function normalize(string $value): string

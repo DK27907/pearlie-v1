@@ -373,20 +373,84 @@ class BookingChatServiceTest extends TestCase
         $sessionId = 'contextual-booking-options';
 
         $chat->handle($sessionId, 'Book an appointment', 'web');
-        $datePrompt = $chat->handle($sessionId, 'Dental Cleaning', 'web');
-        $namePrompt = $chat->handle($sessionId, '2026-10-05', 'web');
-        $phonePrompt = $chat->handle($sessionId, 'Patient Example', 'web');
-        $doctorPrompt = $chat->handle($sessionId, '0712345678', 'web');
-        $timePrompt = $chat->handle($sessionId, '__doctor:'.$doctors[0]->id.'__', 'web');
+        $doctorPrompt = $chat->handle($sessionId, 'Dental Cleaning', 'web');
+        $datePrompt = $chat->handle($sessionId, '__doctor:'.$doctors[0]->id.'__', 'web');
+        $timePrompt = $chat->handle($sessionId, '2026-10-05', 'web');
 
-        $this->assertCount(5, $datePrompt->quickReplies);
-        $this->assertSame('2026-10-03', $datePrompt->quickReplies[0]['value']);
-        $this->assertSame('COLLECTING', $namePrompt->state);
         $this->assertSame($services[0]->id, $doctorPrompt->collectedFields['service_id']);
         $this->assertSame('doctor-'.$doctors[0]->id, $doctorPrompt->quickReplies[0]['id']);
+        $this->assertCount(5, $datePrompt->quickReplies);
+        $this->assertSame('2026-10-03', $datePrompt->quickReplies[0]['value']);
         $this->assertSame($doctors[0]->id, $timePrompt->collectedFields['doctor_id']);
-        $this->assertNotEmpty($timePrompt->quickReplies);
-        $this->assertSame('09:00', $timePrompt->quickReplies[0]['value']);
+        $this->assertSame('2026-10-05', $timePrompt->collectedFields['date']);
+        $this->assertStringContainsString('09:00, 09:30', $timePrompt->message);
+        $this->assertSame(['09:00', '09:30'], array_column($timePrompt->quickReplies, 'value'));
+    }
+
+    public function test_selecting_a_date_returns_real_available_times_for_the_selected_doctor(): void
+    {
+        [, , $doctors] = $this->createContext();
+        $chat = app(BookingChatService::class);
+        $sessionId = 'date-shows-available-times';
+
+        $chat->handle($sessionId, 'Book an appointment', 'web');
+        $chat->handle($sessionId, 'Dental Cleaning', 'web');
+        $datePrompt = $chat->handle($sessionId, 'Sun, Nov 15', 'web');
+
+        $this->assertSame('2026-11-15', $datePrompt->collectedFields['date']);
+        $this->assertSame($doctors[0]->id, $datePrompt->collectedFields['doctor_id']);
+        $this->assertStringContainsString('Dr. Amina Njeri', $datePrompt->message);
+        $this->assertStringContainsString('Sunday, Nov 15', $datePrompt->message);
+        $this->assertSame(['09:00', '09:30'], array_column($datePrompt->quickReplies, 'value'));
+    }
+
+    public function test_unavailable_selected_date_offers_three_available_dates_and_date_menu_excludes_closed_days(): void
+    {
+        [, , $doctors] = $this->createContext();
+        $this->travelTo(CarbonImmutable::parse('2026-11-14 08:00:00'));
+        DoctorAvailability::query()
+            ->where('doctor_id', $doctors[0]->id)
+            ->where('day_of_week', 0)
+            ->update(['is_active' => false]);
+        $chat = app(BookingChatService::class);
+        $sessionId = 'unavailable-date-available-options';
+
+        $chat->handle($sessionId, 'Book an appointment', 'web');
+        $datePrompt = $chat->handle($sessionId, 'Dental Cleaning', 'web');
+        $response = $chat->handle($sessionId, 'Sun, Nov 15', 'web');
+
+        $offeredDates = array_column($datePrompt->quickReplies, 'value');
+        $this->assertNotContains('2026-11-15', $offeredDates);
+        $this->assertSame(['2026-11-16', '2026-11-17', '2026-11-18'], array_column($response->quickReplies, 'value'));
+        $this->assertStringContainsString('no available slots', mb_strtolower($response->message));
+        $this->assertNull($response->collectedFields['date']);
+        $this->assertSame('COLLECTING', $response->state);
+    }
+
+    #[DataProvider('clockTimeInputs')]
+    public function test_single_digit_clock_times_are_parsed_as_the_requested_hour(
+        string $timeInput,
+        string $expectedTime,
+    ): void {
+        $this->createContext();
+
+        $response = app(BookingChatService::class)->handle(
+            'parse-clock-time-'.$expectedTime,
+            'Book Dental Cleaning with Dr. Amina Njeri tomorrow at '.$timeInput.'. My name is Test Patient, phone 254748249882, email patient@test.com.',
+            'web',
+        );
+
+        $this->assertSame('CONFIRMING', $response->state);
+        $this->assertSame($expectedTime, $response->collectedFields['time']);
+    }
+
+    public static function clockTimeInputs(): array
+    {
+        return [
+            'single digit with minutes' => ['9:00', '09:00'],
+            'single digit with meridiem' => ['9am', '09:00'],
+            'zero-padded hour' => ['09:00', '09:00'],
+        ];
     }
 
     public function test_specialist_question_lists_the_matching_doctor_without_starting_a_booking(): void
@@ -925,9 +989,9 @@ class BookingChatServiceTest extends TestCase
 
         $this->assertStringContainsString('Which service do you need?', $servicePrompt->message);
         $this->assertStringContainsString('DD/MM/YYYY', $datePrompt->message);
-        $this->assertStringContainsString('full name', mb_strtolower($namePrompt->message));
+        $this->assertStringContainsString('available times', mb_strtolower($namePrompt->message));
         $this->assertStringContainsString('mobile number', mb_strtolower($phonePrompt->message));
-        $this->assertStringContainsString('What time', $timePrompt->message);
+        $this->assertStringContainsString('available times', mb_strtolower($timePrompt->message));
         $this->assertSame('IDLE', $restartPrompt->state);
         $this->assertStringContainsString('start over', mb_strtolower($restartPrompt->message));
         $this->assertNull($restartPrompt->collectedFields['service_id']);
@@ -935,7 +999,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertStringContainsString('DD/MM/YYYY', $restartedDatePrompt->message);
         $this->assertSame('COLLECTING', $restartedNamePrompt->state);
         $this->assertSame(now()->addDay()->toDateString(), $restartedNamePrompt->collectedFields['date']);
-        $this->assertStringContainsString('full name', mb_strtolower($restartedNamePrompt->message));
+        $this->assertStringContainsString('available times', mb_strtolower($restartedNamePrompt->message));
         $this->assertDatabaseCount('escalations', 0);
     }
 
@@ -970,9 +1034,9 @@ class BookingChatServiceTest extends TestCase
         $timePrompt = $chat->handle($sessionId, '254748249882', 'web');
         $summary = $chat->handle($sessionId, '9am', 'web');
 
-        $this->assertStringContainsString('full name', mb_strtolower($namePrompt->message));
+        $this->assertStringContainsString('available times', mb_strtolower($namePrompt->message));
         $this->assertStringContainsString('mobile number', mb_strtolower($phonePrompt->message));
-        $this->assertStringContainsString('What time', $timePrompt->message);
+        $this->assertStringContainsString('available times', mb_strtolower($timePrompt->message));
         $this->assertSame('CONFIRMING', $summary->state);
         $this->assertSame($services[0]->id, $summary->collectedFields['service_id']);
         $this->assertSame($doctors[0]->id, $summary->collectedFields['doctor_id']);
@@ -1091,7 +1155,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertNull($ambiguousDate->collectedFields['time']);
         $this->assertSame(CarbonImmutable::tomorrow()->toDateString(), $validDate->collectedFields['date']);
         $this->assertNull($validDate->collectedFields['time']);
-        $this->assertStringContainsString('full name', mb_strtolower($validDate->message));
+        $this->assertStringContainsString('available times', mb_strtolower($validDate->message));
     }
 
     public function test_third_unrecognized_booking_message_resets_to_recovery_menu(): void
@@ -1142,10 +1206,10 @@ class BookingChatServiceTest extends TestCase
 
         $this->assertStringContainsString('DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD', $datePrompt->message);
         $this->assertStringContainsString('kesho', $datePrompt->message);
-        $this->assertStringContainsString('jina lako', mb_strtolower($namePrompt->message));
+        $this->assertStringContainsString('saa zinazopatikana', mb_strtolower($namePrompt->message));
         $this->assertSame('Juma', $phonePrompt->collectedFields['patient_name']);
         $this->assertStringContainsString('nambari gani ya simu', mb_strtolower($phonePrompt->message));
-        $this->assertStringContainsString('saa ngapi', mb_strtolower($timePrompt->message));
+        $this->assertStringContainsString('nafasi za muda', mb_strtolower($timePrompt->message));
         $this->assertSame($services[0]->id, $confirmation->collectedFields['service_id']);
         $this->assertSame('Juma', $confirmation->collectedFields['patient_name']);
         $this->assertSame('254712345678', $confirmation->collectedFields['patient_phone']);
@@ -1407,9 +1471,10 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame($services[0]->id, $state['service_id']);
         $this->assertSame($doctors[0]->id, $state['doctor_id']);
         $this->assertStringContainsString('What date would you prefer', $datePrompt->message);
-        $this->assertStringContainsString('full name', mb_strtolower($namePrompt->message));
+        $this->assertStringContainsString('available times', mb_strtolower($namePrompt->message));
+        $this->assertSame(['09:00', '09:30'], array_column($namePrompt->quickReplies, 'value'));
         $this->assertStringContainsString('mobile number', mb_strtolower($phonePrompt->message));
-        $this->assertStringContainsString('What time would you prefer', $timePrompt->message);
+        $this->assertStringContainsString('available times', mb_strtolower($timePrompt->message));
         $this->assertSame('2026-10-15', $state['date']);
         $this->assertSame('09:00', $state['time']);
         $this->assertSame('Test Patient', $state['patient_name']);
@@ -2539,22 +2604,17 @@ class BookingChatServiceTest extends TestCase
             doctorNames: ['Dr. Amina Njeri', 'Dr. Brian Otieno'],
         );
 
-        $response = app(BookingChatService::class)->handle(
-            'specialty-not-required',
-            'Book General Consultation',
-            'web',
-        );
-
-        $this->assertStringContainsString('What date would you prefer', $response->message);
-
         $chat = app(BookingChatService::class);
-        $chat->handle('specialty-not-required', 'tomorrow', 'web');
-        $chat->handle('specialty-not-required', 'My name is Test Patient', 'web');
-        $doctorPrompt = $chat->handle('specialty-not-required', '254748249882', 'web');
+        $doctorPrompt = $chat->handle('specialty-not-required', 'Book General Consultation', 'web');
+        $datePrompt = $chat->handle('specialty-not-required', 'Dr. Amina Njeri', 'web');
+        $timePrompt = $chat->handle('specialty-not-required', 'tomorrow', 'web');
 
         $this->assertStringContainsString('Dr. Amina Njeri', $doctorPrompt->message);
         $this->assertStringContainsString('Dr. Brian Otieno', $doctorPrompt->message);
         $this->assertStringContainsString('Which doctor', $doctorPrompt->message);
+        $this->assertStringContainsString('What date would you prefer', $datePrompt->message);
+        $this->assertStringContainsString('available times', mb_strtolower($timePrompt->message));
+        $this->assertSame(['09:00', '09:30'], array_column($timePrompt->quickReplies, 'value'));
     }
 
     public function test_confirmation_no_returns_to_idle_without_creating_appointment(): void
@@ -2719,8 +2779,9 @@ class BookingChatServiceTest extends TestCase
 
         $this->assertStringContainsString('Which service do you need?', $service->message);
         $this->assertStringContainsString('What date', $date->message);
-        $this->assertStringContainsString('What time', $time->message);
-        $this->assertStringContainsString('full name', $name->message);
+        $this->assertStringContainsString('available times', mb_strtolower($name->message));
+        $this->assertSame(['09:00', '09:30'], array_column($name->quickReplies, 'value'));
+        $this->assertStringContainsString('available times', mb_strtolower($time->message));
         $this->assertStringContainsString('mobile number', $phone->message);
         $this->assertSame('CONFIRMING', $confirmation->state);
         $this->assertStringNotContainsString('email', mb_strtolower($confirmation->message));
@@ -3208,18 +3269,19 @@ class BookingChatServiceTest extends TestCase
     {
         $this->createContext(doctorNames: ['Dr. Amina Njeri', 'Dr. Test Live']);
         $chat = app(BookingChatService::class);
-        $datePrompt = $chat->handle('natural-multi', 'Book Dental Cleaning', 'web');
-        $namePrompt = $chat->handle('natural-multi', 'tomorrow at 9am', 'web');
-        $doctorPrompt = $chat->handle(
-            'natural-multi',
-            'My name is Test Patient, phone 254748249882, email patient@test.com',
-            'web',
-        );
-        $confirmation = $chat->handle('natural-multi', 'Dr. Amina Njeri', 'web');
+        $doctorPrompt = $chat->handle('natural-multi', 'Book Dental Cleaning', 'web');
+        $datePrompt = $chat->handle('natural-multi', 'Dr. Amina Njeri', 'web');
+        $timePrompt = $chat->handle('natural-multi', 'tomorrow', 'web');
+        $namePrompt = $chat->handle('natural-multi', '09:00', 'web');
+        $phonePrompt = $chat->handle('natural-multi', 'Test Patient', 'web');
+        $confirmation = $chat->handle('natural-multi', '254748249882', 'web');
 
-        $this->assertStringContainsString('What date would you prefer', $datePrompt->message);
-        $this->assertStringContainsString('full name', mb_strtolower($namePrompt->message));
         $this->assertStringContainsString('Which doctor', $doctorPrompt->message);
+        $this->assertStringContainsString('What date would you prefer', $datePrompt->message);
+        $this->assertStringContainsString('available times', mb_strtolower($timePrompt->message));
+        $this->assertSame(['09:00', '09:30'], array_column($timePrompt->quickReplies, 'value'));
+        $this->assertStringContainsString('full name', mb_strtolower($namePrompt->message));
+        $this->assertStringContainsString('mobile number', mb_strtolower($phonePrompt->message));
         $this->assertSame('CONFIRMING', $confirmation->state);
     }
 
