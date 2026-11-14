@@ -6,6 +6,7 @@ use App\Mail\DoctorInviteMail;
 use App\Models\DoctorInvite;
 use App\Models\Hospital;
 use App\Models\User;
+use App\Services\DoctorManagementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -65,6 +66,26 @@ class DoctorManagementTest extends TestCase
             return $mail->doctor->email === 'ada@example.test';
         });
         $this->assertSame("You're invited to the MediDesk Assistant Doctor Dashboard", $sentMail->envelope()->subject);
+    }
+
+    public function test_doctor_creation_uses_the_supplied_hospital_when_context_differs(): void
+    {
+        Mail::fake();
+        $hospital = Hospital::factory()->create();
+        app()->instance('currentHospital', Hospital::factory()->create());
+
+        $result = app(DoctorManagementService::class)->createDoctor([
+            'name' => 'Dr. Tenant Context',
+            'email' => 'tenant-context-doctor@example.test',
+            'specialization' => 'General Medicine',
+            'phone' => '+254 712 345 678',
+        ], $hospital);
+
+        $doctor = User::withoutGlobalScopes()->findOrFail($result['doctor']->id);
+        $this->assertSame($hospital->id, $doctor->hospital_id);
+        $this->assertSame('doctor', $doctor->role);
+        $this->assertTrue($doctor->hasRole('doctor'));
+        Mail::assertSent(DoctorInviteMail::class);
     }
 
     public function test_doctor_with_temporary_password_must_change_on_first_login(): void

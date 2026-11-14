@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Mail\DoctorInviteMail;
 use App\Models\DoctorInvite;
+use App\Models\Hospital;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -48,37 +49,50 @@ class DoctorManagementService
      * @param  array<string, mixed>  $attributes
      * @return array{doctor: User, invite_sent: bool, temporary_password: ?string}
      */
-    public function createDoctor(array $attributes): array
+    public function createDoctor(array $attributes, Hospital $hospital): array
     {
         $useTemporaryPassword = (bool) ($attributes['use_temporary_password'] ?? false);
         unset($attributes['use_temporary_password']);
         $temporaryPassword = $useTemporaryPassword ? Str::random(12) : null;
 
-        [$doctor, $token, $invite] = DB::transaction(function () use ($attributes, $temporaryPassword): array {
-            $doctor = User::query()->create([
-                ...$attributes,
-                'password' => $temporaryPassword ?? Str::random(64),
-                'role' => 'doctor',
-                'is_admin' => false,
-                'is_super_admin' => false,
-                'is_doctor' => true,
-                'is_active' => true,
-                'must_change_password' => $temporaryPassword !== null,
-            ]);
-            $doctor->syncRolesFromFlags();
+        $hadCurrentHospital = app()->bound('currentHospital');
+        $previousHospital = hospital();
+        app()->instance('currentHospital', $hospital);
 
-            if ($temporaryPassword !== null) {
-                return [$doctor, null, null];
+        try {
+            [$doctor, $token, $invite] = DB::transaction(function () use ($attributes, $hospital, $temporaryPassword): array {
+                $doctor = User::query()->create([
+                    ...$attributes,
+                    'hospital_id' => $hospital->id,
+                    'password' => $temporaryPassword ?? Str::random(64),
+                    'role' => 'doctor',
+                    'is_admin' => false,
+                    'is_super_admin' => false,
+                    'is_doctor' => true,
+                    'is_active' => true,
+                    'must_change_password' => $temporaryPassword !== null,
+                ]);
+                $doctor->syncRolesFromFlags();
+
+                if ($temporaryPassword !== null) {
+                    return [$doctor, null, null];
+                }
+
+                $token = Str::random(64);
+                $invite = $doctor->doctorInvites()->create([
+                    'token' => hash('sha256', $token),
+                    'expires_at' => now()->addHours((int) config('doctor_invites.expiration_hours', 72)),
+                ]);
+
+                return [$doctor, $token, $invite];
+            });
+        } finally {
+            if ($hadCurrentHospital) {
+                app()->instance('currentHospital', $previousHospital);
+            } else {
+                app()->forgetInstance('currentHospital');
             }
-
-            $token = Str::random(64);
-            $invite = $doctor->doctorInvites()->create([
-                'token' => hash('sha256', $token),
-                'expires_at' => now()->addHours((int) config('doctor_invites.expiration_hours', 72)),
-            ]);
-
-            return [$doctor, $token, $invite];
-        });
+        }
 
         return [
             'doctor' => $doctor,

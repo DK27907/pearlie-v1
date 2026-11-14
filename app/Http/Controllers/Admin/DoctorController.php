@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\IndexDoctorsRequest;
 use App\Http\Requests\Admin\StoreDoctorRequest;
 use App\Http\Requests\Admin\UpdateDoctorRequest;
+use App\Models\Hospital;
 use App\Models\User;
 use App\Services\DoctorManagementService;
 use Illuminate\Http\RedirectResponse;
@@ -32,7 +33,10 @@ class DoctorController extends Controller
 
     public function store(StoreDoctorRequest $request): RedirectResponse
     {
-        $result = $this->doctorManagement->createDoctor($request->validated());
+        $hospital = hospital();
+        abort_unless($hospital instanceof Hospital, 404);
+
+        $result = $this->doctorManagement->createDoctor($request->validated(), $hospital);
 
         if ($result['temporary_password'] !== null) {
             return redirect()
