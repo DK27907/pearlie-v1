@@ -88,6 +88,34 @@ class WhatsAppIntegrationTest extends TestCase
             && $request['interactive']['action']['sections'][0]['rows'][0]['id'] === '__service:1__');
     }
 
+    public function test_whatsapp_yes_no_replies_use_interactive_buttons(): void
+    {
+        config([
+            'whatsapp.access_token' => 'test-token',
+            'whatsapp.phone_number_id' => 'test-phone-number-id',
+            'whatsapp.api_version' => 'v20.0',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.buttons']]]),
+        ]);
+
+        $result = app(WhatsAppService::class)->sendInteractiveButtons(
+            '254712345678',
+            'Confirm your booking?',
+            [
+                ['id' => 'yes', 'label' => 'Yes', 'value' => 'yes'],
+                ['id' => 'no', 'label' => 'No', 'value' => 'no'],
+            ],
+        );
+
+        $this->assertTrue($result['success']);
+        Http::assertSent(fn ($request): bool => $request['type'] === 'interactive'
+            && $request['interactive']['type'] === 'button'
+            && $request['interactive']['action']['buttons'][0]['reply']['id'] === 'yes'
+            && $request['interactive']['action']['buttons'][1]['reply']['id'] === 'no');
+    }
+
     public function test_whatsapp_webhook_passes_interactive_list_reply_id_to_booking_flow(): void
     {
         config([

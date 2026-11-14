@@ -21,7 +21,11 @@
                         $canResolve = auth()->user()->isAdmin() || $isAssignedWorker;
                         $waitingMinutes = (int) floor(now()->diffInSeconds($escalation->created_at) / 60);
                     @endphp
-                    <tr class="align-top hover:bg-slate-50">
+                    <tr @class([
+                        'align-top',
+                        'bg-rose-50 hover:bg-rose-100' => $escalation->is_urgent,
+                        'hover:bg-slate-50' => ! $escalation->is_urgent,
+                    ])>
                         <td class="whitespace-nowrap px-4 py-4 font-semibold text-slate-900">#{{ $escalation->id }}</td>
                         <td class="max-w-48 px-4 py-4">
                             <p class="truncate font-semibold text-slate-900">{{ $escalation->patient_name }}</p>
@@ -30,7 +34,12 @@
                             @endif
                         </td>
                         <td class="whitespace-nowrap px-4 py-4 text-slate-600">{{ $escalation->patient_phone ?: 'Not provided' }}</td>
-                        <td class="max-w-sm px-4 py-4 text-slate-600">{{ \Illuminate\Support\Str::limit($escalation->user_message, 100) }}</td>
+                        <td class="max-w-sm px-4 py-4 text-slate-600">
+                            @if ($escalation->is_urgent)
+                                <span class="mb-1 inline-flex rounded-full bg-rose-700 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-white">Urgent</span>
+                            @endif
+                            <span class="block">{{ \Illuminate\Support\Str::limit($escalation->user_message, 100) }}</span>
+                        </td>
                         <td @class([
                             'whitespace-nowrap px-4 py-4 font-semibold',
                             'text-rose-700' => $escalation->status === 'pending' && $waitingMinutes >= (int) config('pearlie.escalation.max_wait_minutes', 30),

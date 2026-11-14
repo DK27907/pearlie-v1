@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Hospital;
 use App\Models\KnowledgeBase;
 use App\Support\FuzzyMatcher;
 use Illuminate\Support\Str;
@@ -92,6 +93,52 @@ class KnowledgeBaseService
         }
 
         return $this->isEmergencyIntent($normalizedQuery);
+    }
+
+    public function acceptsInsurance(Hospital $hospital, string $provider): bool
+    {
+        $normalizedProvider = $this->normalizeInsuranceName($provider);
+        $configuredProviders = data_get($hospital->settings, 'accepted_insurances', []);
+
+        if (is_array($configuredProviders)) {
+            foreach ($configuredProviders as $configuredProvider) {
+                if (is_string($configuredProvider)
+                    && $this->normalizeInsuranceName($configuredProvider) === $normalizedProvider
+                ) {
+                    return true;
+                }
+            }
+        }
+
+        $providerPattern = '/(?<![\pL\pN])'.preg_quote($provider, '/').'(?![\pL\pN])/iu';
+
+        return $hospital->knowledgeBases()
+            ->where('category', 'payment')
+            ->orderBy('id')
+            ->get(['question', 'keywords', 'answer', 'subcategory'])
+            ->contains(function (KnowledgeBase $entry) use ($providerPattern): bool {
+                $keywords = is_array($entry->keywords)
+                    ? implode(' ', $entry->keywords)
+                    : (string) $entry->keywords;
+                $content = implode(' ', [
+                    $entry->subcategory,
+                    $entry->question,
+                    $keywords,
+                    $entry->answer,
+                ]);
+                $hasExplicitProvider = preg_match($providerPattern, $content) === 1;
+                $hasAcceptance = preg_match('/\b(?:accepts?|accepted|covers?|covered|in[- ]network)\b/iu', $entry->answer) === 1;
+                $hasRejection = preg_match('/\b(?:not|never|doesn[\'’]?t|do not|don[\'’]?t|excluded|not covered)\b/iu', $entry->answer) === 1;
+
+                return $hasExplicitProvider && $hasAcceptance && ! $hasRejection;
+            });
+    }
+
+    private function normalizeInsuranceName(string $provider): string
+    {
+        $normalized = preg_replace('/[^\pL\pN]+/u', ' ', mb_strtolower(trim($provider)));
+
+        return trim($normalized ?? '');
     }
 
     public function getServiceContext(): string

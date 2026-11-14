@@ -9,6 +9,7 @@ use App\Models\Hospital;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\AnnouncementService;
+use App\Services\WhatsAppService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -290,7 +291,8 @@ class AnnouncementWorkflowTest extends TestCase
         $recipient = AnnouncementRecipient::query()
             ->where('appointment_request_id', $reminderAppointment->id)
             ->firstOrFail();
-        $this->assertStringContainsString($reminderAppointment->booking_reference, $recipient->rendered_message);
+        $this->assertStringContainsString($reminderAppointment->name, $recipient->rendered_message);
+        $this->assertStringContainsString('Reply 1 to confirm, 2 to reschedule.', $recipient->rendered_message);
         $this->assertDatabaseCount('announcements', 2);
         $this->assertDatabaseMissing('announcements', [
             'hospital_id' => $disabledHospital->id,
@@ -325,6 +327,62 @@ class AnnouncementWorkflowTest extends TestCase
 
         $this->assertCount(1, $announcements);
         $this->assertSame('reminder', $announcements->first()->type);
+    }
+
+    public function test_appointment_23_hours_away_sends_a_dynamic_whatsapp_reminder(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-10-22 08:00:00'));
+        $hospital = Hospital::factory()->create(['reminder_enabled' => true]);
+        app()->instance('currentHospital', $hospital);
+        $doctor = User::factory()->for($hospital, 'hospital')->create([
+            'name' => 'Dr. Amina Njeri',
+            'is_doctor' => true,
+            'role' => 'doctor',
+        ]);
+        $admin = User::factory()->for($hospital, 'hospital')->create([
+            'is_admin' => true,
+            'role' => 'hospital_admin',
+        ]);
+        $appointment = AppointmentRequest::factory()->for($hospital)->create([
+            'doctor_id' => $doctor->id,
+            'name' => 'Jane Doe',
+            'phone' => '254712345678',
+            'preferred_date' => '2026-10-23',
+            'slot_start_time' => '07:00:00',
+            'status' => AppointmentRequest::STATUS_CONFIRMED,
+        ]);
+        $whatsApp = \Mockery::mock(WhatsAppService::class);
+        $whatsApp->shouldReceive('sendMessage')
+            ->twice()
+            ->with(
+                '254712345678',
+                'Hi Jane Doe, this is a reminder of your appointment with Dr. Amina Njeri on 23 Oct 2026 at 7:00 AM. Reply 1 to confirm, 2 to reschedule.',
+            )
+            ->andReturn(['success' => true, 'message' => 'accepted']);
+        $this->app->instance(WhatsAppService::class, $whatsApp);
+
+        $exitCode = Artisan::call('appointments:send-reminders');
+
+        $this->assertSame(0, $exitCode, Artisan::output());
+        $this->assertDatabaseHas('announcements', [
+            'hospital_id' => $hospital->id,
+            'reminder_appointment_id' => $appointment->id,
+            'reminder_stage' => '24h',
+            'channel' => 'whatsapp',
+            'status' => 'sent',
+        ]);
+
+        $this->travelTo(CarbonImmutable::parse('2026-10-23 05:00:00'));
+        $exitCode = Artisan::call('appointments:send-reminders');
+
+        $this->assertSame(0, $exitCode, Artisan::output());
+        $this->assertDatabaseHas('announcements', [
+            'hospital_id' => $hospital->id,
+            'reminder_appointment_id' => $appointment->id,
+            'reminder_stage' => '2h',
+            'channel' => 'whatsapp',
+            'status' => 'sent',
+        ]);
     }
 
     public function test_reminders_use_defaults_when_legacy_settings_and_reference_are_null(): void

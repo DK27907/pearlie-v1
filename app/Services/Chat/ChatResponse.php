@@ -16,6 +16,7 @@ class ChatResponse
         public readonly array $collectedFields = [],
         public readonly ?string $source = null,
         public readonly array $quickReplies = [],
+        public readonly ?string $interactiveType = null,
     ) {}
 
     /**
@@ -37,6 +38,9 @@ class ChatResponse
 
         if ($this->quickReplies !== []) {
             $response['quick_replies'] = $this->quickReplies;
+            if ($this->interactiveType !== null) {
+                $response['interactive_type'] = $this->interactiveType;
+            }
         }
 
         return $response;

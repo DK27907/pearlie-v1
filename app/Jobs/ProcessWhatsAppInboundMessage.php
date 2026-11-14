@@ -70,9 +70,19 @@ class ProcessWhatsAppInboundMessage implements ShouldBeUnique, ShouldQueue
 
             $response = $booking->handle($this->from, $this->message, 'whatsapp');
             try {
-                $delivery = $response->quickReplies !== []
-                    ? $whatsApp->sendInteractiveList($this->from, $response->message, $response->quickReplies)
-                    : $whatsApp->sendMessage($this->from, $response->message);
+                $delivery = match (true) {
+                    $response->quickReplies === [] => $whatsApp->sendMessage($this->from, $response->message),
+                    $response->interactiveType === 'buttons' => $whatsApp->sendInteractiveButtons(
+                        $this->from,
+                        $response->message,
+                        $response->quickReplies,
+                    ),
+                    default => $whatsApp->sendInteractiveList(
+                        $this->from,
+                        $response->message,
+                        $response->quickReplies,
+                    ),
+                };
 
                 if (! $delivery['success']) {
                     Log::warning('WhatsApp chat response was not accepted for delivery.', [

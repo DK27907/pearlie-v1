@@ -63,20 +63,20 @@ class BookingChatService
      */
     private const FIELD_PROMPTS = [
         'service_id' => 'What service do you need?',
-        'date' => 'What date would you prefer? Use DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say "tomorrow".',
+        'date' => 'Choose an available date from the list below.',
         'patient_name' => 'What is your full name?',
         'patient_phone' => 'What Kenyan mobile number should we use?',
         'doctor_id' => 'Which doctor would you prefer?',
-        'time' => 'What time would you prefer?',
+        'time' => 'Choose an available time from the list below.',
     ];
 
     private const SWAHILI_FIELD_PROMPTS = [
         'service_id' => 'Unahitaji huduma gani?',
-        'date' => "Ungependa miadi tarehe gani? Tumia DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema 'kesho'.",
+        'date' => 'Tafadhali chagua tarehe inayopatikana kwenye orodha iliyo hapa chini.',
         'patient_name' => 'Jina lako kamili ni nani?',
         'patient_phone' => 'Tutumie nambari gani ya simu ya Kenya?',
         'doctor_id' => 'Ungependa kumwona daktari gani?',
-        'time' => 'Ungependa miadi iwe saa ngapi?',
+        'time' => 'Tafadhali chagua muda unaopatikana kwenye orodha iliyo hapa chini.',
     ];
 
     private const LANGUAGE_ENGLISH = 'en';
@@ -303,20 +303,23 @@ class BookingChatService
                 language: $state['language'],
                 stateVersion: $previousState['state_version'],
             );
-            $greeting = $this->greetingResponse(
+            $greeting = $this->patientGreeting(
+                $sessionId,
                 $hospital,
                 $state['language'],
-                $patient->name,
-                returning: $patientWasReturning && filled($patient->name),
+                $patient,
+                $patientWasReturning,
+                $state,
             );
 
             return $this->respond(
                 $sessionId,
                 $channel,
                 $message,
-                $greeting,
+                $greeting['message'],
                 $state,
                 source: 'session_timeout',
+                quickReplies: $greeting['quickReplies'],
             );
         }
 
@@ -440,16 +443,83 @@ class BookingChatService
         }
 
         if ($this->knowledgeBase->isEmergencyQuery($message)) {
+            $emergencyPhone = $hospital->emergency_phone ?: '999';
+            $emergencyResponse = $state['language'] === self::LANGUAGE_SWAHILI
+                ? sprintf(
+                    'Hii inaonekana kuwa dharura. Tafadhali piga simu %s au nenda kwenye chumba cha dharura kilicho karibu mara moja. Ninaitaarifu timu yetu ya matibabu.',
+                    $emergencyPhone,
+                )
+                : sprintf(
+                    'This sounds like an emergency. Please call %s or go to the nearest emergency room immediately. I am also alerting our medical team.',
+                    $emergencyPhone,
+                );
+
             return $this->respond(
                 $sessionId,
                 $channel,
                 $message,
-                $this->knowledgeBase->search($message)
-                    ?? ($state['language'] === self::LANGUAGE_SWAHILI
-                        ? 'Kwa dharura, wasiliana na timu ya dharura ya hospitali mara moja.'
-                        : 'For an emergency, contact the hospital emergency team immediately.'),
+                $emergencyResponse,
                 $state,
                 source: 'emergency',
+                escalated: true,
+                beforePersist: fn () => app(EscalationService::class)->createEscalation(
+                    $sessionId,
+                    $message,
+                    $emergencyResponse,
+                    isUrgent: true,
+                ),
+            );
+        }
+
+        if ($this->isInsuranceQuestion($message)) {
+            $provider = $this->extractInsuranceProvider($message);
+            if ($provider === null) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    $state['language'] === self::LANGUAGE_SWAHILI
+                        ? 'Tafadhali niambie jina la bima unayoulizia.'
+                        : 'Which insurance provider are you asking about?',
+                    $state,
+                    source: 'insurance_clarification',
+                );
+            }
+
+            if ($this->knowledgeBase->acceptsInsurance($hospital, $provider)) {
+                return $this->respond(
+                    $sessionId,
+                    $channel,
+                    $message,
+                    sprintf(
+                        '%s is listed in %s insurance information as accepted. Please confirm your current coverage and eligibility with the billing team.',
+                        $provider,
+                        $hospital->name,
+                    ),
+                    $state,
+                    source: 'insurance_information',
+                );
+            }
+
+            $insuranceResponse = sprintf(
+                'I am not sure if %s accepts %s. I have alerted the billing team to confirm and get back to you.',
+                $hospital->name,
+                $provider,
+            );
+
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $insuranceResponse,
+                $state,
+                source: 'insurance_escalation',
+                escalated: true,
+                beforePersist: fn () => app(EscalationService::class)->createEscalation(
+                    $sessionId,
+                    sprintf('Billing verification request for %s: %s', $provider, $message),
+                    $insuranceResponse,
+                ),
             );
         }
 
@@ -482,19 +552,24 @@ class BookingChatService
                 language: $state['language'],
                 stateVersion: $state['state_version'],
             );
+            $greeting = $this->patientGreeting(
+                $sessionId,
+                $hospital,
+                $state['language'],
+                $patient,
+                $patientWasReturning,
+                $state,
+            );
 
             return $this->respond(
                 $sessionId,
                 $channel,
                 $message,
-                $this->greetingResponse(
-                    $hospital,
-                    $state['language'],
-                    $patient->name,
-                    returning: $patientWasReturning,
-                ),
+                $greeting['message'],
                 $state,
                 source: 'hospital_greeting',
+                quickReplies: $greeting['quickReplies'],
+                interactiveType: $greeting['quickReplies'] === [] ? null : 'buttons',
             );
         }
 
@@ -574,6 +649,8 @@ class BookingChatService
                     $faqResponse,
                     $state,
                     source: 'topic_change',
+                    quickReplies: $this->yesNoQuickReplies($state['language']),
+                    interactiveType: 'buttons',
                 );
             }
 
@@ -591,7 +668,11 @@ class BookingChatService
                 quickReplies: $intent === 'services'
                     && $this->isGeneralServiceCatalogQuestion($message, $hospital)
                     ? $this->serviceQuickReplies($hospital, $state['language'])
-                    : null,
+                    : $this->yesNoQuickReplies($state['language']),
+                interactiveType: $intent === 'services'
+                    && $this->isGeneralServiceCatalogQuestion($message, $hospital)
+                    ? null
+                    : 'buttons',
             );
         }
 
@@ -643,6 +724,8 @@ class BookingChatService
                     $this->serviceInquiryResponse($service, $hospital, $state['language']),
                     $state,
                     source: 'hospital_services',
+                    quickReplies: $this->yesNoQuickReplies($state['language']),
+                    interactiveType: 'buttons',
                 );
             }
 
@@ -1026,7 +1109,7 @@ class BookingChatService
             && $this->extractName($message) !== null;
 
         if ($intent === 'greeting' && ! $isNameForActiveBooking) {
-            if ($this->recentAssistantGreeting($latestConversation)) {
+            if ($this->recentAssistantGreeting($latestConversation) && ! $patientWasReturning) {
                 return $this->respond(
                     $sessionId,
                     $channel,
@@ -1050,18 +1133,24 @@ class BookingChatService
                 );
             }
 
+            $greeting = $this->patientGreeting(
+                $sessionId,
+                $hospital,
+                $state['language'],
+                $patient,
+                $patientWasReturning,
+                $state,
+            );
+
             return $this->respond(
                 $sessionId,
                 $channel,
                 $message,
-                $this->greetingResponse(
-                    $hospital,
-                    $state['language'],
-                    $patient->name,
-                    returning: $patientWasReturning,
-                ),
+                $greeting['message'],
                 $state,
                 source: 'hospital_greeting',
+                quickReplies: $greeting['quickReplies'],
+                interactiveType: $greeting['quickReplies'] === [] ? null : 'buttons',
             );
         }
 
@@ -1105,6 +1194,8 @@ class BookingChatService
                     $response,
                     $state,
                     source: 'hospital_services',
+                    quickReplies: $this->yesNoQuickReplies($state['language']),
+                    interactiveType: 'buttons',
                 );
             }
 
@@ -1120,6 +1211,8 @@ class BookingChatService
                             : 'Would you like help booking this service?'),
                         $state,
                         source: 'hospital_services',
+                        quickReplies: $this->yesNoQuickReplies($state['language']),
+                        interactiveType: 'buttons',
                     );
                 }
 
@@ -1948,6 +2041,8 @@ class BookingChatService
             $message,
             $state['summary'].$confirmationPrompt,
             $state,
+            quickReplies: $this->yesNoQuickReplies($state['language']),
+            interactiveType: 'buttons',
         );
     }
 
@@ -1980,6 +2075,8 @@ class BookingChatService
                     $message,
                     'Would you like to pay now via M-Pesa, or pay at the hospital on your appointment date?',
                     $state,
+                    quickReplies: $this->paymentQuickReplies($state['language']),
+                    interactiveType: 'buttons',
                 );
             }
         }
@@ -2526,12 +2623,10 @@ class BookingChatService
 
         if ($isSwahili) {
             $prompt = match ($error) {
-                'past' => 'Tarehe hiyo imepita. Tafadhali chagua tarehe ijayo kwa muundo wa DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema "kesho".',
-                'too_far' => 'Tarehe hiyo iko mbali sana. Tafadhali chagua tarehe ndani ya miezi 12 kwa muundo wa DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema "kesho".',
-                'invalid' => "Samahani, sikuweza kuelewa tarehe. Tafadhali ingiza tarehe kama DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema 'kesho'.",
-                'ambiguous' => "Samahani, sijapata tarehe uliyomaanisha. Tafadhali tumia DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema 'kesho'.",
-                'unrecognized' => "Samahani, sikuweza kuelewa. Ungependa miadi tarehe gani? Tumia DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema 'kesho'.",
-                default => "Ungependa miadi tarehe gani? Tafadhali ingiza DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD, au sema 'kesho'.",
+                'past' => 'Tarehe hiyo imepita. Tafadhali chagua tarehe ijayo kutoka kwenye orodha hapa chini.',
+                'too_far' => 'Tafadhali chagua tarehe inayopatikana kutoka kwenye orodha hapa chini.',
+                'invalid', 'ambiguous', 'unrecognized' => 'Samahani, sikuweza kuelewa. Tafadhali chagua tarehe kutoka kwenye orodha hapa chini.',
+                default => 'Tafadhali chagua tarehe inayopatikana kutoka kwenye orodha hapa chini.',
             };
 
             if ($error === null && $serviceName !== null) {
@@ -2548,15 +2643,15 @@ class BookingChatService
         }
 
         $prompt = match ($error) {
-            'past' => 'That date is in the past. Please choose a future date as DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say "tomorrow".',
-            'too_far' => 'That date is too far ahead. Please choose a date within the next 12 months as DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say "tomorrow".',
+            'past' => 'That date is in the past. Please choose a future date from the list below.',
+            'too_far' => 'That date is too far ahead. Please choose an available date from the list below.',
             'invalid' => sprintf(
-                "I couldn't understand '%s'. Please enter a date as DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say 'tomorrow'.",
+                "I couldn't understand '%s'. Please choose an available date from the list below.",
                 $message,
             ),
-            'ambiguous' => "Sorry, I didn't catch that date. Please use DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say 'tomorrow'.",
-            'unrecognized' => "I didn't quite catch the date. Could you please format it as DD/MM/YYYY, or say 'tomorrow'?",
-            default => 'What date would you prefer? Use DD/MM/YYYY (e.g. 15/10/2026), YYYY-MM-DD, or say "tomorrow".',
+            'ambiguous' => "Sorry, I didn't catch that date. Please choose an available date from the list below.",
+            'unrecognized' => "I didn't quite catch the date. Choose an available date from the list below.",
+            default => 'What date would you prefer? Choose an available date from the list below.',
         };
 
         if ($error === null && $serviceName !== null) {
@@ -3604,6 +3699,7 @@ class BookingChatService
         bool $escalated = false,
         ?Closure $beforePersist = null,
         ?array $quickReplies = null,
+        ?string $interactiveType = null,
     ): ChatResponse {
         $state['language'] = in_array($state['language'] ?? null, [
             self::LANGUAGE_ENGLISH,
@@ -3637,7 +3733,42 @@ class BookingChatService
             $state,
             $source,
             $quickReplies ?? ($source === null ? $this->quickRepliesForState($state, $hospital) : []),
+            $interactiveType,
         );
+    }
+
+    /**
+     * @return array<int, array{id: string, label: string, value: string}>
+     */
+    private function yesNoQuickReplies(string $language): array
+    {
+        return [
+            [
+                'id' => 'yes',
+                'label' => $language === self::LANGUAGE_SWAHILI ? 'Ndiyo' : 'Yes',
+                'value' => 'yes',
+            ],
+            [
+                'id' => 'no',
+                'label' => $language === self::LANGUAGE_SWAHILI ? 'Hapana' : 'No',
+                'value' => 'no',
+            ],
+        ];
+    }
+
+    /**
+     * @return array<int, array{id: string, label: string, value: string}>
+     */
+    private function paymentQuickReplies(string $language): array
+    {
+        return [
+            ['id' => 'payment-mpesa', 'label' => 'Pay via M-Pesa', 'value' => 'mpesa'],
+            [
+                'id' => 'payment-cash',
+                'label' => $language === self::LANGUAGE_SWAHILI ? 'Lipa hospitalini' : 'Pay at hospital',
+                'value' => 'cash',
+            ],
+        ];
     }
 
     /**
@@ -4628,6 +4759,41 @@ class BookingChatService
         return false;
     }
 
+    private function isInsuranceQuestion(string $message): bool
+    {
+        $mentionsInsurance = preg_match('/\b(?:insurance|insurer|medical cover|health cover)\b/iu', $message) === 1;
+        $asksAcceptance = preg_match('/\b(?:accept|take|cover)\b/iu', $message) === 1;
+
+        return ($mentionsInsurance && $asksAcceptance)
+            || preg_match('/\bdo you accept\b/iu', $message) === 1;
+    }
+
+    private function extractInsuranceProvider(string $message): ?string
+    {
+        if (preg_match(
+            '/\b(?:accept|take|cover)\s+(?:the\s+)?(.+?)[?.!,]*$/iu',
+            $message,
+            $matches,
+        ) !== 1) {
+            return null;
+        }
+
+        $provider = preg_replace(
+            '/\s+(?:insurance|insurer|medical cover|health cover|insurance plan)(?:\s+for\s+.*)?$/iu',
+            '',
+            trim($matches[1]),
+        );
+        $provider = preg_replace('/\s+(?:for|with|on)\s+.*$/iu', '', $provider ?? '');
+        $provider = trim($provider ?? '', " \t\n\r\0\x0B,.;:!?");
+        if ($provider === ''
+            || preg_match('/^(?:my|your|insurance|insurer|medical|health|cover)$/iu', $provider) === 1
+        ) {
+            return null;
+        }
+
+        return mb_substr($provider, 0, 80);
+    }
+
     private function isServiceInquiry(string $message): bool
     {
         return preg_match(
@@ -4660,6 +4826,56 @@ class BookingChatService
                 $hospital->chatbotName() ?? 'Assistant',
                 $hospital->name,
             );
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     * @return array{message: string, quickReplies: array<int, array{id: string, label: string, value: string}>}
+     */
+    private function patientGreeting(
+        string $sessionId,
+        Hospital $hospital,
+        string $language,
+        Patient $patient,
+        bool $returning,
+        array &$state,
+    ): array {
+        $recentAppointment = $returning
+            ? AppointmentRequest::withoutGlobalScope('hospital')
+                ->where('hospital_id', $hospital->id)
+                ->where('session_id', $sessionId)
+                ->whereIn('status', [AppointmentRequest::STATUS_CONFIRMED, AppointmentRequest::STATUS_COMPLETED])
+                ->whereBetween('preferred_date', [now()->subMonths(3)->toDateString(), now()->subDay()->toDateString()])
+                ->whereNotNull('service_id')
+                ->latest('preferred_date')
+                ->first()
+            : null;
+        $patientName = $patient->name ?: $recentAppointment?->name;
+        $message = $this->greetingResponse(
+            $hospital,
+            $language,
+            $patientName,
+            returning: $returning && filled($patientName),
+        );
+        $quickReplies = [];
+
+        if ($recentAppointment !== null && $recentAppointment->service_id !== null) {
+            $service = Service::query()
+                ->where('hospital_id', $hospital->id)
+                ->active()
+                ->whereKey($recentAppointment->service_id)
+                ->first();
+
+            if ($service !== null) {
+                $state['offered_service_id'] = $service->id;
+                $message .= $language === self::LANGUAGE_SWAHILI
+                    ? ' Je, ungependa kuweka tena miadi ya '.$service->name.'?'
+                    : ' Would you like to rebook '.$service->name.'?';
+                $quickReplies = $this->yesNoQuickReplies($language);
+            }
+        }
+
+        return ['message' => $message, 'quickReplies' => $quickReplies];
     }
 
     private function rememberPatient(

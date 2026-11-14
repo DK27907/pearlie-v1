@@ -94,6 +94,49 @@ class WhatsAppService
     }
 
     /**
+     * @param  array<int, array{id: string, label: string, value: string}>  $quickReplies
+     * @return array{success: bool, message: string}
+     */
+    public function sendInteractiveButtons(string $to, string $message, array $quickReplies): array
+    {
+        if ($quickReplies === [] || count($quickReplies) > 3) {
+            throw new InvalidArgumentException('WhatsApp interactive buttons require one to three options.');
+        }
+
+        $buttons = array_map(static fn (array $reply): array => [
+            'type' => 'reply',
+            'reply' => [
+                'id' => $reply['value'],
+                'title' => Str::limit($reply['label'], 20, ''),
+            ],
+        ], $quickReplies);
+
+        try {
+            $response = $this->apiRequest()->post($this->messagesUrl(), [
+                'messaging_product' => 'whatsapp',
+                'to' => $this->formatPhone($to),
+                'type' => 'interactive',
+                'interactive' => [
+                    'type' => 'button',
+                    'body' => ['text' => Str::limit($message, 1024, '')],
+                    'action' => ['buttons' => $buttons],
+                ],
+            ])->throw();
+
+            return [
+                'success' => true,
+                'message' => (string) ($response->json('messages.0.id') ?? 'WhatsApp buttons accepted.'),
+            ];
+        } catch (Throwable $exception) {
+            Log::error('Unable to send WhatsApp interactive buttons.', [
+                'exception_class' => $exception::class,
+            ]);
+
+            throw $exception;
+        }
+    }
+
+    /**
      * @param  array<int, string>  $variables
      * @return array{success: bool, message: string}
      */

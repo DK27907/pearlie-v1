@@ -25,7 +25,8 @@ class EscalationNotificationService
             $question = mb_substr($escalation->user_message, 0, 100);
             $confidenceText = $confidence === null ? 'unknown' : number_format($confidence, 2);
             $message = sprintf(
-                '🚨 ESCALATION #%d: %s (%s) needs help. Question: %s. Confidence: %s. Open: %s',
+                '%sESCALATION #%d: %s (%s) needs help. Question: %s. Confidence: %s. Open: %s',
+                $escalation->is_urgent ? '🚨 URGENT ' : '🚨 ',
                 $escalation->id,
                 $escalation->patient_name,
                 $escalation->patient_phone ?: 'phone unavailable',

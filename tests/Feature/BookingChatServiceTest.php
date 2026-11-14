@@ -6,6 +6,7 @@ use App\Jobs\SendPaymentNotification;
 use App\Models\AppointmentRequest;
 use App\Models\Conversation;
 use App\Models\DoctorAvailability;
+use App\Models\Escalation;
 use App\Models\Hospital;
 use App\Models\MpesaPayment;
 use App\Models\Service;
@@ -871,7 +872,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame(CarbonImmutable::tomorrow()->toDateString(), $response->collectedFields['date']);
     }
 
-    public function test_gibberish_while_waiting_for_a_date_gets_clear_date_format_guidance(): void
+    public function test_gibberish_while_waiting_for_a_date_gets_available_date_guidance(): void
     {
         $this->createContext();
         $chat = app(BookingChatService::class);
@@ -881,7 +882,7 @@ class BookingChatServiceTest extends TestCase
 
         $this->assertSame('COLLECTING', $response->state);
         $this->assertSame(
-            "I didn't quite catch the date. Could you please format it as DD/MM/YYYY, or say 'tomorrow'?",
+            "I didn't quite catch the date. Choose an available date from the list below.",
             $response->message,
         );
     }
@@ -969,7 +970,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame($doctors[0]->id, $state['doctor_id']);
     }
 
-    public function test_booking_state_machine_survives_repeated_intent_during_active_flow(): void
+    public function test_booking_state_machine_survives_repeated_intent_with_available_dates(): void
     {
         [, $services] = $this->createContext();
         $sessionId = 'repeated-booking-intent';
@@ -988,7 +989,7 @@ class BookingChatServiceTest extends TestCase
         $restartedNamePrompt = $chat->handle($sessionId, 'tomorrow', 'web');
 
         $this->assertStringContainsString('Which service do you need?', $servicePrompt->message);
-        $this->assertStringContainsString('DD/MM/YYYY', $datePrompt->message);
+        $this->assertStringContainsString('choose an available date from the list', mb_strtolower($datePrompt->message));
         $this->assertStringContainsString('available times', mb_strtolower($namePrompt->message));
         $this->assertStringContainsString('mobile number', mb_strtolower($phonePrompt->message));
         $this->assertStringContainsString('available times', mb_strtolower($timePrompt->message));
@@ -996,7 +997,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertStringContainsString('start over', mb_strtolower($restartPrompt->message));
         $this->assertNull($restartPrompt->collectedFields['service_id']);
         $this->assertSame($services[0]->id, $restartedDatePrompt->collectedFields['service_id']);
-        $this->assertStringContainsString('DD/MM/YYYY', $restartedDatePrompt->message);
+        $this->assertStringContainsString('choose an available date from the list', mb_strtolower($restartedDatePrompt->message));
         $this->assertSame('COLLECTING', $restartedNamePrompt->state);
         $this->assertSame(now()->addDay()->toDateString(), $restartedNamePrompt->collectedFields['date']);
         $this->assertStringContainsString('available times', mb_strtolower($restartedNamePrompt->message));
@@ -1123,7 +1124,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertDatabaseCount('escalations', 0);
     }
 
-    public function test_unrecognized_date_stays_in_booking_and_explains_supported_formats(): void
+    public function test_unrecognized_date_stays_in_booking_and_shows_available_dates(): void
     {
         $this->createContext();
         Http::preventStrayRequests();
@@ -1136,8 +1137,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame('COLLECTING', $response->state);
         $this->assertNull($response->collectedFields['date']);
         $this->assertStringContainsString("I couldn't understand '32/13/2026'", $response->message);
-        $this->assertStringContainsString('DD/MM/YYYY', $response->message);
-        $this->assertStringContainsString('tomorrow', $response->message);
+        $this->assertStringContainsString('choose an available date from the list', mb_strtolower($response->message));
         $this->assertDatabaseCount('escalations', 0);
     }
 
@@ -1204,8 +1204,7 @@ class BookingChatServiceTest extends TestCase
         [, $services, , $chat, $sessionId, $datePrompt, $namePrompt, $phonePrompt, $timePrompt] = $this->advanceToSwahiliBookingTimeStep();
         $confirmation = $chat->handle($sessionId, '9am', 'web');
 
-        $this->assertStringContainsString('DD/MM/YYYY (mfano 15/10/2026), YYYY-MM-DD', $datePrompt->message);
-        $this->assertStringContainsString('kesho', $datePrompt->message);
+        $this->assertStringContainsString('chagua tarehe inayopatikana', mb_strtolower($datePrompt->message));
         $this->assertStringContainsString('saa zinazopatikana', mb_strtolower($namePrompt->message));
         $this->assertSame('Juma', $phonePrompt->collectedFields['patient_name']);
         $this->assertStringContainsString('nambari gani ya simu', mb_strtolower($phonePrompt->message));
@@ -1407,6 +1406,71 @@ class BookingChatServiceTest extends TestCase
         }
 
         $this->assertDatabaseCount('appointment_requests', 0);
+        $this->assertDatabaseCount('escalations', 4);
+        $this->assertDatabaseHas('escalations', ['is_urgent' => true]);
+    }
+
+    public function test_returning_patient_is_greeted_and_offered_a_real_recent_service_rebooking(): void
+    {
+        [$hospital, $services] = $this->createContext();
+        $chat = app(BookingChatService::class);
+        $sessionId = 'returning-patient-chat';
+
+        $chat->handle($sessionId, 'My name is Jane Doe', 'web');
+        AppointmentRequest::factory()->for($hospital)->create([
+            'session_id' => $sessionId,
+            'service_id' => $services[0]->id,
+            'name' => 'Jane Doe',
+            'preferred_date' => today()->subMonth(),
+            'status' => AppointmentRequest::STATUS_COMPLETED,
+        ]);
+        $response = $chat->handle($sessionId, 'Hello', 'web');
+
+        $this->assertStringContainsString('Welcome back, Jane Doe!', $response->message);
+        $this->assertStringContainsString('rebook Dental Cleaning', $response->message);
+        $this->assertSame(['yes', 'no'], array_column($response->quickReplies, 'value'));
+        $this->assertDatabaseHas('patients', ['name' => 'Jane Doe']);
+    }
+
+    public function test_unknown_insurance_is_escalated_without_claiming_coverage(): void
+    {
+        $this->createContext();
+
+        $response = app(BookingChatService::class)->handle(
+            'insurance-question',
+            'Do you accept AcmeCare insurance?',
+            'web',
+        );
+
+        $this->assertStringContainsString('not sure', $response->message);
+        $this->assertSame('insurance_escalation', $response->source);
+        $this->assertDatabaseHas('escalations', [
+            'session_id' => 'insurance-question',
+            'status' => Escalation::STATUS_PENDING,
+        ]);
+    }
+
+    public function test_configured_insurance_is_confirmed_from_tenant_knowledge(): void
+    {
+        [$hospital] = $this->createContext();
+        $hospital->knowledgeBases()->create([
+            'category' => 'payment',
+            'question' => 'Does the hospital accept AcmeCare?',
+            'keywords' => ['AcmeCare'],
+            'answer' => 'We accept AcmeCare insurance.',
+            'source' => 'Hospital billing policy',
+            'last_updated' => today()->toDateString(),
+        ]);
+
+        $response = app(BookingChatService::class)->handle(
+            'known-insurance-question',
+            'Do you accept AcmeCare insurance?',
+            'web',
+        );
+
+        $this->assertSame('insurance_information', $response->source);
+        $this->assertStringContainsString('listed', $response->message);
+        $this->assertDatabaseCount('escalations', 0);
     }
 
     public function test_greetings_out_of_scope_and_nonverbal_messages_stay_local(): void
@@ -1499,7 +1563,7 @@ class BookingChatServiceTest extends TestCase
         $state = $chat->getState('unrecognized-booking-input');
 
         $this->assertSame(
-            "I didn't quite catch the date. Could you please format it as DD/MM/YYYY, or say 'tomorrow'?",
+            "I didn't quite catch the date. Choose an available date from the list below.",
             $firstClarification->message,
         );
         $this->assertStringContainsString('cancel this booking', $recovery->message);
@@ -2093,7 +2157,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame('2026-10-15', $this->state('extract-date-explicit')['date']);
     }
 
-    public function test_booking_date_prompt_includes_the_expected_format_and_example(): void
+    public function test_booking_date_prompt_directs_the_patient_to_available_date_options(): void
     {
         $this->createContext();
 
@@ -2103,9 +2167,9 @@ class BookingChatServiceTest extends TestCase
             'web',
         );
 
-        $this->assertStringContainsString('DD/MM/YYYY', $response->message);
-        $this->assertStringContainsString('15/10/2026', $response->message);
-        $this->assertStringContainsString('YYYY-MM-DD', $response->message);
+        $this->assertStringContainsString('choose an available date from the list below', mb_strtolower($response->message));
+        $this->assertNotEmpty($response->quickReplies);
+        $this->assertSame('2026-10-03', $response->quickReplies[0]['value']);
     }
 
     public function test_booking_accepts_iso_kenyan_and_hyphenated_dates_and_natural_language(): void
@@ -2132,7 +2196,7 @@ class BookingChatServiceTest extends TestCase
         }
     }
 
-    public function test_ambiguous_date_is_rejected_with_format_guidance(): void
+    public function test_ambiguous_date_is_rejected_with_available_date_guidance(): void
     {
         $this->createContext();
         $chat = app(BookingChatService::class);
@@ -2143,7 +2207,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame('COLLECTING', $response->state);
         $this->assertNull($response->collectedFields['date']);
         $this->assertStringContainsString('Sorry, I didn\'t catch that', $response->message);
-        $this->assertStringContainsString('DD/MM/YYYY', $response->message);
+        $this->assertStringContainsString('choose an available date from the list', mb_strtolower($response->message));
     }
 
     public function test_past_date_is_rejected_with_future_date_guidance(): void
@@ -2156,7 +2220,7 @@ class BookingChatServiceTest extends TestCase
 
         $this->assertNull($response->collectedFields['date']);
         $this->assertStringContainsString('date is in the past', $response->message);
-        $this->assertStringContainsString('DD/MM/YYYY', $response->message);
+        $this->assertStringContainsString('choose a future date from the list', mb_strtolower($response->message));
     }
 
     public function test_date_more_than_twelve_months_ahead_is_rejected(): void
@@ -2169,7 +2233,7 @@ class BookingChatServiceTest extends TestCase
 
         $this->assertNull($response->collectedFields['date']);
         $this->assertStringContainsString('too far ahead', $response->message);
-        $this->assertStringContainsString('12 months', $response->message);
+        $this->assertStringContainsString('choose an available date from the list', mb_strtolower($response->message));
     }
 
     public function test_swahili_booking_date_prompt_and_invalid_date_guidance_are_in_swahili(): void
@@ -2179,8 +2243,7 @@ class BookingChatServiceTest extends TestCase
         $prompt = $chat->handle('date-swahili', 'Nataka Dental Cleaning', 'web');
         $response = $chat->handle('date-swahili', '03/04', 'web');
 
-        $this->assertStringContainsString('DD/MM/YYYY', $prompt->message);
-        $this->assertStringContainsString('miadi tarehe gani', $prompt->message);
+        $this->assertStringContainsString('chagua tarehe inayopatikana', mb_strtolower($prompt->message));
         $this->assertStringContainsString('Samahani', $response->message);
         $this->assertStringContainsString('tafadhali', mb_strtolower($response->message));
 
@@ -2188,13 +2251,11 @@ class BookingChatServiceTest extends TestCase
         $pastDateResponse = $chat->handle('date-swahili-past', '01/01/2020', 'web');
 
         $this->assertStringContainsString('imepita', mb_strtolower($pastDateResponse->message));
-        $this->assertStringContainsString('DD/MM/YYYY', $pastDateResponse->message);
 
         $chat->handle('date-swahili-future', 'Nataka Dental Cleaning', 'web');
         $futureDateResponse = $chat->handle('date-swahili-future', '01/01/2030', 'web');
 
-        $this->assertStringContainsString('mbali sana', mb_strtolower($futureDateResponse->message));
-        $this->assertStringContainsString('miezi 12', mb_strtolower($futureDateResponse->message));
+        $this->assertStringContainsString('chagua tarehe', mb_strtolower($futureDateResponse->message));
     }
 
     public function test_extracts_9am_as_the_booking_time(): void

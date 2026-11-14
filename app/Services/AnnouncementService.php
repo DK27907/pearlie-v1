@@ -76,55 +76,68 @@ class AnnouncementService
     {
         $now = now()->toImmutable();
         $hoursBefore = min(168, max(1, (int) ($hospital->reminder_hours_before ?? 24)));
-        $dueAppointments = AppointmentRequest::withoutGlobalScope('hospital')
-            ->where('hospital_id', $hospital->id)
-            ->where('status', AppointmentRequest::STATUS_CONFIRMED)
-            ->whereNotNull('slot_start_time')
-            ->whereBetween('preferred_date', [
-                $now->startOfDay()->toDateTimeString(),
-                $now->addHours($hoursBefore)->endOfDay()->toDateTimeString(),
-            ])
-            ->orderBy('id')
-            ->get()
-            ->filter(function (AppointmentRequest $appointment) use ($now, $hoursBefore): bool {
-                $appointmentAt = CarbonImmutable::parse(
-                    $appointment->preferred_date->toDateString().' '.$appointment->slot_start_time,
-                );
+        $leadTimes = collect([$hoursBefore, 2])->unique()->sortDesc()->values()->all();
+        $dueAnnouncements = new BaseCollection;
 
-                return $appointmentAt->isAfter($now)
-                    && $appointmentAt->subHours($hoursBefore)->lessThanOrEqualTo($now);
-            })
-            ->values();
+        foreach ($leadTimes as $index => $leadTime) {
+            $nextLeadTime = $leadTimes[$index + 1] ?? 0;
+            $dueAppointments = AppointmentRequest::withoutGlobalScope('hospital')
+                ->where('hospital_id', $hospital->id)
+                ->where('status', AppointmentRequest::STATUS_CONFIRMED)
+                ->whereNotNull('slot_start_time')
+                ->whereBetween('preferred_date', [
+                    $now->startOfDay()->toDateTimeString(),
+                    $now->addHours($leadTime)->endOfDay()->toDateTimeString(),
+                ])
+                ->orderBy('id')
+                ->get()
+                ->filter(function (AppointmentRequest $appointment) use ($now, $leadTime, $nextLeadTime): bool {
+                    $appointmentAt = CarbonImmutable::parse(
+                        $appointment->preferred_date->toDateString().' '.$appointment->slot_start_time,
+                        config('app.timezone'),
+                    );
 
-        if ($dueAppointments->isEmpty()) {
-            return new BaseCollection;
+                    return $appointmentAt->isAfter($now)
+                        && $appointmentAt->subHours($leadTime)->lessThanOrEqualTo($now)
+                        && $appointmentAt->subHours($nextLeadTime)->greaterThan($now);
+                })
+                ->values();
+
+            if ($dueAppointments->isEmpty()) {
+                continue;
+            }
+
+            $systemUser = $hospital->users()
+                ->where(fn ($query) => $query->where('is_admin', true)->orWhere('role', 'hospital_admin'))
+                ->orderBy('id')
+                ->first();
+
+            if (! $systemUser) {
+                throw new RuntimeException('A hospital admin is required to schedule appointment reminders.');
+            }
+
+            $stage = $leadTime.'h';
+            foreach ($dueAppointments as $appointment) {
+                $dueAnnouncements->push(Announcement::query()->firstOrCreate(
+                    [
+                        'hospital_id' => $hospital->id,
+                        'type' => 'reminder',
+                        'reminder_appointment_id' => $appointment->id,
+                        'reminder_stage' => $stage,
+                    ],
+                    [
+                        'sent_by_user_id' => $systemUser->id,
+                        'message' => $hospital->reminder_message_template ?: Hospital::DEFAULT_REMINDER_MESSAGE_TEMPLATE,
+                        'audience_filter' => ['appointment_date' => $appointment->preferred_date->toDateString()],
+                        'channel' => 'whatsapp',
+                        'scheduled_for' => $now,
+                        'status' => 'scheduled',
+                    ],
+                ));
+            }
         }
 
-        $systemUser = $hospital->users()
-            ->where(fn ($query) => $query->where('is_admin', true)->orWhere('role', 'hospital_admin'))
-            ->orderBy('id')
-            ->first();
-
-        if (! $systemUser) {
-            throw new RuntimeException('A hospital admin is required to schedule appointment reminders.');
-        }
-
-        return $dueAppointments
-            ->map(fn (AppointmentRequest $appointment): Announcement => Announcement::query()->firstOrCreate(
-                [
-                    'hospital_id' => $hospital->id,
-                    'type' => 'reminder',
-                    'reminder_appointment_id' => $appointment->id,
-                ],
-                [
-                    'sent_by_user_id' => $systemUser->id,
-                    'message' => $hospital->reminder_message_template ?: Hospital::DEFAULT_REMINDER_MESSAGE_TEMPLATE,
-                    'audience_filter' => ['appointment_date' => $appointment->preferred_date->toDateString()],
-                    'channel' => 'sms',
-                    'scheduled_for' => $now,
-                    'status' => 'scheduled',
-                ],
-            ))
+        return $dueAnnouncements
             ->filter(fn (Announcement $announcement): bool => in_array($announcement->status, ['scheduled', 'sending'], true))
             ->values();
     }
@@ -243,11 +256,14 @@ class AnnouncementService
         $time = filled($appointment->slot_start_time)
             ? CarbonImmutable::parse($appointment->slot_start_time)->format('g:i A')
             : 'Not provided';
+        $appointmentTime = $announcement->type === 'reminder'
+            ? trim($date.' at '.$time)
+            : trim($date.' '.$time);
 
         return $announcement->renderFor(
             $appointment->name,
             $appointment->doctor?->name ?? 'the hospital team',
-            trim($date.' '.$time),
+            $appointmentTime,
             [
                 'booking_reference' => $appointment->booking_reference ?: 'Not available',
                 'service_name' => $appointment->service?->name ?? $appointment->reason,

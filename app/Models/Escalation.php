@@ -25,6 +25,7 @@ class Escalation extends Model
         'session_id',
         'user_message',
         'user_phone',
+        'is_urgent',
         'ai_response',
         'status',
         'assigned_to',
@@ -35,6 +36,7 @@ class Escalation extends Model
     ];
 
     protected $casts = [
+        'is_urgent' => 'boolean',
         'claimed_at' => 'datetime',
         'resolved_at' => 'datetime',
     ];

@@ -12,6 +12,7 @@ class Announcement extends Model
         'hospital_id',
         'sent_by_user_id',
         'reminder_appointment_id',
+        'reminder_stage',
         'type',
         'message',
         'audience_filter',
@@ -66,6 +67,11 @@ class Announcement extends Model
             $placeholders['{'.$key.'}'] = $value;
         }
 
-        return strtr((string) $this->message, $placeholders);
+        $message = strtr((string) $this->message, $placeholders);
+        if ($this->type === 'reminder' && ! str_contains($message, 'Reply 1 to confirm, 2 to reschedule.')) {
+            $message = rtrim($message).' Reply 1 to confirm, 2 to reschedule.';
+        }
+
+        return $message;
     }
 }

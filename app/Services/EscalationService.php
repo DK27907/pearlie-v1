@@ -40,12 +40,14 @@ class EscalationService
         string $userMessage,
         ?string $aiResponse = null,
         ?string $userPhone = null,
+        bool $isUrgent = false,
     ): Escalation {
         try {
             $patientPhone = $userPhone ?: $this->patientPhoneForSession($sessionId);
             $identity = $patientPhone ? $this->normalizePhoneForIdentity($patientPhone) : $sessionId;
             $phoneVariants = $patientPhone ? $this->phoneVariants($identity) : [];
             $lock = Cache::lock('escalation-rate-limit:'.hash('sha256', $identity), 10);
+            $notifyHealthWorkers = false;
 
             $escalation = CacheLockRunner::run($lock, 5, function () use (
                 $sessionId,
@@ -54,6 +56,8 @@ class EscalationService
                 $identity,
                 $phoneVariants,
                 $patientPhone,
+                $isUrgent,
+                &$notifyHealthWorkers,
             ): Escalation {
                 return DB::transaction(function () use (
                     $sessionId,
@@ -62,6 +66,8 @@ class EscalationService
                     $identity,
                     $phoneVariants,
                     $patientPhone,
+                    $isUrgent,
+                    &$notifyHealthWorkers,
                 ): Escalation {
                     $recent = Escalation::query()
                         ->where('created_at', '>=', now()->subMinutes(5))
@@ -82,8 +88,16 @@ class EscalationService
                         ->first();
 
                     if ($recent) {
+                        $updates = [];
                         if ($patientPhone && blank($recent->user_phone)) {
-                            $recent->forceFill(['user_phone' => $patientPhone])->save();
+                            $updates['user_phone'] = $patientPhone;
+                        }
+                        if ($isUrgent && ! $recent->is_urgent) {
+                            $updates['is_urgent'] = true;
+                            $notifyHealthWorkers = true;
+                        }
+                        if ($updates !== []) {
+                            $recent->forceFill($updates)->save();
                         }
 
                         return $recent;
@@ -95,11 +109,12 @@ class EscalationService
                         'user_phone' => $patientPhone,
                         'ai_response' => $aiResponse,
                         'status' => Escalation::STATUS_PENDING,
+                        'is_urgent' => $isUrgent,
                     ]);
                 });
             });
 
-            if ($escalation->wasRecentlyCreated) {
+            if ($escalation->wasRecentlyCreated || $notifyHealthWorkers) {
                 DB::afterCommit(fn () => $this->notifications->notifyHealthWorkers($escalation));
             }
 
@@ -212,6 +227,7 @@ class EscalationService
             });
 
         return $query
+            ->orderByDesc('is_urgent')
             ->orderByRaw("CASE status WHEN 'pending' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END")
             ->orderBy('created_at')
             ->orderBy('id')
