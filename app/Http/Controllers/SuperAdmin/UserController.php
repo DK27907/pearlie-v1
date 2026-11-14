@@ -70,6 +70,7 @@ class UserController extends Controller
         ]);
     }
 
+
     public function edit(int $user): View
     {
         $record = $this->findManagedUser($user);
