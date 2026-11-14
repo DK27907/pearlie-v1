@@ -18,6 +18,8 @@ class HospitalIntegrationCredential extends Model
 
     public const PROVIDER_EMAIL = 'email';
 
+    public const PROVIDER_GROQ = 'groq';
+
     protected $fillable = [
         'provider',
         'credentials',

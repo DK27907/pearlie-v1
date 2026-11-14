@@ -28,6 +28,7 @@ class HospitalSettings
         HospitalIntegrationCredential::PROVIDER_WHATSAPP,
         HospitalIntegrationCredential::PROVIDER_SMS,
         HospitalIntegrationCredential::PROVIDER_EMAIL,
+        HospitalIntegrationCredential::PROVIDER_GROQ,
     ];
 
     private ?Hospital $hospital = null;

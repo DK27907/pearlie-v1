@@ -10,6 +10,7 @@
             'whatsapp' => 'WhatsApp',
             'sms' => 'SMS',
             'email' => 'Email',
+            'groq' => 'AI (Groq)',
             'branding' => 'Branding',
             'receipts' => 'Receipts',
         ];
@@ -22,7 +23,7 @@
             'saturday' => 'Saturday',
             'sunday' => 'Sunday',
         ];
-        $providerNames = ['mpesa' => 'M-Pesa', 'whatsapp' => 'WhatsApp', 'sms' => 'SMS', 'email' => 'Email'];
+        $providerNames = ['mpesa' => 'M-Pesa', 'whatsapp' => 'WhatsApp', 'sms' => 'SMS', 'email' => 'Email', 'groq' => 'Groq AI'];
         $inputClass = 'mt-1 block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-sky-700 focus:ring-sky-700';
     @endphp
 
@@ -383,6 +384,26 @@
                         <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save email settings</button>
                     </form>
                     @include('admin.settings.partials.clear-credentials', ['provider' => 'email'])
+                </section>
+            @elseif ($activeTab === 'groq')
+                <section role="tabpanel" class="space-y-6 p-5 sm:p-7">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-900">Groq AI</h2>
+                            <p class="mt-1 text-sm text-slate-600">Add a hospital-specific Groq API key. If none is saved, the application environment key is used.</p>
+                        </div>
+                        @include('admin.settings.partials.configured', ['provider' => 'groq', 'credentials' => $credentials['groq']])
+                    </div>
+                    <form method="POST" action="{{ route('admin.integration-settings.groq.update') }}" class="max-w-2xl space-y-5">
+                        @csrf
+                        @method('PUT')
+                        <div>
+                            <x-password-input name="api_key" label="Groq API key" autocomplete="new-password" :class="$inputClass" />
+                            <span class="mt-1 block text-xs font-normal text-slate-500">Leave blank to keep the current key. Clear credentials to use the application environment key.</span>
+                        </div>
+                        <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save Groq settings</button>
+                    </form>
+                    @include('admin.settings.partials.clear-credentials', ['provider' => 'groq'])
                 </section>
             @elseif ($activeTab === 'receipts')
                 @include('admin.settings.receipts', ['hospital' => $hospital])

@@ -6,10 +6,12 @@ use App\Models\AppointmentRequest;
 use App\Models\DoctorAvailability;
 use App\Models\Hospital;
 use App\Models\User;
+use App\Services\HospitalSettings;
 use App\Services\PearlieService;
 use App\Services\PearlieServiceV2;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -17,6 +19,58 @@ use Tests\TestCase;
 class PearlieServiceTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_groq_request_uses_the_hospitals_saved_api_key(): void
+    {
+        $hospital = $this->createBookingHospital('groq-tenant-key');
+        app(HospitalSettings::class)->for($hospital)->setCredential('groq', [
+            'api_key' => 'hospital-groq-key',
+        ]);
+        config([
+            'services.groq.api_key' => 'global-groq-key',
+            'services.groq.base_url' => 'https://api.groq.test/v1',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://api.groq.test/v1/chat/completions' => Http::response([
+                'choices' => [['message' => ['content' => 'I can help with that.']]],
+            ]),
+        ]);
+
+        app(PearlieServiceV2::class)->processMessage('Can you repair bicycles?', 'groq-tenant-key-session');
+
+        Http::assertSent(fn (ClientRequest $request): bool => $request->hasHeader(
+            'Authorization',
+            'Bearer hospital-groq-key',
+        ));
+    }
+
+    public function test_groq_request_falls_back_to_the_environment_key_without_a_hospital_key(): void
+    {
+        $otherHospital = $this->createBookingHospital('groq-other-tenant');
+        app(HospitalSettings::class)->for($otherHospital)->setCredential('groq', [
+            'api_key' => 'other-hospital-groq-key',
+        ]);
+        $currentHospital = $this->createBookingHospital('groq-global-fallback');
+        app()->instance('currentHospital', $currentHospital);
+        config([
+            'services.groq.api_key' => 'global-groq-key',
+            'services.groq.base_url' => 'https://api.groq.test/v1',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://api.groq.test/v1/chat/completions' => Http::response([
+                'choices' => [['message' => ['content' => 'I can help with that.']]],
+            ]),
+        ]);
+
+        app(PearlieServiceV2::class)->processMessage('Can you repair bicycles?', 'groq-global-fallback-session');
+
+        Http::assertSent(fn (ClientRequest $request): bool => $request->hasHeader(
+            'Authorization',
+            'Bearer global-groq-key',
+        ));
+    }
 
     public function test_booking_request_is_recorded_with_a_clear_confirmation(): void
     {

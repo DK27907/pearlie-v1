@@ -10,10 +10,11 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\View\View;
+use RuntimeException;
 
 class UserController extends Controller
 {
@@ -138,12 +139,22 @@ class UserController extends Controller
             }
 
             if (filled($attributes['password'] ?? null)) {
-                $lockedUser->password = $attributes['password'];
+                $lockedUser->password = Hash::make($attributes['password']);
                 $lockedUser->must_change_password = true;
-                $lockedUser->remember_token = Str::random(60);
+                $lockedUser->remember_token = null;
             }
 
             $lockedUser->save();
+
+            if (filled($attributes['password'] ?? null)) {
+                $updatedUser = User::withoutGlobalScopes()
+                    ->whereKey($lockedUser->getKey())
+                    ->firstOrFail();
+
+                if (! Hash::check($attributes['password'], $updatedUser->password)) {
+                    throw new RuntimeException('The updated user password could not be verified.');
+                }
+            }
 
             if ($role !== null) {
                 $lockedUser->syncRolesFromFlags();

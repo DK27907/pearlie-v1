@@ -4,7 +4,9 @@ namespace Tests\Feature\SuperAdmin;
 
 use App\Mail\HospitalAdminWelcomeMail;
 use App\Models\Hospital;
+use App\Models\Service;
 use App\Models\User;
+use App\Services\HospitalManagementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -24,6 +26,7 @@ class HospitalCreateWithAdminTest extends TestCase
 
         $hospital = Hospital::withoutGlobalScopes()->where('slug', 'nairobi-medical-centre')->firstOrFail();
         $admin = User::withoutGlobalScopes()->where('email', 'admin@nairobi-medical.test')->firstOrFail();
+        $services = Service::withoutGlobalScopes()->where('hospital_id', $hospital->id)->get();
 
         $response->assertRedirect(route('superadmin.hospitals.show', $hospital))
             ->assertSessionHas(
@@ -52,6 +55,13 @@ class HospitalCreateWithAdminTest extends TestCase
         $this->assertTrue($admin->must_change_password);
         $this->assertTrue($admin->hasRole('hospital_admin'));
         $this->assertTrue(Hash::check('SecureStart!2026', $admin->password));
+        $this->assertCount(2, $services);
+        $this->assertTrue($services->contains(
+            fn (Service $service): bool => $service->name === 'General Consultation' && $service->is_active,
+        ));
+        $this->assertTrue($services->contains(
+            fn (Service $service): bool => $service->name === 'Dental Checkup & Cleaning' && $service->is_active,
+        ));
     }
 
     public function test_created_admin_must_change_password_before_accessing_dashboard(): void
@@ -77,6 +87,31 @@ class HospitalCreateWithAdminTest extends TestCase
         $admin = User::withoutGlobalScopes()->where('email', 'admin@nairobi-medical.test')->firstOrFail();
         $this->assertFalse($admin->must_change_password);
         $this->get(route('admin.dashboard'))->assertOk();
+    }
+
+    public function test_onboarding_keeps_new_admin_and_services_in_the_new_tenant_context(): void
+    {
+        Mail::fake();
+        $previousHospital = Hospital::factory()->create();
+        app()->instance('currentHospital', $previousHospital);
+
+        $hospital = app(HospitalManagementService::class)->createWithAdmin($this->hospitalPayload([
+            'slug' => 'tenant-context-onboarding',
+            'admin_email' => 'context-admin@nairobi-medical.test',
+        ]));
+        $admin = User::withoutGlobalScopes()
+            ->where('email', 'context-admin@nairobi-medical.test')
+            ->firstOrFail();
+        $services = Service::withoutGlobalScopes()->where('hospital_id', $hospital->id)->get();
+
+        $this->assertSame($previousHospital->id, hospital()->id);
+        $this->assertSame($hospital->id, $admin->hospital_id);
+        $this->assertSame('hospital_admin', $admin->role);
+        $this->assertTrue($admin->hasRole('hospital_admin'));
+        $this->assertCount(2, $services);
+        $this->assertTrue($services->every(
+            fn (Service $service): bool => $service->hospital_id === $hospital->id,
+        ));
     }
 
     public function test_welcome_email_escapes_hospital_and_admin_names(): void

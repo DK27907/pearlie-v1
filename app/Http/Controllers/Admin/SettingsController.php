@@ -30,6 +30,7 @@ class SettingsController extends Controller
         HospitalIntegrationCredential::PROVIDER_WHATSAPP,
         HospitalIntegrationCredential::PROVIDER_SMS,
         HospitalIntegrationCredential::PROVIDER_EMAIL,
+        HospitalIntegrationCredential::PROVIDER_GROQ,
     ];
 
     private const SECRET_FIELDS = [
@@ -37,6 +38,7 @@ class SettingsController extends Controller
         'whatsapp' => ['access_token', 'verify_token', 'app_secret'],
         'sms' => ['api_key', 'account_sid', 'auth_token'],
         'email' => ['resend_api_key', 'smtp_password'],
+        'groq' => ['api_key'],
     ];
 
     public function edit(Request $request, HospitalSettings $settings, SmsService $sms): View
@@ -292,6 +294,24 @@ class SettingsController extends Controller
         }
 
         return $this->redirectToTab($provider, 'Email settings saved.');
+    }
+
+    public function updateGroq(Request $request, HospitalSettings $settings): RedirectResponse
+    {
+        $validated = $request->validate([
+            'api_key' => ['nullable', 'string', 'max:255'],
+        ]);
+        $settings->for($this->currentHospital());
+        $apiKey = trim((string) ($validated['api_key'] ?? ''));
+
+        if ($apiKey !== '') {
+            $settings->setCredential(
+                HospitalIntegrationCredential::PROVIDER_GROQ,
+                ['api_key' => $apiKey],
+            );
+        }
+
+        return $this->redirectToTab('groq', 'Groq AI settings saved.');
     }
 
     public function updateBranding(UpdateBrandingSettingsRequest $request): RedirectResponse

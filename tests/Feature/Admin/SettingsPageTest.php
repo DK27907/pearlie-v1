@@ -34,6 +34,7 @@ class SettingsPageTest extends TestCase
             ->assertSee('WhatsApp')
             ->assertSee('SMS')
             ->assertSee('Email')
+            ->assertSee('AI (Groq)')
             ->assertSee('name="booking_payment_mode"', false)
             ->assertSee('name="reminder_hours_before"', false)
             ->assertSee('booking_reference')
@@ -445,6 +446,47 @@ class SettingsPageTest extends TestCase
             ->assertRedirect(route('admin.integration-settings.edit', ['tab' => 'email']));
 
         $this->assertSame($credentials, app(HospitalSettings::class)->for($hospital)->credential('email'));
+    }
+
+    public function test_admin_can_save_an_encrypted_groq_key_for_their_hospital(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $otherHospital = Hospital::factory()->create();
+        $admin = $this->createAdmin($hospital);
+
+        $this->actingAs($admin)
+            ->put(route('admin.integration-settings.groq.update'), [
+                'api_key' => 'hospital-groq-secret',
+                'hospital_id' => $otherHospital->id,
+            ])
+            ->assertRedirect(route('admin.integration-settings.edit', ['tab' => 'groq']));
+
+        $this->assertSame(
+            ['api_key' => 'hospital-groq-secret'],
+            app(HospitalSettings::class)->for($hospital)->credential('groq'),
+        );
+        $this->assertNull(app(HospitalSettings::class)->for($otherHospital)->credential('groq'));
+        $rawCredentials = DB::table('hospital_integration_credentials')
+            ->where('hospital_id', $hospital->id)
+            ->where('provider', 'groq')
+            ->value('credentials');
+        $this->assertIsString($rawCredentials);
+        $this->assertStringNotContainsString('hospital-groq-secret', $rawCredentials);
+    }
+
+    public function test_admin_can_clear_groq_key_to_use_the_environment_fallback(): void
+    {
+        $hospital = Hospital::factory()->create();
+        $admin = $this->createAdmin($hospital);
+        app(HospitalSettings::class)->for($hospital)->setCredential('groq', [
+            'api_key' => 'hospital-groq-secret',
+        ]);
+
+        $this->actingAs($admin)
+            ->delete(route('admin.integration-settings.credentials.clear', 'groq'))
+            ->assertRedirect(route('admin.integration-settings.edit', ['tab' => 'groq']));
+
+        $this->assertNull(app(HospitalSettings::class)->for($hospital)->credential('groq'));
     }
 
     /**

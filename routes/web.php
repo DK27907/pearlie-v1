@@ -269,6 +269,7 @@ Route::middleware(['auth', 'hospital.admin', 'password.changed'])
             Route::put('/whatsapp', [SettingsController::class, 'updateWhatsApp'])->name('whatsapp.update');
             Route::put('/sms', [SettingsController::class, 'updateSms'])->name('sms.update');
             Route::put('/email', [SettingsController::class, 'updateEmail'])->name('email.update');
+            Route::put('/groq', [SettingsController::class, 'updateGroq'])->name('groq.update');
             Route::put('/branding', [SettingsController::class, 'updateBranding'])->name('branding.update');
             Route::delete('/credentials/{provider}', [SettingsController::class, 'clearCredential'])->name('credentials.clear');
         });

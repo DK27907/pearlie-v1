@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AppointmentRequest;
 use App\Models\Conversation;
+use App\Models\HospitalIntegrationCredential;
 use App\Models\Patient;
 use App\Models\Service;
 use App\Models\User;
@@ -49,7 +50,11 @@ class PearlieServiceV2
         $this->knowledgeBase = $knowledgeBase;
         $this->escalationService = $escalationService;
         $this->availabilityService = $availabilityService;
-        $this->apiKey = config('services.groq.api_key');
+        $credentials = HospitalSettings::currentOrNull()
+            ?->credential(HospitalIntegrationCredential::PROVIDER_GROQ);
+        $this->apiKey = filled($credentials['api_key'] ?? null)
+            ? $credentials['api_key']
+            : config('services.groq.api_key');
         $this->model = config('services.groq.model', 'openai/gpt-oss-20b');
         $this->baseUrl = config('services.groq.base_url', 'https://api.groq.com/openai/v1');
     }

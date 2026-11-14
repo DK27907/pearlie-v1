@@ -12,6 +12,23 @@ use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 class HospitalManagementService
 {
+    private const DEFAULT_SERVICES = [
+        [
+            'name' => 'General Consultation',
+            'description' => 'Consultation with a general practitioner.',
+            'price' => 1500,
+            'category' => 'General',
+            'requires_specialty' => 'General Practitioner',
+        ],
+        [
+            'name' => 'Dental Checkup & Cleaning',
+            'description' => 'Dental examination and professional cleaning.',
+            'price' => 2500,
+            'category' => 'Dental',
+            'requires_specialty' => 'Dentist',
+        ],
+    ];
+
     public function __construct(private readonly HospitalInvitationService $invitations) {}
 
     /**
@@ -84,24 +101,44 @@ class HospitalManagementService
                 'is_active' => true,
             ]);
 
-            $admin = User::query()->create([
-                'name' => $adminName,
-                'email' => $adminEmail,
-                'password' => Hash::make($adminPassword),
-                'hospital_id' => $hospital->id,
-                'role' => 'hospital_admin',
-                'is_admin' => true,
-                'is_doctor' => false,
-                'is_super_admin' => false,
-                'is_active' => true,
-                'email_verified_at' => now(),
-                'must_change_password' => true,
-            ]);
-            $admin->syncRolesFromFlags();
+            $hadCurrentHospital = app()->bound('currentHospital');
+            $previousHospital = $hadCurrentHospital ? hospital() : null;
+            app()->instance('currentHospital', $hospital);
 
-            Mail::to($admin->email)->queue(
-                (new HospitalAdminWelcomeMail($hospital, $admin, $adminPassword))->afterCommit(),
-            );
+            try {
+                $admin = User::query()->create([
+                    'name' => $adminName,
+                    'email' => $adminEmail,
+                    'password' => Hash::make($adminPassword),
+                    'hospital_id' => $hospital->id,
+                    'role' => 'hospital_admin',
+                    'is_admin' => true,
+                    'is_doctor' => false,
+                    'is_super_admin' => false,
+                    'is_active' => true,
+                    'email_verified_at' => now(),
+                    'must_change_password' => true,
+                ]);
+                $admin->syncRolesFromFlags();
+
+                foreach (self::DEFAULT_SERVICES as $service) {
+                    $hospital->services()->create([
+                        ...$service,
+                        'duration_minutes' => $hospital->slot_duration_minutes,
+                        'is_active' => true,
+                    ]);
+                }
+
+                Mail::to($admin->email)->queue(
+                    (new HospitalAdminWelcomeMail($hospital, $admin, $adminPassword))->afterCommit(),
+                );
+            } finally {
+                if ($hadCurrentHospital) {
+                    app()->instance('currentHospital', $previousHospital);
+                } else {
+                    app()->forgetInstance('currentHospital');
+                }
+            }
 
             return $hospital;
         });

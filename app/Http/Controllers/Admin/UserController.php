@@ -11,8 +11,10 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use RuntimeException;
 
 class UserController extends Controller
 {
@@ -72,9 +74,11 @@ class UserController extends Controller
         $attributes = $request->validated();
         $hospitalId = (int) $request->user()->hospital_id;
 
-        DB::transaction(function () use ($attributes, $hospitalId, $record): void {
+        $newPassword = $attributes['password'] ?? null;
+
+        DB::transaction(function () use ($attributes, $hospitalId, $newPassword, $record): void {
             Hospital::query()->whereKey($hospitalId)->lockForUpdate()->firstOrFail();
-            $lockedUser = User::query()
+            $lockedUser = User::withoutGlobalScopes()
                 ->where('hospital_id', $hospitalId)
                 ->whereKey($record->id)
                 ->lockForUpdate()
@@ -102,11 +106,24 @@ class UserController extends Controller
                 'must_change_password' => $attributes['must_change_password'] ?? $lockedUser->must_change_password,
             ]);
 
-            if (filled($attributes['password'] ?? null)) {
-                $lockedUser->password = $attributes['password'];
+            if (filled($newPassword)) {
+                $lockedUser->password = Hash::make($newPassword);
+                $lockedUser->remember_token = null;
             }
 
             $lockedUser->save();
+
+            if (filled($newPassword)) {
+                $updatedUser = User::withoutGlobalScopes()
+                    ->where('hospital_id', $hospitalId)
+                    ->whereKey($lockedUser->getKey())
+                    ->firstOrFail();
+
+                if (! Hash::check($newPassword, $updatedUser->password)) {
+                    throw new RuntimeException('The updated user password could not be verified.');
+                }
+            }
+
             $lockedUser->syncRolesFromFlags();
         });
 
@@ -139,7 +156,7 @@ class UserController extends Controller
 
     private function scopedUser(Request $request, int $id): User
     {
-        return User::query()
+        return User::withoutGlobalScopes()
             ->where('hospital_id', $request->user()->hospital_id)
             ->whereKey($id)
             ->firstOrFail();
@@ -154,7 +171,7 @@ class UserController extends Controller
 
     private function activeHospitalAdminCount(int $hospitalId): int
     {
-        return User::query()
+        return User::withoutGlobalScopes()
             ->where('hospital_id', $hospitalId)
             ->where('is_active', true)
             ->where('is_super_admin', false)

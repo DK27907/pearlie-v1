@@ -79,12 +79,14 @@ class UserManagementTest extends TestCase
         ]);
     }
 
-    public function test_admin_can_change_user_password(): void
+    public function test_admin_can_change_doctor_password_and_clear_remember_token(): void
     {
         $admin = $this->createHospitalAdmin();
         $user = User::factory()->create([
             'hospital_id' => $this->hospital->id,
-            'role' => 'patient',
+            'role' => 'doctor',
+            'is_doctor' => true,
+            'remember_token' => 'old-remember-token',
         ]);
 
         $this->actingAs($admin)
@@ -98,6 +100,40 @@ class UserManagementTest extends TestCase
         $user->refresh();
         $this->assertTrue(Hash::check('UpdatedPassword2026!', $user->password));
         $this->assertTrue($user->must_change_password);
+        $this->assertNull($user->remember_token);
+    }
+
+    public function test_super_admin_can_change_doctor_password_across_tenant_scope(): void
+    {
+        $otherHospital = Hospital::factory()->create();
+        app()->instance('currentHospital', $otherHospital);
+        $doctor = User::factory()->create([
+            'hospital_id' => $otherHospital->id,
+            'role' => 'doctor',
+            'is_doctor' => true,
+            'remember_token' => 'old-remember-token',
+        ]);
+        app()->instance('currentHospital', $this->hospital);
+        $superAdmin = User::factory()->create([
+            'role' => 'super_admin',
+            'is_super_admin' => true,
+        ]);
+        $superAdmin->syncRolesFromFlags();
+
+        $this->actingAs($superAdmin)
+            ->put(route('superadmin.users.update', $doctor), $this->validUpdate([
+                'name' => $doctor->name,
+                'email' => $doctor->email,
+                'role' => 'doctor',
+                'password' => 'SuperAdminUpdated2026!',
+                'password_confirmation' => 'SuperAdminUpdated2026!',
+            ]))
+            ->assertRedirect(route('superadmin.users.index'));
+
+        $updatedDoctor = User::withoutGlobalScopes()->findOrFail($doctor->id);
+        $this->assertTrue(Hash::check('SuperAdminUpdated2026!', $updatedDoctor->password));
+        $this->assertNull($updatedDoctor->remember_token);
+        $this->assertSame($otherHospital->id, $updatedDoctor->hospital_id);
     }
 
     public function test_admin_can_change_user_role_and_role_flags_are_synchronized(): void
