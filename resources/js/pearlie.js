@@ -242,14 +242,7 @@ async function sendMessage(suggestedMessage = null, displayedMessage = null) {
             appendMessage(data.message || data.error || 'The assistant could not process your request. Please try again.', 'ai');
         } else {
             const assistantResponse = data.response || 'I could not process that. Please try again.';
-            const repeatsInitialGreeting = messagesEl?.children.length === 2
-                && messagesEl.children[0] === welcomeEl
-                && messagesEl.children[1]?.classList.contains('user')
-                && assistantResponse === welcomeEl?.textContent;
-
-            if (!repeatsInitialGreeting) {
-                appendMessage(assistantResponse, 'ai');
-            }
+            appendMessage(assistantResponse, 'ai');
             renderQuickReplies(data.quick_replies);
             if (Number.isSafeInteger(data.last_message_id)) {
                 lastMessageId = Math.max(lastMessageId, data.last_message_id);
