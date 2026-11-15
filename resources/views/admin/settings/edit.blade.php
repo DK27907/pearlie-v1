@@ -192,6 +192,11 @@
                             <output id="reminder-message-preview" class="mt-2 block whitespace-pre-wrap text-sm text-slate-800" aria-live="polite"></output>
                         </div>
                     </fieldset>
+                        <label class="block text-sm font-semibold text-slate-700">
+                            Google review URL
+                            <input class="{{ $inputClass }}" type="url" name="google_review_url" maxlength="2048" value="{{ old('google_review_url', $googleReviewUrl) }}">
+                            <span class="mt-1 block text-xs font-normal text-slate-500">Shared with patients who submit a rating of 4 or 5.</span>
+                        </label>
                         <button type="submit" class="rounded-lg bg-sky-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-900">Save general settings</button>
                     </form>
                     @if ($canSendReminderTest)

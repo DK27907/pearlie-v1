@@ -11,6 +11,7 @@ use App\Console\Commands\PrunePasswordResetTokens;
 use App\Console\Commands\PrunePaymentEvents;
 use App\Console\Commands\ReconcileMpesaPayments;
 use App\Console\Commands\RefreshMpesaCaBundle;
+use App\Console\Commands\SendAppointmentFollowUps;
 use App\Console\Commands\SendAppointmentReminders;
 use App\Console\Commands\SendScheduledAnnouncements;
 use Illuminate\Console\Application as ArtisanApplication;
@@ -32,6 +33,7 @@ ArtisanApplication::starting(static function ($artisan): void {
         PruneConversations::class,
         PrunePaymentEvents::class,
         SendAppointmentReminders::class,
+        SendAppointmentFollowUps::class,
         SendScheduledAnnouncements::class,
     ]);
 });
@@ -104,6 +106,11 @@ Schedule::command('appointments:send-reminders')
     ->everyMinute()
     ->withoutOverlapping(5)
     ->onOneServer();
+Schedule::command('appointments:send-follow-ups')
+    ->hourly()
+    ->withoutOverlapping(55)
+    ->onOneServer()
+    ->runInBackground();
 Schedule::command('app:send-scheduled-announcements')
     ->everyMinute()
     ->withoutOverlapping(5)

@@ -98,6 +98,7 @@ class SettingsController extends Controller
             'reminderHoursBefore' => $hospital->reminder_hours_before ?? 24,
             'canSendReminderTest' => $canSendReminderTest,
             'reminderMessageTemplate' => $hospital->reminder_message_template ?: Hospital::DEFAULT_REMINDER_MESSAGE_TEMPLATE,
+            'googleReviewUrl' => data_get($hospital->settings, 'google_review_url'),
         ]);
     }
 
@@ -130,6 +131,12 @@ class SettingsController extends Controller
         }
         if ($hospitalFields !== []) {
             $hospital->fill($hospitalFields)->save();
+        }
+        if (array_key_exists('google_review_url', $data)) {
+            $hospital->refresh();
+            $hospitalSettings = $hospital->settings ?? [];
+            $hospitalSettings['google_review_url'] = $data['google_review_url'];
+            $hospital->forceFill(['settings' => $hospitalSettings])->save();
         }
         $businessHours = $data['business_hours'] ?? [];
         foreach ($businessHours as &$hours) {

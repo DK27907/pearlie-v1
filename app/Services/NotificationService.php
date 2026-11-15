@@ -284,6 +284,20 @@ class NotificationService
         return false;
     }
 
+    public function recordUnavailableDelivery(
+        string $channel,
+        string $provider,
+        ?int $appointmentRequestId = null,
+    ): void {
+        $this->recordDelivery(
+            $channel,
+            $provider,
+            'not_configured',
+            failureCode: 'credentials_missing',
+            appointmentRequestId: $appointmentRequestId,
+        );
+    }
+
     public function smsIsConfigured(): bool
     {
         $this->ensureTenantContext();

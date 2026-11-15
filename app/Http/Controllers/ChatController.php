@@ -52,17 +52,22 @@ class ChatController extends Controller
         ]);
 
         $sessionId = $this->chatSessionId($request, $hospital);
+        $patientIdentity = $this->chatPatientId($request, $hospital);
         $result = $this->bookingChat->handle(
             $sessionId,
             $validated['message'] ?? '',
             'web',
-            $this->chatPatientId($request, $hospital),
+            $patientIdentity,
         );
 
         return response()->json([
             ...$result->toArray(),
             'last_message_id' => $this->latestConversationId($hospital, $sessionId),
-        ]);
+        ])->cookie(
+            $this->chatPatientCookieName($hospital),
+            $patientIdentity,
+            43200,
+        );
     }
 
     public function messages(Request $request): JsonResponse
@@ -167,8 +172,8 @@ class ChatController extends Controller
 
     private function chatPatientId(Request $request, Hospital $hospital): string
     {
-        $key = 'tenant_chat_patient_id_'.$hospital->id;
-        $patientId = $request->session()->get($key);
+        $key = $this->chatPatientCookieName($hospital);
+        $patientId = $request->session()->get($key) ?? $request->cookie($key);
 
         if (! is_string($patientId) || $patientId === '') {
             $patientId = (string) Str::uuid();
@@ -176,6 +181,11 @@ class ChatController extends Controller
         }
 
         return $patientId;
+    }
+
+    private function chatPatientCookieName(Hospital $hospital): string
+    {
+        return 'tenant_chat_patient_id_'.$hospital->id;
     }
 
     private function latestConversationId(Hospital $hospital, string $sessionId): int

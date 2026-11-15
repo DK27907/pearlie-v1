@@ -33,6 +33,7 @@ class UpdateGeneralSettingsRequest extends FormRequest
             'reminder_enabled' => ['sometimes', 'boolean'],
             'reminder_hours_before' => ['sometimes', 'integer', 'between:1,168'],
             'reminder_message_template' => ['sometimes', 'string', 'max:1000'],
+            'google_review_url' => ['nullable', 'url', 'max:2048'],
             'business_hours' => ['nullable', 'array'],
             'business_hours.*.open' => ['required_with:business_hours', 'regex:/^\d{2}:\d{2}$/'],
             'business_hours.*.close' => ['required_with:business_hours', 'regex:/^\d{2}:\d{2}$/'],

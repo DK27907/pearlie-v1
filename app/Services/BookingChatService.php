@@ -93,6 +93,7 @@ class BookingChatService
         private readonly AppointmentPolicyService $appointmentPolicy,
         private readonly AppointmentLifecycleService $appointmentLifecycle,
         private readonly ChatLanguageDetector $languageDetector,
+        private readonly AppointmentFollowUpService $appointmentFollowUps,
     ) {}
 
     /**
@@ -297,6 +298,23 @@ class BookingChatService
             'preferred_language' => $state['language'],
             'last_interaction_at' => now(),
         ])->save();
+
+        $feedbackResponse = $this->appointmentFollowUps->captureReply(
+            $hospital,
+            $channel,
+            $profileIdentity,
+            $message,
+        );
+        if ($feedbackResponse !== null) {
+            return $this->respond(
+                $sessionId,
+                $channel,
+                $message,
+                $feedbackResponse,
+                $state,
+                source: 'appointment_feedback',
+            );
+        }
 
         if ($sessionExpired) {
             $state = $this->emptyState(
@@ -817,7 +835,7 @@ class BookingChatService
 
         if ($state['state'] === self::STATE_PAYMENT_CHOICE) {
             if ($hospital->bookingPaymentMode() !== Hospital::BOOKING_PAYMENT_MODE_MPESA) {
-                return $this->confirmBooking($sessionId, $channel, $message, $hospital, $state);
+                return $this->confirmBooking($sessionId, $channel, $message, $hospital, $state, profileIdentity: $profileIdentity);
             }
 
             $lowerMessage = mb_strtolower($message);
@@ -837,7 +855,15 @@ class BookingChatService
                 );
             }
 
-            return $this->confirmBooking($sessionId, $channel, $message, $hospital, $state, $paymentMethod);
+            return $this->confirmBooking(
+                $sessionId,
+                $channel,
+                $message,
+                $hospital,
+                $state,
+                $paymentMethod,
+                $profileIdentity,
+            );
         }
 
         if ($intent === 'reset') {
@@ -1531,7 +1557,7 @@ class BookingChatService
 
         if ($state['state'] === self::STATE_CONFIRMING) {
             if ($intent === 'yes') {
-                return $this->confirmBooking($sessionId, $channel, $message, $hospital, $state);
+                return $this->confirmBooking($sessionId, $channel, $message, $hospital, $state, profileIdentity: $profileIdentity);
             }
 
             if ($intent === 'no') {
@@ -2079,6 +2105,7 @@ class BookingChatService
         Hospital $hospital,
         array $state,
         ?string $paymentMethod = null,
+        ?string $profileIdentity = null,
     ): ChatResponse {
         $paymentMode = $hospital->bookingPaymentMode();
         if (! $hospital->requiresPayment()) {
@@ -2136,6 +2163,16 @@ class BookingChatService
 
         if (! $appointment) {
             return $this->offerBookingAlternatives($sessionId, $channel, $message, $hospital, $state);
+        }
+
+        if ($profileIdentity !== null) {
+            $appointment->forceFill([
+                'feedback_identity_hash' => hash('sha256', implode(':', [
+                    $hospital->id,
+                    $channel,
+                    $profileIdentity,
+                ])),
+            ])->save();
         }
 
         $amount = (float) ($appointment->payment_amount ?? $service->price);

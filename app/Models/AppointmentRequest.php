@@ -75,6 +75,10 @@ class AppointmentRequest extends Model
         'booking_source',
     ];
 
+    protected $hidden = [
+        'feedback_identity_hash',
+    ];
+
     protected $casts = [
         'preferred_date' => 'date',
         'booking_fee' => 'integer',
@@ -87,6 +91,8 @@ class AppointmentRequest extends Model
         'cancelled_at' => 'datetime',
         'forfeited_amount' => 'decimal:2',
         'payment_collected_amount' => 'decimal:2',
+        'feedback_requested_at' => 'datetime',
+        'feedback_score' => 'integer',
     ];
 
     public function mpesaPayment(): HasOne
