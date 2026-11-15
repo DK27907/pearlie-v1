@@ -13,14 +13,19 @@ class DashboardController extends Controller
     {
         $startOfMonth = Carbon::now()->startOfMonth();
         $endOfMonth = Carbon::now()->endOfMonth();
+        // Bypass only the request scope; each relationship retains its hospital_id constraint.
         $hospitals = Hospital::query()
-            ->withCount('doctors')
+            ->withCount([
+                'doctors' => fn ($query) => $query->withoutGlobalScope('hospital'),
+            ])
             ->withCount([
                 'appointments as appointments_this_month_count' => fn ($query) => $query
+                    ->withoutGlobalScope('hospital')
                     ->whereBetween('preferred_date', [$startOfMonth->toDateString(), $endOfMonth->toDateString()]),
             ])
             ->withSum([
                 'appointments as revenue_this_month' => fn ($query) => $query
+                    ->withoutGlobalScope('hospital')
                     ->where('payment_status', 'paid')
                     ->whereBetween('paid_at', [$startOfMonth, $endOfMonth]),
             ], 'payment_amount')

@@ -599,7 +599,11 @@ class BookingChatService
             $requestedService = $intent === 'services'
                 ? $this->serviceForInquiry($message, $hospital)
                 : null;
-            $serviceId = $requestedService?->id ?? $activeServiceId;
+            $matchingServices = $intent === 'services' && $requestedService === null
+                ? $this->servicesForInquiry($message, $hospital)
+                : new Collection;
+            $serviceId = $requestedService?->id
+                ?? ($matchingServices->isNotEmpty() ? null : $activeServiceId);
             $serviceName = $serviceId !== null
                 ? $hospital->services()->whereKey($serviceId)->value('name')
                 : null;
@@ -610,6 +614,12 @@ class BookingChatService
                         $hospital,
                         $state['language'],
                         $this->knowledgeBase->search($message),
+                    );
+                } elseif ($matchingServices->isNotEmpty()) {
+                    $faqResponse = $this->serviceOptionsInquiryResponse(
+                        $matchingServices,
+                        $hospital,
+                        $state['language'],
                     );
                 } elseif ($this->isGeneralServiceCatalogQuestion($message, $hospital)) {
                     $faqResponse = $this->serviceCatalogResponse($hospital, $state['language']);
@@ -641,7 +651,9 @@ class BookingChatService
                 stateVersion: $state['state_version'],
             );
             $state['offered_service_id'] = $serviceId;
-            if ($intent === 'services' && $requestedService !== null) {
+            if ($intent === 'services'
+                && ($requestedService !== null || $matchingServices->isNotEmpty())
+            ) {
                 return $this->respond(
                     $sessionId,
                     $channel,
@@ -1209,6 +1221,20 @@ class BookingChatService
                         $knowledgeAnswer.' '.($state['language'] === self::LANGUAGE_SWAHILI
                             ? 'Je, ungependa kuweka miadi ya huduma hii?'
                             : 'Would you like help booking this service?'),
+                        $state,
+                        source: 'hospital_services',
+                        quickReplies: $this->yesNoQuickReplies($state['language']),
+                        interactiveType: 'buttons',
+                    );
+                }
+
+                $matchingServices = $this->servicesForInquiry($message, $hospital);
+                if ($matchingServices->isNotEmpty()) {
+                    return $this->respond(
+                        $sessionId,
+                        $channel,
+                        $message,
+                        $this->serviceOptionsInquiryResponse($matchingServices, $hospital, $state['language']),
                         $state,
                         source: 'hospital_services',
                         quickReplies: $this->yesNoQuickReplies($state['language']),
@@ -4704,6 +4730,64 @@ class BookingChatService
         return $this->extractService($message, $hospital);
     }
 
+    /**
+     * @return Collection<int, Service>
+     */
+    private function servicesForInquiry(string $message, Hospital $hospital): Collection
+    {
+        if ($this->isGeneralServiceCatalogQuestion($message, $hospital)) {
+            return new Collection;
+        }
+
+        $normalizedMessage = $this->normalize($message);
+        $matchedAliases = collect(array_keys($this->serviceAliases()))
+            ->map(fn (string $alias): string => $this->normalize($alias))
+            ->filter(function (string $alias) use ($message, $normalizedMessage): bool {
+                if ($alias === ''
+                    || preg_match('/(?<![\pL\pN])'.preg_quote($alias, '/').'(?![\pL\pN])/u', $normalizedMessage) !== 1
+                ) {
+                    return false;
+                }
+
+                return $alias !== 'scan'
+                    || count($this->meaningfulTokens($this->requestedServicePhrase($message) ?? $message)) <= 1;
+            })
+            ->unique()
+            ->values();
+
+        $matchedAliases = $matchedAliases->reject(function (string $alias) use ($matchedAliases): bool {
+            return $matchedAliases->contains(
+                fn (string $otherAlias): bool => $alias !== $otherAlias
+                    && mb_strlen($otherAlias) > mb_strlen($alias)
+                    && str_contains(' '.$otherAlias.' ', ' '.$alias.' '),
+            );
+        })->values();
+
+        if ($matchedAliases->isEmpty()) {
+            return new Collection;
+        }
+
+        return $hospital->services()
+            ->active()
+            ->orderBy('id')
+            ->get()
+            ->filter(function (Service $service) use ($matchedAliases): bool {
+                $normalizedName = $this->normalize($service->name);
+
+                foreach ($matchedAliases as $alias) {
+                    if (preg_match(
+                        '/(?<![\pL\pN])'.preg_quote($alias, '/').'(?![\pL\pN])/u',
+                        $normalizedName,
+                    ) === 1) {
+                        return true;
+                    }
+                }
+
+                return false;
+            })
+            ->values();
+    }
+
     private function hasSpecificServiceReference(string $message, Hospital $hospital): bool
     {
         $genericTerms = [
@@ -5098,6 +5182,29 @@ class BookingChatService
             $detail,
             $hospital->name,
         );
+    }
+
+    /**
+     * @param  Collection<int, Service>  $services
+     */
+    private function serviceOptionsInquiryResponse(
+        Collection $services,
+        Hospital $hospital,
+        string $language,
+    ): string {
+        $serviceNames = $services->pluck('name')->implode(', ');
+
+        return $language === self::LANGUAGE_SWAHILI
+            ? sprintf(
+                'Ndiyo, tunatoa %s katika %s. Ungependa kusaidiwa kuweka miadi ya mojawapo ya huduma hizi?',
+                $serviceNames,
+                $hospital->name,
+            )
+            : sprintf(
+                'Yes, we offer %s at %s. Would you like help booking one of these services?',
+                $serviceNames,
+                $hospital->name,
+            );
     }
 
     private function serviceCatalogResponse(Hospital $hospital, string $language): string

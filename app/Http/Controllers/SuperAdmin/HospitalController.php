@@ -17,7 +17,12 @@ class HospitalController extends Controller
 {
     public function index(Request $request): View
     {
+        // Bypass only the request scope; each relationship retains its hospital_id constraint.
         $hospitals = Hospital::query()
+            ->withCount([
+                'users' => fn ($query) => $query->withoutGlobalScope('hospital'),
+                'appointments' => fn ($query) => $query->withoutGlobalScope('hospital'),
+            ])
             ->when($request->filled('search'), function ($query) use ($request): void {
                 $search = $request->string('search')->trim()->toString();
                 $query->where(fn ($query) => $query
@@ -86,7 +91,13 @@ class HospitalController extends Controller
 
     public function show(Hospital $hospital): View
     {
-        $hospital->loadCount(['users', 'doctors', 'appointments', 'escalations']);
+        // Bypass only the request scope; each relationship retains its hospital_id constraint.
+        $hospital->loadCount([
+            'users' => fn ($query) => $query->withoutGlobalScope('hospital'),
+            'doctors' => fn ($query) => $query->withoutGlobalScope('hospital'),
+            'appointments' => fn ($query) => $query->withoutGlobalScope('hospital'),
+            'escalations' => fn ($query) => $query->withoutGlobalScope('hospital'),
+        ]);
 
         return view('superadmin.hospitals.show', compact('hospital'));
     }

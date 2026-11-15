@@ -491,6 +491,38 @@ class BookingChatServiceTest extends TestCase
         $this->assertDatabaseCount('appointment_requests', 0);
     }
 
+    public function test_service_question_lists_matching_services_when_an_alias_is_ambiguous(): void
+    {
+        $this->createContext(['Dental Checkup', 'Dental Cleaning', 'General Consultation']);
+
+        $response = app(BookingChatService::class)->handle(
+            'ambiguous-dental-service-inquiry',
+            'Do you offer dental?',
+            'web',
+        );
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertSame('hospital_services', $response->source);
+        $this->assertStringContainsString('Dental Checkup, Dental Cleaning', $response->message);
+        $this->assertStringContainsString('Would you like help booking one of these services?', $response->message);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
+    public function test_ambiguous_service_question_during_booking_lists_matching_services(): void
+    {
+        $this->createContext(['Dental Checkup', 'Dental Cleaning', 'General Consultation']);
+        $chat = app(BookingChatService::class);
+        $chat->handle('ambiguous-dental-topic-change', 'Book General Consultation', 'web');
+
+        $response = $chat->handle('ambiguous-dental-topic-change', 'Do you offer dental?', 'web');
+
+        $this->assertSame('IDLE', $response->state);
+        $this->assertSame('topic_change', $response->source);
+        $this->assertStringContainsString('Dental Checkup, Dental Cleaning', $response->message);
+        $this->assertNull($this->state('ambiguous-dental-topic-change')['offered_service_id']);
+        $this->assertDatabaseCount('appointment_requests', 0);
+    }
+
     public function test_ultrasound_inquiry_confirms_service_without_starting_a_booking_or_asking_for_a_date(): void
     {
         $this->createContext(['Ultrasound Scan']);
