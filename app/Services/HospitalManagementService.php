@@ -42,6 +42,7 @@ class HospitalManagementService
         [$hospital, $invite] = DB::transaction(function () use ($attributes, $adminEmail, $inviterId): array {
             $trialDays = (int) ($attributes['trial_days'] ?? 14);
             unset($attributes['trial_days'], $attributes['admin_email']);
+            $attributes['subscription_plan'] ??= 'professional';
 
             $hospital = Hospital::query()->create([
                 ...$attributes,
@@ -93,6 +94,7 @@ class HospitalManagementService
                 $attributes['admin_password'],
                 $attributes['admin_password_confirmation'],
             );
+            $attributes['subscription_plan'] ??= 'professional';
 
             $hospital = Hospital::query()->create([
                 ...$attributes,

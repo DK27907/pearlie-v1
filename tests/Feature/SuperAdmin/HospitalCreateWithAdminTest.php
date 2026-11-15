@@ -64,6 +64,32 @@ class HospitalCreateWithAdminTest extends TestCase
         ));
     }
 
+    public function test_new_hospital_form_defaults_to_professional_plan(): void
+    {
+        $this->actingAs($this->superAdmin())
+            ->get(route('superadmin.hospitals.create'))
+            ->assertSee('<option value="professional" selected>Professional</option>', false)
+            ->assertDontSee('<option value="starter" selected>Starter</option>', false);
+    }
+
+    public function test_hospital_service_defaults_missing_plan_to_professional(): void
+    {
+        Mail::fake();
+        $attributes = $this->hospitalPayload([
+            'slug' => 'professional-plan-default',
+            'admin_email' => 'professional-admin@nairobi-medical.test',
+        ]);
+        unset($attributes['subscription_plan']);
+
+        $hospital = app(HospitalManagementService::class)->createWithAdmin($attributes);
+
+        $this->assertSame('professional', $hospital->subscription_plan);
+        $this->assertDatabaseHas('hospitals', [
+            'id' => $hospital->id,
+            'subscription_plan' => 'professional',
+        ]);
+    }
+
     public function test_created_admin_must_change_password_before_accessing_dashboard(): void
     {
         Mail::fake();
