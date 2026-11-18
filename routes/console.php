@@ -6,6 +6,7 @@ use App\Console\Commands\MpesaSimulateCallback;
 use App\Console\Commands\MpesaVerifySandboxCredentials;
 use App\Console\Commands\ProcessMpesaCallbackInbox;
 use App\Console\Commands\PruneConversations;
+use App\Console\Commands\PruneExpiredSessions;
 use App\Console\Commands\PruneNotificationLogs;
 use App\Console\Commands\PrunePasswordResetTokens;
 use App\Console\Commands\PrunePaymentEvents;
@@ -32,6 +33,7 @@ ArtisanApplication::starting(static function ($artisan): void {
         PrunePasswordResetTokens::class,
         PruneConversations::class,
         PrunePaymentEvents::class,
+        PruneExpiredSessions::class,
         SendAppointmentReminders::class,
         SendAppointmentFollowUps::class,
         SendScheduledAnnouncements::class,
@@ -114,4 +116,7 @@ Schedule::command('appointments:send-follow-ups')
 Schedule::command('app:send-scheduled-announcements')
     ->everyMinute()
     ->withoutOverlapping(5)
+    ->onOneServer();
+Schedule::command('session:prune')
+    ->daily()
     ->onOneServer();
