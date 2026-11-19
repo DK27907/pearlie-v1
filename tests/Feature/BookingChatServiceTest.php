@@ -3366,7 +3366,7 @@ class BookingChatServiceTest extends TestCase
         $datePrompt = $chat->handle('natural-multi', 'Dr. Amina Njeri', 'web');
         $timePrompt = $chat->handle('natural-multi', 'tomorrow', 'web');
         $namePrompt = $chat->handle('natural-multi', '09:00', 'web');
-        $phonePrompt = $chat->handle('natural-multi', 'Test Patient', 'web');
+        $phonePrompt = $chat->handle('natural-multi', 'E2E Test Patient', 'web');
         $confirmation = $chat->handle('natural-multi', '254748249882', 'web');
 
         $this->assertStringContainsString('Which doctor', $doctorPrompt->message);
@@ -3375,6 +3375,7 @@ class BookingChatServiceTest extends TestCase
         $this->assertSame(['09:00', '09:30'], array_column($timePrompt->quickReplies, 'value'));
         $this->assertStringContainsString('full name', mb_strtolower($namePrompt->message));
         $this->assertStringContainsString('mobile number', mb_strtolower($phonePrompt->message));
+        $this->assertSame('E2E Test Patient', $phonePrompt->collectedFields['patient_name']);
         $this->assertSame('CONFIRMING', $confirmation->state);
     }
 

@@ -2339,7 +2339,7 @@ class BookingChatService
 
         if (! $state['patient_name'] && $wasWaitingForName) {
             $plainName = trim($message);
-            if (preg_match('/^[\pL][\pL\' -]{1,79}$/u', $plainName)
+            if (preg_match('/^[\pL][\pL\pN\' -]{1,79}$/u', $plainName)
                 && ! preg_match('/\b(book|appointment|doctor|tomorrow|today|yes|no)\b/iu', $plainName)
             ) {
                 $state['patient_name'] = $plainName;
@@ -2954,7 +2954,7 @@ class BookingChatService
     private function extractName(string $message): ?string
     {
         if (preg_match(
-            '/\b(?:my name is|i am|i\'m|this is)\s+([\pL][\pL\'-]*(?:\s+[\pL][\pL\'-]*){0,3}?)(?=\s+(?:and|with|phone|email|tomorrow|today|next)\b|[,.;]|$)/iu',
+            '/\b(?:my name is|i am|i\'m|this is)\s+([\pL][\pL\pN\'-]*(?:\s+[\pL][\pL\pN\'-]*){0,3}?)(?=\s+(?:and|with|phone|email|tomorrow|today|next)\b|[,.;]|$)/iu',
             $message,
             $matches,
         )) {
