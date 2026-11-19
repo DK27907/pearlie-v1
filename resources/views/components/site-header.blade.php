@@ -20,14 +20,16 @@
         <div class="flex min-h-20 items-center justify-between gap-4">
             <a href="{{ $homeUrl }}" class="flex shrink-0 items-center gap-3">
                 @if ($branding['logo_url'])
-                    <img class="h-11 w-11 rounded-xl object-contain" src="{{ $branding['logo_url'] }}" alt="">
+                    <img class="h-auto max-h-11 w-32 shrink-0 rounded-lg bg-white p-1 object-contain" src="{{ $branding['logo_url'] }}" alt="{{ $tenantHospital?->name ?? $branding['header_text'] }} logo">
                 @elseif ($tenantHospital && ! $isPlatformPage)
                     <span class="grid h-11 w-11 place-items-center rounded-xl bg-[var(--hospital-primary)] text-lg font-bold text-white" aria-hidden="true">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($tenantHospital->name, 0, 1)) }}</span>
                 @else
                     <span class="grid h-11 w-11 place-items-center rounded-xl bg-[var(--hospital-primary)] text-2xl" aria-hidden="true">🏥</span>
                 @endif
                 <span class="min-w-0">
-                    <span class="block text-lg font-bold leading-tight text-[var(--hospital-primary)]">{{ $branding['header_text'] }}</span>
+                    @unless ($tenantHospital && ! $isPlatformPage && $branding['logo_url'])
+                        <span class="block text-lg font-bold leading-tight text-[var(--hospital-primary)]">{{ $branding['header_text'] }}</span>
+                    @endunless
                     @if ($isPlatformLogin)
                         <span class="block max-w-[15rem] truncate text-xs font-medium text-slate-500">{{ config('app.tagline', 'AI-powered healthcare operations') }}</span>
                     @elseif (! $isPlatformPage)

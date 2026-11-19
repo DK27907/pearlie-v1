@@ -45,6 +45,7 @@ class HospitalControllerTest extends TestCase
         $hospital = Hospital::factory()->create([
             'name' => 'Nairobi Oversight Hospital',
             'subscription_plan' => 'professional',
+            'logo_url' => '/images/demo-hospital-logo.svg',
         ]);
         $platformHospital = Hospital::factory()->create();
         $superAdmin = User::factory()->create([
@@ -72,6 +73,7 @@ class HospitalControllerTest extends TestCase
         $this->actingAs($superAdmin)
             ->get(route('superadmin.hospitals.show', $hospital))
             ->assertOk()
+            ->assertSee(url('/images/demo-hospital-logo.svg'), false)
             ->assertSeeInOrder(['Users', '2', 'Doctors', '1', 'Appointments', '1', 'Escalations', '1']);
     }
 }

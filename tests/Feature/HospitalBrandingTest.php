@@ -179,6 +179,33 @@ class HospitalBrandingTest extends TestCase
             ->assertSee('Pearlie');
     }
 
+    public function test_root_relative_hospital_logo_renders_on_tenant_pages_and_admin_dashboard(): void
+    {
+        $hospital = Hospital::factory()->create([
+            'name' => 'Demo Hospital',
+            'slug' => 'demo-logo-rendering',
+            'logo_url' => '/images/demo-hospital-logo.svg',
+        ]);
+        $logoUrl = url('/images/demo-hospital-logo.svg');
+
+        $this->get(route('tenant.home', $hospital->slug))
+            ->assertOk()
+            ->assertSee($logoUrl, false)
+            ->assertSee('Demo Hospital logo');
+        $this->get(route('tenant.chat.page', $hospital->slug))
+            ->assertOk()
+            ->assertSee($logoUrl, false);
+        $this->get(route('tenant.login', ['hospital' => $hospital->slug]))
+            ->assertOk()
+            ->assertSee($logoUrl, false);
+
+        $admin = $this->createAdmin($hospital);
+        $this->actingAs($admin)
+            ->get(route('admin.dashboard'))
+            ->assertOk()
+            ->assertSee($logoUrl, false);
+    }
+
     public function test_tenant_login_route_is_available_to_guests_and_redirects_authenticated_users(): void
     {
         $hospital = Hospital::factory()->create([

@@ -26,14 +26,16 @@
         ])>
             <a href="{{ $isTenantAuthPage && hospital() ? route('tenant.home', ['slug' => hospital()->slug]) : route('home') }}" class="relative z-10 flex items-center gap-4">
                 @if ($isTenantAuthPage && $branding['logo_url'])
-                    <img class="animate-scale-in h-14 w-14 rounded-2xl border border-white/30 bg-white object-contain p-1 shadow-xl" src="{{ $branding['logo_url'] }}" alt="{{ $branding['name'] }} logo">
+                    <img class="animate-scale-in h-auto max-h-14 w-40 rounded-xl border border-white/30 bg-white p-2 object-contain shadow-xl" src="{{ $branding['logo_url'] }}" alt="{{ $branding['name'] }} logo">
                 @elseif ($isPlatformPage)
                     <img class="animate-scale-in h-14 w-14 rounded-2xl border border-white/20 object-cover shadow-xl" src="{{ asset('images/medidesk-assistant-logo.jpg') }}" alt="MediDesk Assistant logo">
                 @else
                     <span class="grid h-14 w-14 place-items-center rounded-2xl border border-white/25 bg-white/10 text-2xl font-bold shadow-xl" aria-hidden="true">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($authBrandName, 0, 1)) }}</span>
                 @endif
                 <span>
-                    <span class="block text-xl font-bold tracking-tight">{{ $branding['header_text'] ?? $authBrandName }}</span>
+                    @unless ($isTenantAuthPage && $branding['logo_url'])
+                        <span class="block text-xl font-bold tracking-tight">{{ $branding['header_text'] ?? $authBrandName }}</span>
+                    @endunless
                     <span class="mt-1 block text-sm text-white/75">{{ $isPlatformPage ? config('app.tagline', 'AI-powered healthcare operations') : 'Secure workspace' }}</span>
                 </span>
             </a>
@@ -93,13 +95,15 @@
             <div class="auth-card animate-fade-up glass-card w-full min-w-0 max-w-md p-6 sm:p-10">
                 <div class="mb-7 text-center">
                     @if ($isTenantAuthPage && $branding['logo_url'])
-                        <img class="mx-auto h-14 w-14 rounded-2xl border border-slate-200 bg-white object-contain p-1 shadow-sm" src="{{ $branding['logo_url'] }}" alt="{{ $branding['name'] }} logo">
+                        <img class="mx-auto h-auto max-h-14 w-40 rounded-xl border border-slate-200 bg-white p-2 object-contain shadow-sm" src="{{ $branding['logo_url'] }}" alt="{{ $branding['name'] }} logo">
                     @elseif ($isPlatformPage)
                         <img class="mx-auto h-14 w-14 rounded-2xl object-cover shadow-sm" src="{{ asset('images/medidesk-assistant-logo.jpg') }}" alt="MediDesk Assistant logo">
                     @else
                         <span class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[var(--hospital-primary)] text-xl font-bold text-white" aria-hidden="true">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($authBrandName, 0, 1)) }}</span>
                     @endif
-                    <p class="mt-3 text-lg font-bold text-midnight">{{ $branding['header_text'] ?? $authBrandName }}</p>
+                    @unless ($isTenantAuthPage && $branding['logo_url'])
+                        <p class="mt-3 text-lg font-bold text-midnight">{{ $branding['header_text'] ?? $authBrandName }}</p>
+                    @endunless
                 </div>
 
                 {{ $slot }}

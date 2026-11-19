@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="theme-color" content="{{ $hospital->primary_color ?: '#0a2f44' }}">
+    @if ($hospital->slug === 'demo')
+        <link rel="icon" type="image/svg+xml" href="{{ asset('images/demo-hospital-favicon.svg') }}">
+    @endif
     <title>@yield('title', 'Chat with '.hospital_branding()['header_text'])</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('styles')

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Demo Hospital</title>
+  <path d="M32 3 58 12v18c0 16-10 26-26 31C16 56 6 46 6 30V12L32 3Z" fill="#0a1628"/>
+  <path d="M28 15h8v11h11v8H36v12h-8V34H17v-8h11V15Z" fill="#0891b2"/>
+</svg>

@@ -25,7 +25,7 @@ class DemoHospitalSeeder extends Seeder
                 $hospital->forceFill([
                     'name' => 'Demo Hospital',
                     'chatbot_name' => 'MediDesk',
-                    'logo_url' => 'https://placehold.co/600x200/0a2f44/06b6d4?text=Demo+Hospital',
+                    'logo_url' => '/images/demo-hospital-logo.svg',
                     'primary_color' => '#0a2f44',
                     'secondary_color' => '#06b6d4',
                     'site_header_text' => 'Demo Hospital',

@@ -15,14 +15,16 @@
         <nav class="mx-auto flex w-full min-w-0 max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
             <a href="{{ $homeRoute }}" class="flex min-w-0 flex-1 items-center gap-3">
                 @if ($branding['logo_url'])
-                    <img class="h-11 w-11 rounded-xl object-contain" src="{{ $branding['logo_url'] }}" alt="">
+                    <img class="h-auto max-h-11 w-32 shrink-0 rounded-lg bg-white p-1 object-contain sm:w-40" src="{{ $branding['logo_url'] }}" alt="{{ $hospital->name }} logo">
                 @else
                     <div class="flex h-11 w-11 items-center justify-center rounded-xl text-lg font-bold text-white shadow-sm" style="background: {{ $primary }};">
                         {{ strtoupper(substr($hospital->name, 0, 1)) }}
                     </div>
                 @endif
                 <div class="min-w-0">
-                    <div class="truncate text-base font-extrabold tracking-tight" style="color: {{ $primary }};">{{ $branding['header_text'] }}</div>
+                    @unless ($branding['logo_url'])
+                        <div class="truncate text-base font-extrabold tracking-tight" style="color: {{ $primary }};">{{ $branding['header_text'] }}</div>
+                    @endunless
                     <div class="text-[10px] uppercase tracking-[0.16em] text-slate-500">Digital Front Desk</div>
                 </div>
             </a>
@@ -62,6 +64,11 @@
         <section class="tenant-hero relative isolate overflow-hidden text-white">
             <div class="mx-auto grid min-h-[72vh] grid-cols-1 max-w-screen-2xl items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:px-8 lg:py-24 xl:max-w-[90rem] 2xl:max-w-[110rem]">
                 <div class="min-w-0">
+                    @if ($branding['logo_url'])
+                        <div class="mb-6 inline-flex rounded-xl bg-white px-4 py-2 shadow-lg">
+                            <img class="h-auto max-h-14 w-48 object-contain" src="{{ $branding['logo_url'] }}" alt="{{ $hospital->name }} logo">
+                        </div>
+                    @endif
                     <p class="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white/85">Care that fits your day</p>
                     <h1 class="font-display mt-6 text-4xl font-semibold tracking-tight text-white sm:text-5xl lg:text-6xl">
                         Your care, made easier at {{ $hospital->name }}.

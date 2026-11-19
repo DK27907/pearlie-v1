@@ -146,6 +146,10 @@ class Hospital extends Model
                 return $value;
             }
 
+            if (str_starts_with($value, '/images/')) {
+                return url($value);
+            }
+
             return Storage::disk('public')->url($value);
         });
     }

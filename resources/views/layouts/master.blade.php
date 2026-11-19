@@ -48,12 +48,14 @@
             <aside class="h-fit rounded-2xl border border-slate-200/80 bg-white/90 p-3 shadow-sm shadow-slate-900/5 backdrop-blur-sm lg:sticky lg:top-24" aria-label="Admin sidebar">
                 <div class="mb-2 flex items-center gap-3 px-3 py-2">
                     @if (hospital_branding()['logo_url'])
-                        <img class="h-9 w-9 rounded-xl border border-slate-100 object-contain" src="{{ hospital_branding()['logo_url'] }}" alt="">
+                        <img class="h-auto max-h-9 w-28 shrink-0 rounded-lg border border-slate-100 bg-white p-1 object-contain" src="{{ hospital_branding()['logo_url'] }}" alt="{{ hospital()?->name }} logo">
                     @else
                         <span class="grid h-9 w-9 place-items-center rounded-xl bg-[var(--hospital-primary)] text-sm font-bold text-white" aria-hidden="true">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr(hospital()?->name ?? 'H', 0, 1)) }}</span>
                     @endif
                     <div class="min-w-0">
-                        <p class="truncate text-sm font-bold text-slate-900">{{ hospital()?->name }}</p>
+                        @unless ($branding['logo_url'])
+                            <p class="truncate text-sm font-bold text-slate-900">{{ hospital()?->name }}</p>
+                        @endunless
                         <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Hospital admin</p>
                     </div>
                 </div>
@@ -76,6 +78,7 @@
                     @endif
                     <a href="{{ route('admin.payments.index') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Payments</a>
                     <a href="{{ route('admin.audit.index') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Audit trail</a>
+                    <a href="{{ route('admin.activity-logs.index') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Activity Logs</a>
                     <a href="{{ route('admin.announcements.index') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Announcements</a>
                     <a href="{{ route('admin.notification-logs.index') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Notification logs</a>
                     <a href="{{ route('admin.reports.index') }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Reports</a>

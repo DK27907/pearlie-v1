@@ -526,7 +526,7 @@
         <div class="chat-header">
             @if ($branding['logo_url'])
                 <img
-                    class="logo h-9 w-9 rounded-md bg-white object-contain p-1"
+                    class="logo h-auto max-h-10 w-32 shrink-0 rounded-lg bg-white p-1.5 object-contain sm:w-40"
                     src="{{ $branding['logo_url'] }}"
                     alt="{{ $branding['header_text'] }} logo"
                 />

@@ -35,6 +35,8 @@ class DemoHospitalSeederTest extends TestCase
         $demo = Hospital::withoutGlobalScopes()->where('slug', 'demo')->firstOrFail();
         $this->assertSame('Demo Hospital', $demo->name);
         $this->assertSame('enterprise', $demo->subscription_plan);
+        $this->assertSame('/images/demo-hospital-logo.svg', $demo->getRawOriginal('logo_url'));
+        $this->assertSame(url('/images/demo-hospital-logo.svg'), $demo->logo_url);
         $this->assertSame(Hospital::BOOKING_PAYMENT_MODE_NONE, $demo->booking_payment_mode);
         $this->assertTrue($demo->reminder_enabled);
         $this->assertSame(24, $demo->reminder_hours_before);
