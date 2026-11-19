@@ -58,6 +58,44 @@ Alpine.data('passwordInput', () => ({
     },
 }));
 
+Alpine.data('passwordStrength', () => ({
+    score: 0,
+    label: 'Use at least 8 characters',
+    width: '0%',
+    barClass: 'bg-slate-300',
+
+    get barStyle() {
+        return { width: this.width };
+    },
+
+    measure(event) {
+        const password = event.target.value;
+        const checks = [
+            password.length >= 8,
+            /[a-z]/.test(password) && /[A-Z]/.test(password),
+            /\d/.test(password),
+            /[^A-Za-z0-9]/.test(password),
+        ];
+
+        this.score = password.length === 0 ? 0 : checks.filter(Boolean).length;
+        this.width = `${this.score * 25}%`;
+
+        const strengths = [
+            ['Too short', 'bg-rose-500'],
+            ['Weak', 'bg-rose-500'],
+            ['Fair', 'bg-amber-500'],
+            ['Good', 'bg-cyan-500'],
+            ['Strong', 'bg-emerald-500'],
+        ];
+
+        [this.label, this.barClass] = strengths[this.score];
+        if (password.length === 0) {
+            this.label = 'Use at least 8 characters';
+            this.barClass = 'bg-slate-300';
+        }
+    },
+}));
+
 Alpine.start();
 
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');

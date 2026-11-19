@@ -43,11 +43,35 @@
 
 @layer components {
     .btn-primary {
-        @apply inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-700 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-950/15 transition-all duration-200 ease-out hover:bg-cyan-600 hover:shadow-xl hover:shadow-cyan-900/20 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 focus-visible:ring-offset-2;
+        @apply inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-950/20 transition-all duration-200 ease-out hover:scale-[1.02] hover:from-cyan-500 hover:to-teal-500 hover:shadow-xl hover:shadow-cyan-900/30 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2;
+    }
+
+    .btn-amber {
+        @apply inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-amber-950/20 transition-all duration-200 ease-out hover:scale-[1.02] hover:from-amber-400 hover:to-orange-400 hover:shadow-xl hover:shadow-amber-900/25 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2;
+    }
+
+    .btn-secondary {
+        @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-5 py-3 text-sm font-bold text-white shadow-sm backdrop-blur transition-all duration-200 hover:scale-[1.02] hover:bg-white/10 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950;
     }
 
     .input-premium {
-        @apply block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition-colors duration-200 placeholder:text-slate-400 focus:border-cyan-700 focus:ring-4 focus:ring-cyan-100 focus:ring-offset-0;
+        @apply block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition-all duration-200 placeholder:text-slate-400 focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-500/15 focus:ring-offset-0;
+    }
+
+    .glass-card {
+        @apply rounded-2xl border border-white/70 bg-white/95 shadow-2xl shadow-slate-950/20 backdrop-blur-xl;
+    }
+
+    .font-display {
+        font-family: Georgia, "Times New Roman", serif;
+    }
+
+    .strength-track {
+        @apply h-1.5 overflow-hidden rounded-full bg-slate-200;
+    }
+
+    .strength-bar {
+        @apply h-full rounded-full transition-all duration-300 ease-out;
     }
 
     .hover-lift {
@@ -72,9 +96,22 @@
 
     .auth-brand-panel {
         background-image:
-            linear-gradient(135deg, rgb(10 22 40 / 0.78), rgb(10 22 40 / 0.58)),
+            radial-gradient(ellipse at 82% 18%, rgb(6 182 212 / 0.32), transparent 34%),
+            linear-gradient(135deg, rgb(10 22 40 / 0.91), rgb(10 22 40 / 0.7)),
             linear-gradient(135deg, var(--auth-primary, #06b6d4), var(--auth-secondary, #0891b2));
         background-size: 200% 200%;
+    }
+
+    body.auth-surface {
+        background:
+            radial-gradient(ellipse at 8% 12%, rgb(6 182 212 / 0.22), transparent 28rem),
+            linear-gradient(135deg, #0a1628 0%, #111827 58%, #0b2637 100%);
+    }
+
+    .tenant-hero {
+        background:
+            radial-gradient(ellipse at 78% 12%, color-mix(in srgb, var(--tenant-primary) 45%, transparent), transparent 34%),
+            linear-gradient(135deg, #0a1628 0%, color-mix(in srgb, var(--tenant-primary) 70%, #111827) 100%);
     }
 
     .marketing-nav {
@@ -94,9 +131,30 @@
         color: #334155;
     }
 
+    .marketing-page .marketing-card {
+        transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+    }
+
+    .marketing-page .marketing-card:hover {
+        transform: translateY(-3px);
+        border-color: rgb(6 182 212 / 0.4);
+        box-shadow: 0 22px 46px -30px rgb(8 145 178 / 0.45);
+    }
+
+    .tenant-public-page .tenant-card {
+        transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+    }
+
+    .tenant-public-page .tenant-card:hover {
+        transform: translateY(-3px);
+        border-color: color-mix(in srgb, var(--tenant-primary) 28%, #e2e8f0);
+        box-shadow: 0 22px 46px -30px color-mix(in srgb, var(--tenant-primary) 42%, transparent);
+    }
+
     .marketing-hero {
         background:
-            radial-gradient(ellipse at 70% 22%, rgb(8 145 178 / 0.24), transparent 38%),
+            radial-gradient(ellipse at 77% 18%, rgb(6 182 212 / 0.28), transparent 34%),
+            radial-gradient(ellipse at 8% 88%, rgb(8 145 178 / 0.17), transparent 34%),
             linear-gradient(135deg, #0a1628 0%, #111827 54%, #0c3040 100%);
     }
 

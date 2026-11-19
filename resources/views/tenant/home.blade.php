@@ -11,7 +11,7 @@
 @endphp
 
 @section('content')
-    <header class="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <header class="sticky top-0 z-50 border-b border-white/10 bg-white/95 shadow-sm backdrop-blur">
         <nav class="mx-auto flex w-full min-w-0 max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
             <a href="{{ $homeRoute }}" class="flex min-w-0 flex-1 items-center gap-3">
                 @if ($branding['logo_url'])
@@ -59,23 +59,23 @@
     </header>
 
     <main>
-        <section class="relative isolate overflow-hidden bg-gradient-to-br from-white via-sky-50 to-slate-100">
-            <div class="mx-auto grid grid-cols-1 max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:px-8 lg:py-24">
+        <section class="tenant-hero relative isolate overflow-hidden text-white">
+            <div class="mx-auto grid min-h-[72vh] grid-cols-1 max-w-screen-2xl items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:px-8 lg:py-24 xl:max-w-[90rem] 2xl:max-w-[110rem]">
                 <div class="min-w-0">
-                    <p class="inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-sky-700">Healthcare made simple</p>
-                    <h1 class="mt-6 text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">
-                        Healthcare information and appointments, made simpler.
+                    <p class="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white/85">Care that fits your day</p>
+                    <h1 class="font-display mt-6 text-4xl font-semibold tracking-tight text-white sm:text-5xl lg:text-6xl">
+                        Your care, made easier at {{ $hospital->name }}.
                     </h1>
-                    <p class="mt-5 max-w-xl text-lg leading-8 text-slate-600">
-                        Get answers, discover healthcare services and book appointments through our intelligent digital front desk.
+                    <p class="mt-5 max-w-xl text-lg leading-8 text-slate-200">
+                        Get answers, explore services and book an appointment through your hospital's digital front desk.
                     </p>
                     <div class="mt-8 flex flex-col gap-3 sm:flex-row">
-                        <a href="{{ $chatRoute }}" class="inline-flex items-center justify-center rounded-xl px-6 py-3 text-base font-bold text-white" style="background: {{ $secondary }};">Talk to MediDesk</a>
-                        <a href="{{ $chatRoute }}" class="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-6 py-3 text-base font-bold text-slate-800">Book Appointment</a>
+                        <a href="{{ $chatRoute }}" aria-label="Book an Appointment" class="inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-base font-bold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl" style="background: {{ $secondary }};">Book Appointment <span aria-hidden="true">→</span></a>
+                        <a href="#services" class="inline-flex items-center justify-center rounded-xl border border-white/25 bg-white/10 px-6 py-3.5 text-base font-bold text-white backdrop-blur transition hover:bg-white/15">Explore Services</a>
                     </div>
                 </div>
 
-                <figure class="group relative min-w-0 min-h-[25rem] overflow-hidden rounded-[2rem] border border-white bg-slate-900 shadow-2xl shadow-slate-900/15">
+                <figure class="group relative min-w-0 min-h-[25rem] overflow-hidden rounded-[2rem] border border-white/15 bg-slate-900 shadow-2xl shadow-black/30">
                     <img
                         src="{{ asset('images/medidesk-assistant-logo.jpg') }}"
                         alt="Healthcare professional ready to support patients"
@@ -86,7 +86,7 @@
                     >
                     <div class="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/10 to-slate-950/5"></div>
                     <figcaption class="absolute inset-x-0 bottom-0 p-4 sm:p-6">
-                        <div class="rounded-2xl border border-white/60 bg-white/95 p-4 shadow-xl backdrop-blur-sm sm:p-5">
+                        <div class="rounded-2xl border border-white/60 bg-white/95 p-4 text-slate-900 shadow-xl backdrop-blur-sm sm:p-5">
                         <div class="flex items-center justify-between border-b border-slate-200 pb-4">
                             <div>
                                 <p class="text-sm font-semibold text-slate-500">Today at {{ $hospital?->name ?? 'MediDesk Assistant' }}</p>
@@ -111,11 +111,11 @@
             </div>
         </section>
 
-        <section id="services" class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 py-16 sm:px-6 lg:px-8">
+        <section id="services" class="mx-auto max-w-screen-2xl px-4 py-16 sm:px-6 lg:px-8 xl:max-w-[90rem] 2xl:max-w-[110rem]">
             <div class="mb-8 flex items-end justify-between gap-4">
                 <div>
-                    <p class="text-sm font-bold uppercase tracking-[0.2em] text-sky-700">Services</p>
-                    <h2 class="mt-2 text-3xl font-extrabold text-slate-900">Care designed around your needs</h2>
+                    <p class="text-sm font-bold uppercase tracking-[0.2em]" style="color: {{ $primary }};">Services</p>
+                    <h2 class="font-display mt-2 text-3xl font-semibold text-slate-900 sm:text-4xl">Care designed around your needs</h2>
                     <p class="mt-2 text-sm text-slate-600">
                         A standard booking deposit of
                         <span class="font-semibold text-slate-800">KSh {{ number_format((float) $hospital->deposit_amount, 2) }}</span>
@@ -142,7 +142,7 @@
             @endif
             <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                 @forelse($catalogServices as $service)
-                    <article class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <article class="tenant-card rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                         <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl text-xl text-white" style="background: {{ $primary }};">
                             {{ strtoupper(substr($service->category ?? 'S', 0, 1)) }}
                         </div>
@@ -157,15 +157,15 @@
             </div>
         </section>
 
-        <section id="doctors" class="bg-slate-900 py-16 text-white">
+        <section id="doctors" class="bg-gradient-to-br from-[#0a1628] to-slate-900 py-16 text-white">
             <div class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 sm:px-6 lg:px-8">
                 <div class="mb-8">
-                    <p class="text-sm font-bold uppercase tracking-[0.2em] text-sky-300">Doctors</p>
-                    <h2 class="mt-2 text-3xl font-extrabold">Meet our care team</h2>
+                    <p class="text-sm font-bold uppercase tracking-[0.2em]" style="color: {{ $hospital->secondary_color ?: '#67e8f9' }};">Doctors</p>
+                    <h2 class="font-display mt-2 text-3xl font-semibold sm:text-4xl">Meet our care team</h2>
                 </div>
                 <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
                     @forelse($doctors as $doctor)
-                        <article class="rounded-2xl border border-slate-700 bg-slate-800 p-5">
+                        <article class="tenant-card rounded-2xl border border-slate-700 bg-white/5 p-5 backdrop-blur-sm">
                             <div class="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-sky-500 text-lg font-bold text-white">
                                 {{ strtoupper(substr($doctor->name ?? 'D', 0, 1)) }}
                             </div>
@@ -189,10 +189,10 @@
             </div>
         </section>
 
-        <section id="hours" class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 py-16 sm:px-6 lg:px-8">
-            <div class="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-                <p class="text-sm font-bold uppercase tracking-[0.2em] text-sky-700">Hours</p>
-                <h2 class="mt-2 text-3xl font-extrabold text-slate-900">When to visit or call</h2>
+        <section id="hours" class="mx-auto max-w-screen-2xl px-4 py-16 sm:px-6 lg:px-8 xl:max-w-[90rem] 2xl:max-w-[110rem]">
+            <div class="tenant-card rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+                <p class="text-sm font-bold uppercase tracking-[0.2em]" style="color: {{ $primary }};">Hours</p>
+                <h2 class="font-display mt-2 text-3xl font-semibold text-slate-900 sm:text-4xl">When to visit or call</h2>
                 <div class="mt-6 grid gap-4 sm:grid-cols-2">
                     @if ($hospital->hours_emergency)
                         <p class="rounded-xl bg-rose-50 p-4 text-slate-700"><strong>Emergency:</strong> {{ $hospital->hours_emergency }}</p>
@@ -210,11 +210,11 @@
             </div>
         </section>
 
-        <section id="how-it-works" class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 py-16 sm:px-6 lg:px-8">
-            <h2 class="text-center text-3xl font-extrabold text-slate-900">How it works</h2>
+        <section id="how-it-works" class="mx-auto max-w-screen-2xl px-4 py-16 sm:px-6 lg:px-8 xl:max-w-[90rem] 2xl:max-w-[110rem]">
+            <h2 class="font-display text-center text-3xl font-semibold text-slate-900 sm:text-4xl">How it works</h2>
             <div class="mt-10 grid gap-6 md:grid-cols-4">
                 @foreach(['Ask', 'Choose', 'Book', 'Confirm'] as $step)
-                    <div class="rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm">
+                    <div class="tenant-card rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm">
                         <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full font-bold text-white" style="background: {{ $primary }};">{{ $loop->iteration }}</div>
                         <h3 class="text-lg font-bold text-slate-900">{{ $step }}</h3>
                     </div>
@@ -222,21 +222,21 @@
             </div>
         </section>
 
-        <section id="about" class="bg-white py-16">
+        <section id="about" class="bg-gradient-to-br from-white to-cyan-50 py-16">
             <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-                <p class="text-sm font-bold uppercase tracking-[0.2em] text-sky-700">About</p>
-                <h2 class="mt-2 text-3xl font-extrabold text-slate-900">A patient-first healthcare experience</h2>
+                <p class="text-sm font-bold uppercase tracking-[0.2em]" style="color: {{ $primary }};">About</p>
+                <h2 class="font-display mt-2 text-3xl font-semibold text-slate-900 sm:text-4xl">A patient-first healthcare experience</h2>
                 <p class="mt-6 text-lg leading-8 text-slate-600">
                     {{ $about ?: 'The hospital will share more information about its care and facilities here.' }}
                 </p>
             </div>
         </section>
 
-        <section id="contact" class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 py-16 sm:px-6 lg:px-8">
+        <section id="contact" class="mx-auto max-w-screen-2xl px-4 py-16 sm:px-6 lg:px-8 xl:max-w-[90rem] 2xl:max-w-[110rem]">
             <div class="grid gap-6 lg:grid-cols-2">
-                <div class="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-                    <p class="text-sm font-bold uppercase tracking-[0.2em] text-sky-700">Contact</p>
-                    <h2 class="mt-2 text-3xl font-extrabold text-slate-900">We’re here to help</h2>
+                <div class="tenant-card rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+                    <p class="text-sm font-bold uppercase tracking-[0.2em]" style="color: {{ $primary }};">Contact</p>
+                    <h2 class="font-display mt-2 text-3xl font-semibold text-slate-900">We’re here to help</h2>
                     <div class="mt-6 space-y-4 text-slate-600">
                         @if ($hospital->address)
                             <p><strong>Address:</strong> {{ $hospital->address }}</p>

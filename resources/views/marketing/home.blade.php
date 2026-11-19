@@ -40,7 +40,7 @@
     <main id="home">
         <section class="marketing-hero relative isolate overflow-hidden">
             <div class="absolute -right-32 -top-28 -z-10 h-96 w-96 rounded-full bg-cyan-100/60 blur-3xl" aria-hidden="true"></div>
-            <div class="relative z-10 mx-auto grid grid-cols-1 max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] items-center gap-8 px-4 py-10 sm:px-6 sm:py-14 lg:grid-cols-[1.04fr_.96fr] lg:gap-12 lg:px-8 lg:py-20">
+            <div class="relative z-10 mx-auto grid min-h-[85vh] grid-cols-1 max-w-screen-2xl items-center gap-8 px-4 py-10 sm:px-6 sm:py-14 lg:grid-cols-[1.04fr_.96fr] lg:gap-12 lg:px-8 lg:py-20 xl:max-w-[90rem] 2xl:max-w-[110rem]">
                 <figure class="marketing-hero-visual relative order-first mx-auto w-full max-w-2xl lg:order-last">
                     <div class="absolute -inset-3 rounded-[2.25rem] bg-gradient-to-br from-cyan-200 via-sky-100 to-emerald-100 blur-sm" aria-hidden="true"></div>
                     <div class="relative overflow-hidden rounded-[1.75rem] border border-white bg-white shadow-2xl shadow-[#0a2f44]/20 sm:rounded-[2rem]">
@@ -75,18 +75,23 @@
                     </figcaption>
                 </figure>
 
-                <div class="max-w-2xl">
+                <div class="max-w-2xl text-center lg:text-left">
                     <p class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-cyan-100 shadow-sm">
                         <span class="h-2 w-2 rounded-full bg-emerald-500"></span> Built for Kenyan healthcare
                     </p>
-                    <h1 class="mt-5 text-4xl font-extrabold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-6xl">Your Hospital's 24/7 <span class="text-cyan-200">Digital Front Desk</span></h1>
-                    <p class="mt-5 max-w-xl text-lg leading-8 text-slate-300">MediDesk Assistant answers patient questions, books appointments, takes M-Pesa deposits, and connects patients to your staff — through WhatsApp and web chat, in English and Kiswahili.</p>
-                    <div class="mt-7 flex flex-col gap-3 sm:flex-row">
-                        <a href="#demo" class="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1a5276] px-6 py-3.5 text-base font-bold text-white shadow-lg shadow-[#1a5276]/20 transition hover:-translate-y-0.5 hover:bg-[#0a2f44]">Book a Free Demo <span aria-hidden="true">→</span></a>
-                        <a href="#how-it-works" class="inline-flex items-center justify-center rounded-xl border border-white/25 bg-white/10 px-6 py-3.5 text-base font-bold text-white transition hover:border-white/50 hover:bg-white/15">See How It Works</a>
+                    <h1 aria-label="Your hospital's front desk, always open." class="font-display mt-5 text-5xl font-semibold leading-[1.04] tracking-tight text-white sm:text-6xl lg:text-7xl">
+                        <span class="sr-only" aria-hidden="true">Your Hospital's 24/7 Digital Front Desk. </span>
+                        @foreach (['Your', "hospital's", 'front', 'desk,', 'always', 'open.'] as $word)
+                            <span class="marketing-word" style="--reveal-delay: {{ $loop->index * 40 }}ms">{{ $word }}</span>
+                        @endforeach
+                    </h1>
+                    <p class="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-300 sm:text-xl lg:mx-0">MediDesk Assistant answers patients in English and Swahili on WhatsApp and web, books real appointments, and hands off to your staff when needed.</p>
+                    <div class="mt-8 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start">
+                        <a href="#demo" class="btn-primary px-6 py-3.5 text-base">Book a Demo <span aria-hidden="true">→</span></a>
+                        <a href="#pricing" class="btn-secondary px-6 py-3.5 text-base">See Pricing</a>
                     </div>
-                    <p class="mt-4 text-sm text-slate-400">No pressure. See how the digital front desk fits your hospital.</p>
-                    <div class="mt-7 flex flex-wrap gap-2 text-xs font-semibold text-slate-100 sm:gap-3 sm:text-sm">
+                    <p class="mt-4 text-sm text-slate-400">A more responsive experience for patients, with clearer workflows for your team.</p>
+                    <div class="mt-7 flex flex-wrap justify-center gap-2 text-xs font-semibold text-slate-100 sm:gap-3 sm:text-sm lg:justify-start">
                         <span class="rounded-full border border-white/15 bg-white/10 px-3 py-2">24/7 answers</span>
                         <span class="rounded-full border border-white/15 bg-white/10 px-3 py-2">WhatsApp + web</span>
                         <span class="rounded-full border border-white/15 bg-white/10 px-3 py-2">English + Kiswahili</span>
@@ -95,12 +100,13 @@
             </div>
         </section>
 
-        <section aria-label="Platform highlights" class="border-y border-slate-200 bg-white">
-            <div class="mx-auto flex max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] flex-wrap items-center justify-center gap-x-10 gap-y-4 px-4 py-6 text-sm font-semibold text-slate-600 sm:px-6 lg:justify-between lg:px-8">
-                <span class="inline-flex items-center gap-2"><span class="text-lg" aria-hidden="true">🇰🇪</span> Built for Kenyan hospitals</span>
-                <span class="inline-flex items-center gap-2"><span class="text-lg" aria-hidden="true">📲</span> Works with M-Pesa</span>
-                <span class="inline-flex items-center gap-2"><span class="text-lg" aria-hidden="true">💬</span> English &amp; Kiswahili</span>
-                <span class="inline-flex items-center gap-2"><span class="text-lg" aria-hidden="true">✓</span> WhatsApp Business</span>
+        <section aria-label="Platform highlights" class="border-y border-slate-200 bg-white" data-reveal>
+            <div class="mx-auto grid max-w-screen-2xl grid-cols-2 items-center gap-4 px-4 py-7 text-center sm:px-6 md:grid-cols-4 lg:px-8">
+                <p class="col-span-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-500 md:col-span-4">Designed for care teams across Kenya</p>
+                <span class="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 text-sm font-bold text-slate-600">Hospitals</span>
+                <span class="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 text-sm font-bold text-slate-600">Clinics</span>
+                <span class="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 text-sm font-bold text-slate-600">Specialty care</span>
+                <span class="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 text-sm font-bold text-slate-600">Community health</span>
             </div>
         </section>
 
@@ -122,14 +128,14 @@
                 <div class="mx-auto max-w-2xl text-center"><p class="text-sm font-extrabold uppercase tracking-[.18em] text-[#1a5276]">One connected front desk</p><h2 class="mt-3 text-3xl font-extrabold tracking-tight text-[#0a2f44] sm:text-4xl">Everything patients need to take the next step</h2></div>
                 <div class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                     @foreach ([
-                        ['🤖', '24/7 AI Assistant', 'Answer common hospital and service questions in natural language, day or night.'],
-                        ['💬', 'WhatsApp + Web', 'Meet patients on the channels they already use, with English and Kiswahili support.'],
-                        ['📅', 'Real Booking', 'Show available doctor slots and capture appointment requests in one guided conversation.'],
+                        ['🤖', 'AI Chat', 'Answer common hospital and service questions in natural language, day or night.'],
+                        ['📅', 'Real Bookings', 'Show available doctor slots and capture appointment requests across web and WhatsApp.'],
                         ['📲', 'M-Pesa Deposits', 'Send secure STK prompts and track payment outcomes alongside the appointment.'],
                         ['🩺', 'Doctor Dashboard', 'Give clinicians a clear view of their schedule, appointment details, and availability.'],
                         ['🙋', 'Human Escalation', 'Bring a health worker into the conversation when a patient needs human support.'],
+                        ['📊', 'Analytics', 'Give your team a clear view of appointment activity and operational trends.'],
                     ] as [$icon, $title, $description])
-                        <article class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"><span class="grid h-12 w-12 place-items-center rounded-xl bg-[#eaf3f8] text-2xl" aria-hidden="true">{{ $icon }}</span><h3 class="mt-5 text-lg font-bold text-[#0a2f44]">{{ $title }}</h3><p class="mt-2 leading-7 text-slate-600">{{ $description }}</p></article>
+                        <article data-reveal class="marketing-card rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><span class="grid h-12 w-12 place-items-center rounded-xl bg-cyan-50 text-2xl" aria-hidden="true">{{ $icon }}</span><h3 class="mt-5 text-lg font-bold text-[#0a2f44]">{{ $title }}</h3><p class="mt-2 leading-7 text-slate-600">{{ $description }}</p></article>
                     @endforeach
                 </div>
             </div>
@@ -149,7 +155,7 @@
             </ol>
         </section>
 
-        <section id="demo" aria-labelledby="demo-video-title" class="bg-[#0a2f44] py-16 text-white sm:py-20">
+        <section id="walkthrough" aria-labelledby="demo-video-title" class="bg-[#0a2f44] py-16 text-white sm:py-20">
             <div class="mx-auto grid max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] items-center gap-10 px-4 sm:px-6 lg:grid-cols-[.8fr_1.2fr] lg:px-8">
                 <div><p class="text-sm font-extrabold uppercase tracking-[.18em] text-cyan-200">See the experience</p><h2 id="demo-video-title" class="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">A front desk that never clocks out</h2><p class="mt-4 leading-7 text-slate-300">A short product walkthrough is coming soon. Book a live demo to see the patient chat and staff workflow today.</p><a href="mailto:sales@axiomforge.co.ke?subject=MediDesk%20AI%20product%20walkthrough" class="mt-6 inline-flex rounded-xl bg-white px-5 py-3 font-bold text-[#0a2f44] transition hover:bg-cyan-50">Request a 3-minute walkthrough</a></div>
                 <div class="grid min-h-64 place-items-center rounded-3xl border border-white/15 bg-gradient-to-br from-white/10 to-white/5 p-8 text-center shadow-2xl"><div><span class="mx-auto grid h-16 w-16 place-items-center rounded-full border border-white/25 bg-white/10 text-2xl" aria-hidden="true">▶</span><p class="mt-4 font-bold">Product demo video</p><p class="mt-1 text-sm text-slate-300">3-minute walkthrough · coming soon</p></div></div>
@@ -174,9 +180,9 @@
                         ['Professional', 'KES 75,000', 'KES 35,000', ['Everything in Starter', 'Appointment booking', 'Doctor dashboard']],
                         ['Enterprise', 'KES 100,000+', 'KES 75,000+', ['Everything in Professional', 'M-Pesa, SMS and escalation', 'Advanced integrations']],
                     ] as [$plan, $setup, $monthly, $items])
-                        <article class="flex flex-col rounded-2xl border {{ $plan === 'Professional' ? 'border-[#1a5276] ring-2 ring-[#1a5276]/10' : 'border-slate-200' }} bg-white p-6 shadow-sm">
+                        <article class="marketing-card flex flex-col rounded-2xl border {{ $plan === 'Professional' ? 'border-cyan-300 shadow-[0_20px_60px_-15px_rgba(6,182,212,0.3)] ring-2 ring-cyan-500/10' : 'border-slate-200' }} bg-white p-6">
                             @if ($plan === 'Professional')<span class="mb-3 w-fit rounded-full bg-cyan-50 px-3 py-1 text-xs font-extrabold uppercase tracking-wide text-[#1a5276]">Popular</span>@endif
-                            <h3 class="text-lg font-bold text-[#0a2f44]">{{ $plan }}</h3><p class="mt-4 text-3xl font-extrabold tracking-tight text-[#0a2f44]">{{ $setup }}<span class="text-base font-semibold text-slate-500"> setup</span></p><p class="mt-2 text-sm text-slate-600">then <strong>{{ $monthly }}/mo</strong></p>
+                            <h3 class="text-lg font-bold text-[#0a2f44]">{{ $plan }}</h3><p class="mt-4 text-3xl font-extrabold tracking-tight text-[#0a2f44]">{{ $setup }}<span class="text-base font-semibold text-slate-500"> setup</span></p><p class="mt-2 text-sm text-slate-600">then <strong>{{ $monthly }}/month</strong></p>
                             <ul class="mt-6 grid gap-3 text-sm text-slate-600">@foreach ($items as $item)<li class="flex gap-2"><span class="font-bold text-emerald-600" aria-hidden="true">✓</span><span>{{ $item }}</span></li>@endforeach</ul>
                             <a href="mailto:sales@axiomforge.co.ke?subject={{ rawurlencode('MediDesk Assistant '.$plan.' plan') }}" class="mt-7 inline-flex justify-center rounded-xl {{ $plan === 'Professional' ? 'bg-[#1a5276] text-white hover:bg-[#0a2f44]' : 'border border-slate-300 text-[#0a2f44] hover:bg-slate-50' }} px-4 py-3 text-sm font-bold transition">Talk to our team</a>
                         </article>
@@ -187,7 +193,7 @@
         </section>
 
         <section aria-labelledby="testimonials-title" class="mx-auto max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-            <div class="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center">
+            <div class="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-cyan-50 px-6 py-12 text-center shadow-sm">
                 <p class="text-sm font-extrabold uppercase tracking-[.18em] text-[#1a5276]">Testimonials</p>
                 <h2 id="testimonials-title" class="mt-3 text-3xl font-extrabold tracking-tight text-[#0a2f44]">Built with hospital teams</h2>
                 <p class="mx-auto mt-4 max-w-2xl leading-7 text-slate-600">Customer stories are coming soon. Book a demo to see the product and share what your team needs.</p>
@@ -210,17 +216,18 @@
             </div>
         </section>
 
-        <section id="demo" class="scroll-mt-24 bg-gradient-to-r from-[#0a2f44] to-[#1a5276] px-4 py-16 text-white sm:px-6 sm:py-20">
-            <div class="mx-auto grid max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] gap-10 lg:grid-cols-2 lg:items-start">
+        <section id="demo" class="scroll-mt-24 bg-gradient-to-br from-[#0a1628] via-[#111827] to-[#07566a] px-4 py-16 text-white sm:px-6 sm:py-20">
+            <div class="mx-auto grid max-w-screen-2xl gap-10 xl:max-w-[90rem] 2xl:max-w-[110rem] lg:grid-cols-2 lg:items-start">
                 <div class="max-w-2xl">
                     <p class="text-sm font-extrabold uppercase tracking-[.18em] text-cyan-200">Let's make care easier to reach</p>
-                    <h2 class="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">Ready to give your patients a 24/7 digital front desk?</h2>
+                    <h2 class="font-display mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Ready to modernize your hospital's front desk?</h2>
                     <p class="mt-4 max-w-2xl leading-7 text-slate-200">Request a free demo and our team will follow up to learn about your hospital and arrange a walkthrough.</p>
+                    <a href="#demo-form" class="btn-primary mt-6 px-6 py-3.5">Start Free Trial <span aria-hidden="true">→</span></a>
                     @if (filled(config('pearlie.marketing.sales_whatsapp')))
-                        <a href="https://wa.me/{{ preg_replace('/[^\\d]/', '', config('pearlie.marketing.sales_whatsapp')) }}" class="mt-6 inline-flex rounded-xl border border-white/30 px-6 py-3.5 font-bold text-white transition hover:bg-white/10">WhatsApp sales</a>
+                        <a href="https://wa.me/{{ preg_replace('/[^\\d]/', '', config('pearlie.marketing.sales_whatsapp')) }}" class="btn-secondary mt-6 px-6 py-3.5">WhatsApp sales</a>
                     @endif
                 </div>
-                <form method="POST" action="{{ route('marketing.demo.store') }}" class="grid gap-5 rounded-2xl bg-white p-6 text-slate-900 shadow-2xl sm:p-8">
+                <form id="demo-form" method="POST" action="{{ route('marketing.demo.store') }}" class="grid gap-5 rounded-2xl border border-white/70 bg-white p-6 text-slate-900 shadow-2xl sm:p-8">
                     @csrf
                     @if (session('demo_request_sent'))
                         <p role="status" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 font-semibold text-emerald-800">Thanks — your demo request has been sent. Our team will be in touch.</p>
@@ -252,7 +259,7 @@
                         <textarea name="message" rows="3" maxlength="2000" class="rounded-lg border border-slate-300 px-3 py-2.5 text-base font-normal text-slate-900 focus:border-[#1a5276] focus:outline-none focus:ring-2 focus:ring-[#1a5276]/20">{{ old('message') }}</textarea>
                         @error('message')<span class="text-sm font-medium text-rose-700">{{ $message }}</span>@enderror
                     </label>
-                    <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-[#1a5276] px-6 py-3.5 font-bold text-white transition hover:bg-[#0a2f44] focus:outline-none focus:ring-2 focus:ring-[#1a5276] focus:ring-offset-2">Request my free demo</button>
+                    <button type="submit" class="btn-primary w-full sm:w-fit">Request my free demo</button>
                 </form>
             </div>
         </section>
@@ -261,9 +268,9 @@
     <footer class="bg-[#071f2d] text-slate-300">
         <div class="mx-auto grid max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] gap-10 px-4 py-12 sm:px-6 md:grid-cols-3 lg:px-8">
             <div><a href="#home" class="text-xl font-extrabold text-white">MediDesk Assistant</a><p class="mt-2 text-sm text-slate-400">By AxiomForge Digital Solutions</p><p class="mt-4 max-w-sm text-sm leading-6 text-slate-400">A digital front desk for more accessible, connected hospital experiences.</p></div>
-            <div><h2 class="text-sm font-bold uppercase tracking-wider text-white">Explore</h2><ul class="mt-4 grid gap-3 text-sm"><li><a class="hover:text-white" href="#features">Features</a></li><li><a class="hover:text-white" href="#how-it-works">How It Works</a></li><li><a class="hover:text-white" href="#demo">Demo</a></li><li><a class="hover:text-white" href="#pricing">Pricing</a></li><li><a class="hover:text-white" href="#faq">FAQ</a></li></ul></div>
+            <div><h2 class="text-sm font-bold uppercase tracking-wider text-white">Product</h2><ul class="mt-4 grid gap-3 text-sm"><li><a class="marketing-link hover:text-white" href="#features">Features</a></li><li><a class="marketing-link hover:text-white" href="#how-it-works">How It Works</a></li><li><a class="marketing-link hover:text-white" href="#demo">Demo</a></li><li><a class="marketing-link hover:text-white" href="#pricing">Pricing</a></li><li><a class="marketing-link hover:text-white" href="#faq">FAQ</a></li></ul></div>
             <div><h2 class="text-sm font-bold uppercase tracking-wider text-white">Talk to our team</h2><ul class="mt-4 grid gap-3 text-sm"><li><a class="hover:text-white" href="mailto:sales@axiomforge.co.ke">sales@axiomforge.co.ke</a></li>@if (filled(config('pearlie.marketing.sales_whatsapp')))<li><a class="hover:text-white" href="tel:{{ config('pearlie.marketing.sales_whatsapp') }}">{{ config('pearlie.marketing.sales_whatsapp') }}</a></li><li><a class="hover:text-white" href="https://wa.me/{{ preg_replace('/[^\\d]/', '', config('pearlie.marketing.sales_whatsapp')) }}">WhatsApp sales</a></li>@endif</ul></div>
         </div>
-        <div class="border-t border-white/10"><div class="mx-auto flex max-w-screen-2xl xl:max-w-[90rem] 2xl:max-w-[110rem] flex-col gap-2 px-4 py-4 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8"><p>© {{ date('Y') }} MediDesk Assistant by AxiomForge Digital Solutions.</p><a class="hover:text-white" href="mailto:sales@axiomforge.co.ke">Contact sales</a></div></div>
+        <div class="border-t border-white/10"><div class="mx-auto flex max-w-screen-2xl flex-col gap-2 px-4 py-4 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8 xl:max-w-[90rem] 2xl:max-w-[110rem]"><p>© {{ date('Y') }} AxiomForge Digital Solutions</p><a class="marketing-link hover:text-white" href="mailto:sales@axiomforge.co.ke">Contact sales</a></div></div>
     </footer>
 @endsection

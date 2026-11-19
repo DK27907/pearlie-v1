@@ -2,12 +2,12 @@
     <!-- Session Status -->
     <x-auth-session-status class="flash-message mb-5" :status="session('status')" />
 
-    <div class="mb-7 animate-fade-up">
+    <div class="mb-8 animate-fade-up">
         <p class="text-xs font-bold uppercase tracking-[0.2em] text-cyan-800">Welcome back</p>
-        <h1 class="mt-2 text-3xl font-bold tracking-tight text-midnight">Sign in to your workspace</h1>
-        <p class="mt-2 text-sm leading-6 text-slate-600">Manage patient requests and care operations securely.</p>
+        <h1 class="font-display mt-2 text-3xl font-semibold tracking-tight text-midnight">Sign in to your workspace</h1>
+        <p class="mt-2 text-sm leading-6 text-slate-600">Your care operations, ready when you are.</p>
     </div>
-    <form method="POST" action="{{ route('login') }}" class="auth-form space-y-5">
+    <form method="POST" action="{{ route('login') }}" class="auth-form grid gap-5">
         @csrf
 
         <!-- Email Address -->
@@ -25,21 +25,19 @@
         </div>
 
         <!-- Remember Me -->
-        <div class="block">
-            <label for="remember_me" class="inline-flex items-center">
-                <input id="remember_me" type="checkbox" class="rounded border-slate-300 text-cyan-700 shadow-sm focus:ring-cyan-600" name="remember">
-                <span class="ms-2 text-sm text-gray-600">{{ __('Remember me') }}</span>
+        <div class="flex items-center justify-between gap-3">
+            <label for="remember_me" class="inline-flex items-center gap-2">
+                <input id="remember_me" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-cyan-700 shadow-sm focus:ring-cyan-600" name="remember">
+                <span class="text-sm text-slate-600">{{ __('Remember me') }}</span>
             </label>
-        </div>
-
-        <div class="flex items-center justify-between pt-2">
             @if (Route::has('password.request'))
                 <a class="rounded-md text-sm font-semibold text-cyan-800 underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-cyan-600" href="{{ route('password.request') }}">
                     {{ __('Forgot your password?') }}
                 </a>
             @endif
-
-            <x-primary-button class="group ms-3 w-full">
+        </div>
+        <div class="pt-1">
+            <x-primary-button class="group w-full">
                 {{ __('Sign in') }}
                 <svg class="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-6-6 6 6-6 6"/></svg>
             </x-primary-button>

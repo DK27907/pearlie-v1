@@ -12,10 +12,18 @@
             : ($isPlatformPage ? platform_branding() : hospital_branding());
         $authBrandName = $branding['name'] ?? $branding['header_text'] ?? 'MediDesk Assistant';
         $isPlatformLogin = request()->routeIs('login');
+        $isSplitAuthPage = request()->routeIs('login', 'register', 'tenant.login');
         $supportEmail = config('mail.from.address');
     @endphp
-    <div class="auth-shell grid w-full min-w-0 grid-cols-1 flex-1 lg:grid-cols-2" style="--auth-primary: {{ $branding['primary_color'] ?? '#06b6d4' }}; --auth-secondary: {{ $branding['secondary_color'] ?? '#0891b2' }}">
-        <aside class="auth-brand-panel animate-gradient relative hidden min-h-screen flex-col justify-between overflow-hidden px-10 py-10 text-white lg:flex xl:px-16 xl:py-14">
+    <div @class([
+        'auth-shell grid w-full min-w-0 flex-1 grid-cols-1',
+        'lg:grid-cols-2' => $isSplitAuthPage,
+    ]) style="--auth-primary: {{ $branding['primary_color'] ?? '#06b6d4' }}; --auth-secondary: {{ $branding['secondary_color'] ?? '#0891b2' }}">
+        <aside @class([
+            'auth-brand-panel animate-gradient relative min-h-screen flex-col justify-between overflow-hidden px-10 py-10 text-white xl:px-16 xl:py-14',
+            'hidden lg:flex' => $isSplitAuthPage,
+            'hidden' => ! $isSplitAuthPage,
+        ])>
             <a href="{{ $isTenantAuthPage && hospital() ? route('tenant.home', ['slug' => hospital()->slug]) : route('home') }}" class="relative z-10 flex items-center gap-4">
                 @if ($isTenantAuthPage && $branding['logo_url'])
                     <img class="animate-scale-in h-14 w-14 rounded-2xl border border-white/30 bg-white object-contain p-1 shadow-xl" src="{{ $branding['logo_url'] }}" alt="{{ $branding['name'] }} logo">
@@ -31,15 +39,23 @@
             </a>
 
             <div class="relative z-10 my-16 max-w-xl">
-                <p class="text-xs font-bold uppercase tracking-[0.24em] text-cyan-100">MediDesk Assistant</p>
-                <h2 class="mt-5 text-4xl font-bold leading-tight tracking-tight xl:text-5xl">
-                    {{ $isTenantAuthPage ? $branding['name'] : 'Care teams, connected.' }}
+                <p class="text-xs font-bold uppercase tracking-[0.24em] text-cyan-100">{{ $isTenantAuthPage ? 'Welcome to' : 'MediDesk Assistant' }}</p>
+                <h2 class="font-display mt-5 text-4xl font-semibold leading-tight tracking-tight xl:text-5xl">
+                    {{ $isTenantAuthPage ? $branding['name'] : 'The 24/7 AI front desk for Kenyan hospitals.' }}
                 </h2>
                 <p class="mt-5 max-w-lg text-lg leading-8 text-white/85">
                     {{ $isTenantAuthPage
                         ? ($branding['tagline'] ?: 'A secure workspace for your hospital care team.')
-                        : 'A calmer, clearer way to manage patient requests and care operations.' }}
+                        : 'A calmer, clearer way to welcome patients and keep care operations moving.' }}
                 </p>
+
+                @if ($isPlatformPage)
+                    <ul class="mt-8 grid gap-4 text-sm font-medium text-white/90">
+                        <li class="flex items-center gap-3"><span class="grid h-8 w-8 place-items-center rounded-lg border border-white/15 bg-white/10 text-cyan-100" aria-hidden="true">◎</span>Bilingual patient conversations</li>
+                        <li class="flex items-center gap-3"><span class="grid h-8 w-8 place-items-center rounded-lg border border-white/15 bg-white/10 text-cyan-100" aria-hidden="true">↗</span>Real appointment bookings</li>
+                        <li class="flex items-center gap-3"><span class="grid h-8 w-8 place-items-center rounded-lg border border-white/15 bg-white/10 text-cyan-100" aria-hidden="true">✓</span>M-Pesa ready workflows</li>
+                    </ul>
+                @endif
 
                 @if ($isTenantAuthPage && ($branding['phone'] || $branding['address']))
                     <p class="mt-7 text-sm leading-6 text-white/75">
@@ -68,14 +84,14 @@
                 @endif
             </div>
 
-            <p class="relative z-10 text-xs text-white/65">{{ $branding['footer_text'] }}</p>
+            <p class="relative z-10 text-xs text-white/65">{{ $isPlatformPage ? 'Powered by AxiomForge Digital' : $branding['footer_text'] }}</p>
             <div class="pointer-events-none absolute -bottom-28 -right-20 h-96 w-96 rounded-full border border-white/10" aria-hidden="true"></div>
             <div class="pointer-events-none absolute -bottom-16 -right-8 h-72 w-72 rounded-full border border-white/10" aria-hidden="true"></div>
         </aside>
 
-        <section class="grid w-full min-w-0 min-h-screen place-items-center bg-slate-50 px-4 py-10 sm:px-6 lg:px-10">
-            <div class="auth-card animate-fade-up w-full min-w-0 max-w-md rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl shadow-slate-900/10 sm:p-9">
-                <div class="mb-7 text-center lg:hidden">
+        <section class="grid min-h-screen w-full min-w-0 place-items-center px-4 py-8 sm:px-6 lg:px-10">
+            <div class="auth-card animate-fade-up glass-card w-full min-w-0 max-w-md p-6 sm:p-10">
+                <div class="mb-7 text-center">
                     @if ($isTenantAuthPage && $branding['logo_url'])
                         <img class="mx-auto h-14 w-14 rounded-2xl border border-slate-200 bg-white object-contain p-1 shadow-sm" src="{{ $branding['logo_url'] }}" alt="{{ $branding['name'] }} logo">
                     @elseif ($isPlatformPage)
