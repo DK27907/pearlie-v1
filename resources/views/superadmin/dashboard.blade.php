@@ -13,6 +13,37 @@
             @endforeach
         </section>
 
+        <section class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]" aria-label="Platform language usage">
+            @php
+                $languageTotal = $languageBreakdown['english'] + $languageBreakdown['swahili'];
+                $englishWidth = $languageTotal > 0 ? round($languageBreakdown['english'] / $languageTotal * 100) : 0;
+                $swahiliWidth = $languageTotal > 0 ? round($languageBreakdown['swahili'] / $languageTotal * 100) : 0;
+            @endphp
+            <article class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 class="font-bold text-slate-900">Language Distribution (This Month)</h2>
+                <p class="mt-2 text-sm text-slate-600">{{ number_format($languageBreakdown['english']) }} English | {{ number_format($languageBreakdown['swahili']) }} Swahili ({{ $languageBreakdown['swahili_percent'] }}%)</p>
+                <div class="mt-5 grid gap-3">
+                    <div class="flex items-center gap-3 text-xs font-medium text-slate-600"><span class="w-16">English</span><div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-cyan-600" style="width: {{ $englishWidth }}%"></div></div></div>
+                    <div class="flex items-center gap-3 text-xs font-medium text-slate-600"><span class="w-16">Swahili</span><div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-teal-600" style="width: {{ $swahiliWidth }}%"></div></div></div>
+                </div>
+            </article>
+            <article class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div class="border-b border-slate-100 p-5"><h2 class="font-bold text-slate-900">Language by hospital</h2><p class="mt-1 text-sm text-slate-500">Conversation counts for this month.</p></div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+                        <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-5 py-3">Hospital</th><th class="px-5 py-3">English</th><th class="px-5 py-3">Swahili</th></tr></thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @forelse ($hospitalLanguageBreakdown as $hospitalLanguage)
+                                <tr><td class="px-5 py-3 font-medium text-slate-800">{{ $hospitalLanguage['name'] }}</td><td class="px-5 py-3">{{ number_format($hospitalLanguage['english']) }}</td><td class="px-5 py-3">{{ number_format($hospitalLanguage['swahili']) }}</td></tr>
+                            @empty
+                                <tr><td colspan="3" class="px-5 py-8 text-center text-slate-500">No hospitals are available.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </article>
+        </section>
+
         <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5"><div><h2 class="font-bold text-slate-900">Hospitals</h2><p class="mt-1 text-sm text-slate-500">Monthly booking volume and collected deposits.</p></div><a class="text-sm font-semibold text-indigo-700 hover:underline" href="{{ route('superadmin.hospitals.index') }}">Manage hospitals</a></div>
             <div class="overflow-x-auto"><table class="min-w-full divide-y divide-slate-200 text-left text-sm"><thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-5 py-3">Hospital</th><th class="px-5 py-3">Plan / status</th><th class="px-5 py-3">Doctors</th><th class="px-5 py-3">Appointments this month</th><th class="px-5 py-3">Revenue this month</th><th class="px-5 py-3">Actions</th></tr></thead><tbody class="divide-y divide-slate-100">

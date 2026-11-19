@@ -17,11 +17,13 @@ use App\Http\Controllers\Doctor\AppointmentLifecycleController as DoctorAppointm
 use App\Http\Controllers\Doctor\EscalationController as DoctorEscalationController;
 use App\Http\Controllers\HospitalInvitationController;
 use App\Http\Controllers\HospitalOnboardingController;
+use App\Http\Controllers\IntakeFormController;
 use App\Http\Controllers\MarketingDemoController;
 use App\Http\Controllers\MarketingHomeController;
 use App\Http\Controllers\Patient\AppointmentCancelController;
 use App\Http\Controllers\Patient\AppointmentController as PatientAppointmentController;
 use App\Http\Controllers\Patient\AppointmentRescheduleController;
+use App\Http\Controllers\PatientPortalController;
 use App\Http\Controllers\PaymentStatusController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReceiptController;
@@ -85,6 +87,40 @@ Route::get('/receipts/{receipt}/print', [ReceiptController::class, 'print'])
     ->whereNumber('receipt')
     ->middleware('signed')
     ->name('receipts.print');
+
+Route::get('/p/{appointment}', [PatientPortalController::class, 'show'])
+    ->whereNumber('appointment')
+    ->middleware('signed')
+    ->name('patient-portal.show');
+Route::get('/p/{appointment}/reschedule', [
+    PatientPortalController::class,
+    'rescheduleForm',
+])->whereNumber('appointment')
+    ->middleware('signed')
+    ->name('patient-portal.reschedule.form');
+Route::post('/p/{appointment}/reschedule', [PatientPortalController::class, 'reschedule'])
+    ->whereNumber('appointment')
+    ->middleware('signed')
+    ->name('patient-portal.reschedule');
+Route::post('/p/{appointment}/cancel', [PatientPortalController::class, 'cancel'])
+    ->whereNumber('appointment')
+    ->middleware('signed')
+    ->name('patient-portal.cancel');
+Route::get('/p/{appointment}/calendar', [PatientPortalController::class, 'calendar'])
+    ->whereNumber('appointment')
+    ->middleware('signed')
+    ->name('patient-portal.calendar');
+Route::get('/intake/thank-you/{appointment}', [IntakeFormController::class, 'thankYou'])
+    ->whereNumber('appointment')
+    ->name('intake.thank-you');
+Route::get('/intake/{token}', [IntakeFormController::class, 'show'])
+    ->where('token', '[1-9][0-9]*-[A-Za-z0-9]{48}')
+    ->middleware('throttle:30,1')
+    ->name('intake.show');
+Route::post('/intake/{token}', [IntakeFormController::class, 'submit'])
+    ->where('token', '[1-9][0-9]*-[A-Za-z0-9]{48}')
+    ->middleware('throttle:10,1')
+    ->name('intake.submit');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/doctor/setup/{token}', [DoctorSetupController::class, 'show'])

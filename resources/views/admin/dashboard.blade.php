@@ -29,6 +29,27 @@
             @endforeach
         </section>
 
+        <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" aria-labelledby="language-distribution-heading">
+            @php
+                $languageTotal = $language_breakdown['english'] + $language_breakdown['swahili'];
+                $englishWidth = $languageTotal > 0 ? round($language_breakdown['english'] / $languageTotal * 100) : 0;
+                $swahiliWidth = $languageTotal > 0 ? round($language_breakdown['swahili'] / $languageTotal * 100) : 0;
+            @endphp
+            <div class="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                    <h2 id="language-distribution-heading" class="font-bold text-slate-900">Language Distribution (This Month)</h2>
+                    <p class="mt-2 text-sm text-slate-600">{{ number_format($language_breakdown['english']) }} English | {{ number_format($language_breakdown['swahili']) }} Swahili ({{ $language_breakdown['swahili_percent'] }}%)</p>
+                </div>
+                @if ($language_breakdown['swahili_percent'] > 20)
+                    <p class="rounded-lg bg-teal-50 px-3 py-2 text-sm text-teal-900">Consider adding a Swahili-speaking receptionist.</p>
+                @endif
+            </div>
+            <div class="mt-5 grid gap-3">
+                <div class="flex items-center gap-3 text-xs font-medium text-slate-600"><span class="w-16">English</span><div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-cyan-600" style="width: {{ $englishWidth }}%"></div></div></div>
+                <div class="flex items-center gap-3 text-xs font-medium text-slate-600"><span class="w-16">Swahili</span><div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-teal-600" style="width: {{ $swahiliWidth }}%"></div></div></div>
+            </div>
+        </section>
+
         <section class="grid gap-6 lg:grid-cols-2">
             <article class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div class="flex items-center justify-between gap-4 border-b border-slate-100 p-5">

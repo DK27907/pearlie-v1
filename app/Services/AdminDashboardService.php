@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AppointmentRequest;
 use App\Models\Conversation;
 use App\Models\Escalation;
+use App\Models\Hospital;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -58,6 +59,30 @@ class AdminDashboardService
                 ->orderBy('slot_end_time')
                 ->limit(5)
                 ->get(),
+        ];
+    }
+
+    /**
+     * @return array{english: int, swahili: int, swahili_percent: int}
+     */
+    public function getLanguageBreakdown(Hospital $hospital): array
+    {
+        $counts = Conversation::withoutGlobalScope('hospital')
+            ->where('hospital_id', $hospital->id)
+            ->whereBetween('created_at', [now()->startOfMonth(), now()])
+            ->whereIn('language', ['en', 'english', 'sw', 'swahili'])
+            ->select('language')
+            ->selectRaw('COUNT(*) as aggregate')
+            ->groupBy('language')
+            ->pluck('aggregate', 'language');
+        $english = (int) ($counts['en'] ?? 0) + (int) ($counts['english'] ?? 0);
+        $swahili = (int) ($counts['sw'] ?? 0) + (int) ($counts['swahili'] ?? 0);
+        $total = $english + $swahili;
+
+        return [
+            'english' => $english,
+            'swahili' => $swahili,
+            'swahili_percent' => $total > 0 ? (int) round($swahili / $total * 100) : 0,
         ];
     }
 }

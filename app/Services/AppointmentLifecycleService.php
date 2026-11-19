@@ -33,6 +33,7 @@ class AppointmentLifecycleService
         ?User $actor,
         bool $staffOverride = false,
         ?string $reason = null,
+        bool $portalOverride = false,
     ): CancellationResult {
         $this->ensureTenantContext($hospitalId);
         $reason = trim((string) $reason);
@@ -44,6 +45,7 @@ class AppointmentLifecycleService
             $actor,
             $staffOverride,
             $reason,
+            $portalOverride,
         ): CancellationResult {
             $payments = MpesaPayment::query()
                 ->where('hospital_id', $hospitalId)
@@ -63,7 +65,21 @@ class AppointmentLifecycleService
             $this->assertActorCanManage($appointment, $actor, $staffOverride);
 
             $decision = $this->policy->evaluate($appointment, $staffOverride);
-            if (! $decision->canCancel) {
+            $scheduledAt = $appointment->preferred_date
+                ? CarbonImmutable::parse(
+                    $appointment->preferred_date->format('Y-m-d').' '.($appointment->slot_start_time ?: '00:00:00'),
+                )
+                : null;
+            if ($portalOverride && (
+                ! in_array($appointment->status, [
+                    AppointmentRequest::STATUS_PENDING,
+                    AppointmentRequest::STATUS_CONFIRMED,
+                ], true)
+                || ! $scheduledAt?->greaterThanOrEqualTo(CarbonImmutable::now()->addHours(24))
+            )) {
+                throw new AppointmentLifecycleException('Appointments may only be cancelled at least 24 hours before the scheduled time.');
+            }
+            if (! $decision->canCancel && ! $portalOverride) {
                 throw new AppointmentLifecycleException('This appointment is not eligible for cancellation under the hospital policy.');
             }
 
@@ -75,7 +91,8 @@ class AppointmentLifecycleService
                     ? ($appointment->payment_amount ?? $appointment->booking_fee)
                     : 0)
                 ?? 0);
-            $forfeitedAmount = $decision->isLateCancellation
+            $isLateCancellation = ! $portalOverride && $decision->isLateCancellation;
+            $forfeitedAmount = $isLateCancellation
                 ? min($paidAmount, $decision->lateCancellationFee)
                 : 0.0;
             if ($paidAmount > 0 && ! $decision->depositsRefundable) {
@@ -138,10 +155,11 @@ class AppointmentLifecycleService
                 reason: $reason,
                 metadata: [
                     'cancellation_cutoff_at' => $decision->cancellationCutoffAt->toIso8601String(),
-                    'late_cancellation' => $decision->isLateCancellation,
+                    'late_cancellation' => $isLateCancellation,
                     'late_cancellation_fee' => $decision->lateCancellationFee,
                     'forfeited_amount' => $forfeitedAmount,
                     'payment_outcome' => $paymentOutcome,
+                    'portal_request' => $portalOverride,
                 ],
             );
 
@@ -154,9 +172,19 @@ class AppointmentLifecycleService
             $hospitalId,
             'cancelled',
             $reason ?? '',
-        )->afterCommit();
+        )->onConnection('database')->onQueue('portal-links')->afterCommit();
 
         return $result;
+    }
+
+    public function cancelFromPortal(int $appointmentId, int $hospitalId): CancellationResult
+    {
+        return $this->cancel(
+            appointmentId: $appointmentId,
+            hospitalId: $hospitalId,
+            actor: null,
+            portalOverride: true,
+        );
     }
 
     public function reschedule(
@@ -348,7 +376,7 @@ class AppointmentLifecycleService
             $hospitalId,
             'rescheduled',
             $reason ?? '',
-        )->afterCommit();
+        )->onConnection('database')->onQueue('portal-links')->afterCommit();
 
         return $result;
     }

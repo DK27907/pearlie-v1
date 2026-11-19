@@ -25,6 +25,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -2244,9 +2245,10 @@ class BookingChatService
                 $sessionId,
                 $channel,
                 $message,
-                $state['language'] === self::LANGUAGE_SWAHILI
+                ($state['language'] === self::LANGUAGE_SWAHILI
                     ? 'Ombi lako la miadi limetumwa. Hospitali itawasiliana nawe kuthibitisha maelezo.'
-                    : 'Your appointment request has been submitted. The hospital will contact you to confirm the details.',
+                    : 'Your appointment request has been submitted. The hospital will contact you to confirm the details.')
+                    ."\n".$this->appointmentPortalLinks($appointment),
                 $state,
                 $appointment->id,
             );
@@ -4028,6 +4030,7 @@ class BookingChatService
                 'ai_response' => $response,
                 'confidence_score' => 1.0,
                 'channel' => $channel,
+                'language' => $state['language'],
                 'escalated' => $escalated,
                 'chat_state' => $state,
                 'chat_state_updated_at' => now(),
@@ -4553,7 +4556,25 @@ class BookingChatService
             $reminder,
             $isSwahili ? 'Tafadhali fika dakika 15 mapema.' : 'Please arrive 15 minutes early.',
             ($isSwahili ? 'Simu: ' : 'Phone: ').$appointment->phone,
+            $this->appointmentPortalLinks($appointment),
         ]);
+    }
+
+    private function appointmentPortalLinks(AppointmentRequest $appointment): string
+    {
+        $portalUrl = URL::temporarySignedRoute(
+            'patient-portal.show',
+            now()->addDays(7),
+            ['appointment' => $appointment->id],
+        );
+        $links = ['Manage your appointment: '.$portalUrl];
+
+        if ($appointment->status === AppointmentRequest::STATUS_CONFIRMED && filled($appointment->intake_token)) {
+            $links[] = 'Before your visit, please fill this short form (takes 1 minute): '
+                .route('intake.show', ['token' => $appointment->intake_token]);
+        }
+
+        return implode("\n", $links);
     }
 
     private function serviceById(int $serviceId, Hospital $hospital): Service

@@ -162,6 +162,7 @@ class EscalationService
             'ai_response' => $acknowledgement,
             'confidence_score' => null,
             'channel' => 'human_handoff',
+            'language' => $isSwahili ? 'sw' : 'en',
             'escalated' => true,
         ]);
 

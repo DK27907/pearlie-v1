@@ -114,6 +114,7 @@ class PearlieServiceV2
                 'ai_response' => $localAnswer,
                 'confidence_score' => $confidence,
                 'channel' => $channel,
+                'language' => $this->isSwahili($message) ? 'sw' : 'en',
             ]);
 
             return [
@@ -139,6 +140,7 @@ class PearlieServiceV2
                 'ai_response' => $responseText,
                 'confidence_score' => 0.9,
                 'channel' => $channel,
+                'language' => $this->isSwahili($message) ? 'sw' : 'en',
             ]);
 
             return [
@@ -198,6 +200,7 @@ class PearlieServiceV2
                 'ai_response' => $reply,
                 'confidence_score' => $confidence,
                 'channel' => $channel,
+                'language' => $this->isSwahili($message) ? 'sw' : 'en',
                 'escalated' => false,
             ]);
 
@@ -223,6 +226,7 @@ class PearlieServiceV2
                 'ai_response' => $fallback,
                 'confidence_score' => 0.3,
                 'channel' => $channel,
+                'language' => $this->isSwahili($message) ? 'sw' : 'en',
                 'escalated' => false,
             ]);
 
@@ -317,6 +321,7 @@ class PearlieServiceV2
             'ai_response' => $response,
             'confidence_score' => 0.0,
             'channel' => $channel,
+            'language' => $this->isSwahili($message) ? 'sw' : 'en',
             'escalated' => false,
         ]);
 
@@ -435,6 +440,7 @@ class PearlieServiceV2
                 'ai_response' => $response,
                 'confidence_score' => 1.0,
                 'channel' => $channel,
+                'language' => $isSwahili ? 'sw' : 'en',
                 'escalated' => false,
             ]);
 
@@ -478,6 +484,7 @@ class PearlieServiceV2
             'ai_response' => $response,
             'confidence_score' => 1.0,
             'channel' => $channel,
+            'language' => $isSwahili ? 'sw' : 'en',
             'escalated' => true,
         ]);
 
@@ -854,6 +861,7 @@ class PearlieServiceV2
             'ai_response' => $responseText,
             'confidence_score' => 0.98,
             'channel' => $channel,
+            'language' => $this->isSwahili($message) ? 'sw' : 'en',
         ]);
 
         return [
@@ -924,6 +932,7 @@ class PearlieServiceV2
             'ai_response' => $responseText,
             'confidence_score' => 0.98,
             'channel' => $channel,
+            'language' => $isSwahili ? 'sw' : 'en',
         ]);
 
         return [

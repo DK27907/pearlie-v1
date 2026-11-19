@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\SendAppointmentPortalLink;
 use App\Models\AppointmentRequest;
 use App\Models\DoctorAvailability;
 use App\Models\Hospital;
@@ -240,7 +241,7 @@ class ServiceCatalogTest extends TestCase
             $request->url(),
             '/mpesa/stkpush/v1/processrequest',
         ) && $request['Amount'] === 2500);
-        Queue::assertNothingPushed();
+        Queue::assertPushed(SendAppointmentPortalLink::class, 1);
     }
 
     public function test_booking_without_service_uses_deposit_amount(): void
@@ -258,7 +259,7 @@ class ServiceCatalogTest extends TestCase
             'payment_amount' => null,
             'booking_fee' => 725,
         ]);
-        Queue::assertNothingPushed();
+        Queue::assertPushed(SendAppointmentPortalLink::class, 1);
     }
 
     public function test_booking_rejects_inactive_service(): void
@@ -326,7 +327,7 @@ class ServiceCatalogTest extends TestCase
             'status' => AppointmentRequest::STATUS_CONFIRMED,
         ]);
         Http::assertNothingSent();
-        Queue::assertNothingPushed();
+        Queue::assertPushed(SendAppointmentPortalLink::class, 1);
     }
 
     public function test_tenant_booking_page_exposes_services(): void

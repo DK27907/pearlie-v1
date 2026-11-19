@@ -7,6 +7,7 @@ use App\Models\AppointmentRequest;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Throwable;
@@ -246,7 +247,15 @@ class WhatsAppService
                 pearlie_config('hospital.name'),
                 $reference,
                 $appointment->mpesa_receipt ? ' '.$appointment->mpesa_receipt : '',
+            )."\nManage your appointment: ".URL::temporarySignedRoute(
+                'patient-portal.show',
+                now()->addDays(7),
+                ['appointment' => $appointment->id],
             );
+            if (filled($appointment->intake_token)) {
+                $message .= "\nBefore your visit, please fill this short form (takes 1 minute): "
+                    .route('intake.show', ['token' => $appointment->intake_token]);
+            }
 
             return $this->sendMessage($phone, $message, $appointment->id)['success'];
         } catch (Throwable $exception) {

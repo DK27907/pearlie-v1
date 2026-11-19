@@ -2,13 +2,17 @@
 
 namespace App\Models;
 
+use App\Jobs\SendAppointmentPortalLink;
 use App\Traits\BelongsToHospital;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class AppointmentRequest extends Model
 {
@@ -19,6 +23,41 @@ class AppointmentRequest extends Model
         static::creating(static function (self $appointment): void {
             if (blank($appointment->booking_reference)) {
                 $appointment->booking_reference = 'BK-'.strtoupper(bin2hex(random_bytes(16)));
+            }
+        });
+
+        static::created(static function (self $appointment): void {
+            if ($appointment->status === self::STATUS_CONFIRMED && blank($appointment->intake_token)) {
+                $appointment->forceFill([
+                    'intake_token' => $appointment->id.'-'.Str::random(48),
+                ])->saveQuietly();
+            }
+
+            DB::afterCommit(static function () use ($appointment): void {
+                SendAppointmentPortalLink::dispatch(
+                    (int) $appointment->id,
+                    (int) $appointment->hospital_id,
+                )->onConnection('database')->onQueue('portal-links');
+            });
+        });
+
+        static::updating(static function (self $appointment): void {
+            if ($appointment->isDirty('status')
+                && $appointment->status === self::STATUS_CONFIRMED
+                && blank($appointment->intake_token)
+            ) {
+                $appointment->intake_token = $appointment->id.'-'.Str::random(48);
+            }
+        });
+
+        static::updated(static function (self $appointment): void {
+            if ($appointment->wasChanged('status') && $appointment->status === self::STATUS_CONFIRMED) {
+                DB::afterCommit(static function () use ($appointment): void {
+                    SendAppointmentPortalLink::dispatch(
+                        (int) $appointment->id,
+                        (int) $appointment->hospital_id,
+                    )->onConnection('database')->onQueue('portal-links');
+                });
             }
         });
     }
@@ -77,6 +116,8 @@ class AppointmentRequest extends Model
 
     protected $hidden = [
         'feedback_identity_hash',
+        'intake_token',
+        'intake_data',
     ];
 
     protected $casts = [
@@ -93,7 +134,27 @@ class AppointmentRequest extends Model
         'payment_collected_amount' => 'decimal:2',
         'feedback_requested_at' => 'datetime',
         'feedback_score' => 'integer',
+        'intake_token' => 'encrypted',
+        'intake_completed_at' => 'datetime',
     ];
+
+    protected function intakeData(): Attribute
+    {
+        return Attribute::make(
+            get: static function (?string $value): ?array {
+                if ($value === null) {
+                    return null;
+                }
+
+                $payload = json_decode($value, true, flags: JSON_THROW_ON_ERROR);
+
+                return decrypt($payload['payload']);
+            },
+            set: static fn (?array $value): ?string => $value === null
+                ? null
+                : json_encode(['payload' => encrypt($value)], JSON_THROW_ON_ERROR),
+        );
+    }
 
     public function mpesaPayment(): HasOne
     {

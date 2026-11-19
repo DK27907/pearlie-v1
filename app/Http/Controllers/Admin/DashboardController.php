@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Hospital;
 use App\Services\AdminDashboardService;
 use App\Services\NoShowService;
 use Illuminate\View\View;
@@ -16,6 +17,13 @@ class DashboardController extends Controller
 
     public function index(): View
     {
-        return view('admin.dashboard', $this->dashboard->dashboardData($this->noShowService));
+        $data = $this->dashboard->dashboardData($this->noShowService);
+
+        if (! array_key_exists('language_breakdown', $data)) {
+            $hospital = Hospital::query()->findOrFail(auth()->user()->hospital_id);
+            $data['language_breakdown'] = $this->dashboard->getLanguageBreakdown($hospital);
+        }
+
+        return view('admin.dashboard', $data);
     }
 }

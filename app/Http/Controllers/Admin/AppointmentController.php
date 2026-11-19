@@ -18,6 +18,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
 
 class AppointmentController extends Controller
@@ -287,7 +288,15 @@ class AppointmentController extends Controller
                 $appointment->name ?: 'Patient',
                 pearlie_config('hospital.name'),
                 $reference,
+            )."\nManage your appointment: ".URL::temporarySignedRoute(
+                'patient-portal.show',
+                now()->addDays(7),
+                ['appointment' => $appointment->id],
             );
+            if (filled($appointment->intake_token)) {
+                $message .= "\nBefore your visit, please fill this short form (takes 1 minute): "
+                    .route('intake.show', ['token' => $appointment->intake_token]);
+            }
 
             return app(NotificationService::class)->sendSms($appointment->phone, $message, $appointment->id);
         } catch (\Throwable $e) {

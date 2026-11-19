@@ -64,7 +64,7 @@ class WhatsAppBookingService
             $this->storeState($phone, $appointment->id, $this->stateForMissingDetails($missing), $language);
             $response = $this->promptFor($appointment, $missing, $language);
 
-            return $this->recordResponse($sessionId, $message, $response, $appointment->id);
+            return $this->recordResponse($sessionId, $message, $response, $appointment->id, $language);
         }
 
         if ($appointment->payment_status === 'paid') {
@@ -73,7 +73,7 @@ class WhatsAppBookingService
                 ? 'Miadi yako tayari imethibitishwa. Tutawasiliana nawe ikiwa kutakuwa na mabadiliko.'
                 : 'Your appointment is already confirmed. We will contact you if anything changes.';
 
-            return $this->recordResponse($sessionId, $message, $response, $appointment->id);
+            return $this->recordResponse($sessionId, $message, $response, $appointment->id, $language);
         }
 
         if ($appointment->mpesa_checkout_request_id) {
@@ -82,7 +82,7 @@ class WhatsAppBookingService
                 ? 'Tumetuma ombi la malipo ya M-Pesa kwenye simu yako. Weka PIN yako ya M-Pesa ili kulipa ada ya kuweka nafasi ya KSh '.$appointment->booking_fee.'.'
                 : 'We sent an M-Pesa payment prompt to your phone. Enter your M-Pesa PIN to complete the KSh '.$appointment->booking_fee.' booking fee.';
 
-            return $this->recordResponse($sessionId, $message, $response, $appointment->id);
+            return $this->recordResponse($sessionId, $message, $response, $appointment->id, $language);
         }
 
         $amount = (float) ($appointment->payment_amount ?? $appointment->booking_fee);
@@ -92,7 +92,7 @@ class WhatsAppBookingService
                 ? 'Ombi lako la miadi limepokelewa. Hakuna malipo ya M-Pesa yanayohitajika kwa huduma hii.'
                 : 'Your appointment request has been received. No M-Pesa payment is required for this service.';
 
-            return $this->recordResponse($sessionId, $message, $response, $appointment->id);
+            return $this->recordResponse($sessionId, $message, $response, $appointment->id, $language);
         }
 
         try {
@@ -114,7 +114,7 @@ class WhatsAppBookingService
                     : 'Your appointment details are saved as pending, but we could not start the M-Pesa prompt right now. Please try again shortly.');
         }
 
-        return $this->recordResponse($sessionId, $message, $response, $appointment->id);
+        return $this->recordResponse($sessionId, $message, $response, $appointment->id, $language);
     }
 
     public function handleMessage(string $phone, string $message): array
@@ -344,14 +344,20 @@ class WhatsAppBookingService
         return 'I can help book that. Please reply with your '.implode(', ', $missing).'.';
     }
 
-    private function recordResponse(string $sessionId, string $message, string $response, int $appointmentId): array
-    {
+    private function recordResponse(
+        string $sessionId,
+        string $message,
+        string $response,
+        int $appointmentId,
+        string $language,
+    ): array {
         Conversation::create([
             'session_id' => $sessionId,
             'user_message' => $message,
             'ai_response' => $response,
             'confidence_score' => 0.98,
             'channel' => 'whatsapp',
+            'language' => $language,
         ]);
 
         return [

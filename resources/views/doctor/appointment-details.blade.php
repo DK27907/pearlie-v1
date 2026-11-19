@@ -41,6 +41,20 @@
                 </dl>
             </article>
 
+            <article class="rounded-2xl border border-cyan-100 bg-white p-6 shadow-sm">
+                <h2 class="font-bold text-slate-900">Patient Intake</h2>
+                @if ($appointment->intake_completed_at)
+                    <dl class="mt-4 grid gap-4 text-sm sm:grid-cols-2">
+                        <div><dt class="font-semibold text-slate-500">Allergies</dt><dd class="mt-1 whitespace-pre-line text-slate-800">{{ $appointment->intake_data['allergies'] ?? 'None reported' }}</dd></div>
+                        <div><dt class="font-semibold text-slate-500">Current medications</dt><dd class="mt-1 whitespace-pre-line text-slate-800">{{ $appointment->intake_data['medications'] ?? 'None reported' }}</dd></div>
+                        <div class="sm:col-span-2"><dt class="font-semibold text-slate-500">Symptoms / reason for visit</dt><dd class="mt-1 whitespace-pre-line text-slate-800">{{ $appointment->intake_data['symptoms'] ?? 'Not provided' }}</dd></div>
+                        <div class="sm:col-span-2"><dt class="font-semibold text-slate-500">Emergency contact</dt><dd class="mt-1 text-slate-800">{{ $appointment->intake_data['emergency_contact_name'] ?? 'Not provided' }}, {{ $appointment->intake_data['emergency_contact_phone'] ?? 'Not provided' }}</dd></div>
+                    </dl>
+                @else
+                    <p class="mt-3 text-sm text-slate-600">Patient has not completed the intake form.</p>
+                @endif
+            </article>
+
             @if ($appointment->isNoShow())
                 <article class="rounded-2xl border border-rose-200 bg-rose-50 p-6">
                     <h2 class="font-bold text-rose-900">No-show record</h2>
