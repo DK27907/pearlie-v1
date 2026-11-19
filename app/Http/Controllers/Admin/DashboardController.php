@@ -20,7 +20,7 @@ class DashboardController extends Controller
         $data = $this->dashboard->dashboardData($this->noShowService);
 
         if (! array_key_exists('language_breakdown', $data)) {
-            $hospital = Hospital::query()->findOrFail(auth()->user()->hospital_id);
+            $hospital = hospital() ?? Hospital::query()->findOrFail(auth()->user()->hospital_id);
             $data['language_breakdown'] = $this->dashboard->getLanguageBreakdown($hospital);
         }
 

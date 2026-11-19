@@ -6,7 +6,9 @@ use App\Models\Conversation;
 use App\Models\Hospital;
 use App\Models\User;
 use App\Services\AdminDashboardService;
+use App\Services\NoShowService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Mockery;
 use Tests\TestCase;
 
 class DashboardLanguageMetricTest extends TestCase
@@ -40,6 +42,45 @@ class DashboardLanguageMetricTest extends TestCase
             ['english' => 2, 'swahili' => 3, 'swahili_percent' => 60],
             app(AdminDashboardService::class)->getLanguageBreakdown($hospital),
         );
+    }
+
+    public function test_super_admin_impersonation_uses_the_impersonated_hospital_for_language_fallback(): void
+    {
+        $this->travelTo('2026-11-19 12:00:00');
+        $hospital = Hospital::factory()->create(['name' => 'Impersonated Hospital']);
+        $platformHospital = Hospital::factory()->create(['name' => 'Platform Hospital']);
+        $superAdmin = User::factory()->for($platformHospital, 'hospital')->create([
+            'role' => 'super_admin',
+            'is_super_admin' => true,
+        ]);
+        app()->instance('currentHospital', $hospital);
+        $this->createConversations($hospital, ['en', 'sw']);
+        app()->instance('currentHospital', $platformHospital);
+        $this->createConversations($platformHospital, ['en', 'en', 'en']);
+        app()->forgetInstance('currentHospital');
+
+        $realDashboardService = app(AdminDashboardService::class);
+        $dashboardService = Mockery::mock(AdminDashboardService::class)->makePartial();
+        $dashboardService->shouldReceive('dashboardData')
+            ->once()
+            ->andReturnUsing(function (NoShowService $noShowService) use ($realDashboardService): array {
+                $data = $realDashboardService->dashboardData($noShowService);
+                unset($data['language_breakdown']);
+
+                return $data;
+            });
+        $this->app->instance(AdminDashboardService::class, $dashboardService);
+
+        $this->actingAs($superAdmin)
+            ->withSession(['impersonating_hospital_id' => $hospital->id])
+            ->get(route('admin.dashboard'))
+            ->assertOk()
+            ->assertSee('1 English | 1 Swahili (50%)')
+            ->assertViewHas('language_breakdown', [
+                'english' => 1,
+                'swahili' => 1,
+                'swahili_percent' => 50,
+            ]);
     }
 
     public function test_super_admin_dashboard_aggregates_languages_across_hospitals(): void
