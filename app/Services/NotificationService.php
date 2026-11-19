@@ -34,6 +34,17 @@ class NotificationService
                 ? 'africastalking'
                 : 'twilio'
         ));
+        if ($provider === 'log') {
+            $this->recordDelivery(
+                'sms',
+                'log',
+                'logged',
+                appointmentRequestId: $appointmentRequestId,
+            );
+
+            return true;
+        }
+
         if (! in_array($provider, ['africastalking', 'twilio'], true)) {
             $this->recordDelivery(
                 'sms',

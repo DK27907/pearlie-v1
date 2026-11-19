@@ -9,11 +9,13 @@ use App\Models\Hospital;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\AnnouncementService;
+use App\Services\HospitalSettings;
 use App\Services\WhatsAppService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
@@ -339,12 +341,20 @@ class AnnouncementWorkflowTest extends TestCase
             'is_doctor' => true,
             'role' => 'doctor',
         ]);
+        $service = Service::query()->create([
+            'hospital_id' => $hospital->id,
+            'name' => 'General Consultation',
+            'price' => 1500,
+            'duration_minutes' => 30,
+            'is_active' => true,
+        ]);
         $admin = User::factory()->for($hospital, 'hospital')->create([
             'is_admin' => true,
             'role' => 'hospital_admin',
         ]);
         $appointment = AppointmentRequest::factory()->for($hospital)->create([
             'doctor_id' => $doctor->id,
+            'service_id' => $service->id,
             'name' => 'Jane Doe',
             'phone' => '254712345678',
             'preferred_date' => '2026-10-23',
@@ -356,7 +366,7 @@ class AnnouncementWorkflowTest extends TestCase
             ->twice()
             ->with(
                 '254712345678',
-                'Hi Jane Doe, this is a reminder of your appointment with Dr. Amina Njeri on 23 Oct 2026 at 7:00 AM. Reply 1 to confirm, 2 to reschedule.',
+                'Hi Jane Doe, this is a reminder of your General Consultation appointment with Dr. Amina Njeri on 23 Oct 2026 at 7:00 AM. Reply 1 to confirm, 2 to reschedule.',
             )
             ->andReturn(['success' => true, 'message' => 'accepted']);
         $this->app->instance(WhatsAppService::class, $whatsApp);
@@ -383,6 +393,80 @@ class AnnouncementWorkflowTest extends TestCase
             'channel' => 'whatsapp',
             'status' => 'sent',
         ]);
+    }
+
+    public function test_production_log_sms_reminder_records_delivery_for_its_appointment_without_http(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-10-22 08:00:00'));
+        $hospital = Hospital::factory()->create();
+        app()->instance('currentHospital', $hospital);
+        $doctor = User::factory()->for($hospital, 'hospital')->create([
+            'name' => 'Dr. Amina Njeri',
+            'is_doctor' => true,
+            'role' => 'doctor',
+        ]);
+        $admin = User::factory()->for($hospital, 'hospital')->create([
+            'is_admin' => true,
+            'role' => 'hospital_admin',
+        ]);
+        $service = Service::query()->create([
+            'hospital_id' => $hospital->id,
+            'name' => 'General Consultation',
+            'price' => 1500,
+            'duration_minutes' => 30,
+            'is_active' => true,
+        ]);
+        $appointment = AppointmentRequest::factory()->for($hospital)->create([
+            'doctor_id' => $doctor->id,
+            'service_id' => $service->id,
+            'name' => 'Reminder Test Patient',
+            'phone' => '254700000099',
+            'preferred_date' => '2026-10-23',
+            'slot_start_time' => '09:00:00',
+            'status' => AppointmentRequest::STATUS_CONFIRMED,
+        ]);
+        (new HospitalSettings)->for($hospital)->setCredential('sms', [
+            'provider' => 'log',
+            'from' => 'TEST',
+        ]);
+        $announcement = Announcement::query()->create([
+            'hospital_id' => $hospital->id,
+            'sent_by_user_id' => $admin->id,
+            'reminder_appointment_id' => $appointment->id,
+            'reminder_stage' => '24h',
+            'type' => 'reminder',
+            'message' => Hospital::DEFAULT_REMINDER_MESSAGE_TEMPLATE,
+            'audience_filter' => ['appointment_date' => '2026-10-23'],
+            'channel' => 'sms',
+            'scheduled_for' => now(),
+            'status' => 'scheduled',
+        ]);
+        app()->detectEnvironment(static fn (...$arguments): string => 'production');
+        Http::preventStrayRequests();
+
+        app(AnnouncementService::class)->sendAnnouncement($announcement);
+
+        $this->assertDatabaseHas('announcements', [
+            'id' => $announcement->id,
+            'status' => 'sent',
+            'recipients_count' => 1,
+        ]);
+        $this->assertDatabaseHas('notification_logs', [
+            'hospital_id' => $hospital->id,
+            'appointment_request_id' => $appointment->id,
+            'channel' => 'sms',
+            'provider' => 'log',
+            'status' => 'logged',
+        ]);
+        $this->assertDatabaseHas('announcement_recipients', [
+            'announcement_id' => $announcement->id,
+            'appointment_request_id' => $appointment->id,
+            'recipient_name' => 'Reminder Test Patient',
+            'recipient_phone' => '254700000099',
+            'rendered_message' => 'Hi Reminder Test Patient, this is a reminder of your General Consultation appointment with Dr. Amina Njeri on 23 Oct 2026 at 9:00 AM. Reply 1 to confirm, 2 to reschedule.',
+            'delivery_status' => 'sent',
+        ]);
+        Http::assertSentCount(0);
     }
 
     public function test_reminders_use_defaults_when_legacy_settings_and_reference_are_null(): void
@@ -485,5 +569,36 @@ class AnnouncementWorkflowTest extends TestCase
             'ann_recipient_delivery_status_idx',
             Schema::getIndexListing('announcement_recipients'),
         );
+    }
+
+    public function test_migration_adds_service_placeholder_to_unchanged_default_reminder_templates(): void
+    {
+        $currentDefault = 'Hi {patient_name}, this is a reminder of your appointment with {doctor_name} on {appointment_time}. Reply 1 to confirm, 2 to reschedule.';
+        $legacyDefault = 'Hello {patient_name}, this is a reminder of your appointment with {doctor_name} tomorrow at {appointment_time}. Reply STOP to opt out.';
+        $currentHospital = Hospital::factory()->create([
+            'reminder_message_template' => $currentDefault,
+        ]);
+        $legacyHospital = Hospital::factory()->create([
+            'reminder_message_template' => $legacyDefault,
+        ]);
+        $customHospital = Hospital::factory()->create([
+            'reminder_message_template' => 'Custom template for {patient_name}.',
+        ]);
+        $migration = require database_path('migrations/2026_11_19_202803_update_default_appointment_reminder_templates.php');
+
+        $migration->up();
+
+        $this->assertSame(Hospital::DEFAULT_REMINDER_MESSAGE_TEMPLATE, $currentHospital->fresh()->reminder_message_template);
+        $this->assertSame(
+            'Hello {patient_name}, this is a reminder of your {service_name} appointment with {doctor_name} tomorrow at {appointment_time}. Reply STOP to opt out.',
+            $legacyHospital->fresh()->reminder_message_template,
+        );
+        $this->assertSame('Custom template for {patient_name}.', $customHospital->fresh()->reminder_message_template);
+
+        $migration->down();
+
+        $this->assertSame($currentDefault, $currentHospital->fresh()->reminder_message_template);
+        $this->assertSame($legacyDefault, $legacyHospital->fresh()->reminder_message_template);
+        $this->assertSame('Custom template for {patient_name}.', $customHospital->fresh()->reminder_message_template);
     }
 }

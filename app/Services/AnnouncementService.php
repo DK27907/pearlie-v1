@@ -192,6 +192,7 @@ class AnnouncementService
                             $lockedAnnouncement,
                             $recipient->recipient_phone,
                             $recipient->rendered_message,
+                            $appointment->id,
                         );
                         $recipient->forceFill([
                             'delivery_status' => $delivery->success ? 'sent' : 'failed',
@@ -272,11 +273,20 @@ class AnnouncementService
         );
     }
 
-    private function deliver(Announcement $announcement, string $phone, string $message): SmsResult
-    {
+    private function deliver(
+        Announcement $announcement,
+        string $phone,
+        string $message,
+        ?int $appointmentRequestId = null,
+    ): SmsResult {
         $smsResult = null;
         if (in_array($announcement->channel, ['sms', 'both'], true)) {
-            $smsResult = $this->sms->send($phone, $message, app()->isProduction() ? 'configured' : 'log');
+            $smsResult = $this->sms->send(
+                $phone,
+                $message,
+                app()->isProduction() ? 'configured' : 'log',
+                $appointmentRequestId,
+            );
         }
 
         $whatsAppResult = null;

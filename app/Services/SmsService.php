@@ -8,8 +8,12 @@ class SmsService
 {
     public function __construct(private readonly NotificationService $notifications) {}
 
-    public function send(string $phone, string $message, string $provider = 'log'): SmsResult
-    {
+    public function send(
+        string $phone,
+        string $message,
+        string $provider = 'log',
+        ?int $appointmentRequestId = null,
+    ): SmsResult {
         if ($provider === 'log' && ! app()->isProduction()) {
             Log::info('SMS reminder or announcement logged for local delivery.', [
                 'phone' => $phone,
@@ -19,7 +23,7 @@ class SmsService
             return new SmsResult(true, 'sent', message: 'Logged locally.');
         }
 
-        $sent = $this->notifications->sendSms($phone, $message);
+        $sent = $this->notifications->sendSms($phone, $message, $appointmentRequestId);
 
         return new SmsResult(
             $sent,

@@ -26,7 +26,7 @@ class Hospital extends Model
         self::BOOKING_PAYMENT_MODE_NONE,
     ];
 
-    public const DEFAULT_REMINDER_MESSAGE_TEMPLATE = 'Hi {patient_name}, this is a reminder of your appointment with {doctor_name} on {appointment_time}. Reply 1 to confirm, 2 to reschedule.';
+    public const DEFAULT_REMINDER_MESSAGE_TEMPLATE = 'Hi {patient_name}, this is a reminder of your {service_name} appointment with {doctor_name} on {appointment_time}. Reply 1 to confirm, 2 to reschedule.';
 
     protected $attributes = [
         'supported_languages' => '["en","sw"]',
