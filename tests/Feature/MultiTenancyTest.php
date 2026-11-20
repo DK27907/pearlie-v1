@@ -485,7 +485,8 @@ class MultiTenancyTest extends TestCase
 
         $this->actingAs($admin)
             ->get(route('tenant.home', 'suspended-hospital'))
-            ->assertForbidden();
+            ->assertNotFound()
+            ->assertSeeText('This hospital is not available yet. Please contact the platform administrator.');
     }
 
     public function test_super_admin_can_invite_an_admin_to_an_existing_hospital_and_the_admin_can_complete_setup(): void

@@ -72,6 +72,96 @@ class HospitalCreateWithAdminTest extends TestCase
             ->assertDontSee('<option value="starter" selected>Starter</option>', false);
     }
 
+    public function test_newly_created_hospital_tenant_home_is_reachable_while_super_admin_is_authenticated(): void
+    {
+        Mail::fake();
+        $superAdmin = $this->superAdmin();
+
+        $this->actingAs($superAdmin)
+            ->post(route('superadmin.hospitals.store'), $this->hospitalPayload())
+            ->assertRedirect(route(
+                'superadmin.hospitals.show',
+                Hospital::withoutGlobalScopes()->where('slug', 'nairobi-medical-centre')->firstOrFail(),
+            ));
+
+        $this->get(route('tenant.home', ['slug' => 'nairobi-medical-centre']))
+            ->assertOk();
+    }
+
+    public function test_new_hospital_admin_can_log_in_and_is_required_to_change_password(): void
+    {
+        Mail::fake();
+        $superAdmin = $this->superAdmin();
+        $this->actingAs($superAdmin)->post(route('superadmin.hospitals.store'), $this->hospitalPayload());
+        auth()->logout();
+
+        $this->get(route('tenant.login', ['hospital' => 'nairobi-medical-centre']))
+            ->assertOk();
+
+        $this->post(route('tenant.login.store', ['hospital' => 'nairobi-medical-centre']), [
+            'email' => 'admin@nairobi-medical.test',
+            'password' => 'SecureStart!2026',
+        ])->assertRedirect(route('password.force.edit'));
+
+        $this->assertAuthenticated();
+        $this->get(route('password.force.edit'))->assertOk();
+    }
+
+    public function test_hospital_slug_is_normalized_before_creation(): void
+    {
+        Mail::fake();
+        $superAdmin = $this->superAdmin();
+
+        $this->actingAs($superAdmin)
+            ->post(route('superadmin.hospitals.store'), $this->hospitalPayload([
+                'slug' => 'Bug Test',
+                'admin_email' => 'normalized-admin@nairobi-medical.test',
+            ]))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('hospitals', ['slug' => 'bug-test']);
+    }
+
+    public function test_reserved_hospital_slug_is_rejected(): void
+    {
+        $superAdmin = $this->superAdmin();
+
+        $this->actingAs($superAdmin)
+            ->from(route('superadmin.hospitals.create'))
+            ->post(route('superadmin.hospitals.store'), $this->hospitalPayload([
+                'slug' => 'admin',
+            ]))
+            ->assertRedirect(route('superadmin.hospitals.create'))
+            ->assertSessionHasErrors('slug');
+
+        $this->assertDatabaseMissing('hospitals', ['slug' => 'admin']);
+    }
+
+    public function test_unknown_hospital_slug_returns_a_friendly_not_found_response(): void
+    {
+        $this->get('/h/not-a-real-hospital')
+            ->assertNotFound()
+            ->assertSeeText('This hospital is not available yet. Please contact the platform administrator.');
+    }
+
+    public function test_duplicate_hospital_slug_is_rejected_without_creating_a_second_hospital(): void
+    {
+        Mail::fake();
+        $superAdmin = $this->superAdmin();
+        $this->actingAs($superAdmin)->post(route('superadmin.hospitals.store'), $this->hospitalPayload());
+
+        $this->from(route('superadmin.hospitals.create'))
+            ->post(route('superadmin.hospitals.store'), $this->hospitalPayload([
+                'admin_email' => 'second-admin@nairobi-medical.test',
+            ]))
+            ->assertRedirect(route('superadmin.hospitals.create'))
+            ->assertSessionHasErrors('slug');
+
+        $this->assertSame(1, Hospital::withoutGlobalScopes()
+            ->where('slug', 'nairobi-medical-centre')
+            ->count());
+    }
+
     public function test_hospital_service_defaults_missing_plan_to_professional(): void
     {
         Mail::fake();

@@ -44,9 +44,14 @@ class HospitalController extends Controller
 
     public function store(Request $request, HospitalManagementService $hospitals): RedirectResponse
     {
+        $slug = $request->input('slug');
+        if (is_string($slug)) {
+            $request->merge(['slug' => Str::slug($slug)]);
+        }
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'slug' => ['required', 'string', 'alpha_dash', 'max:80', 'unique:hospitals,slug'],
+            'slug' => ['required', 'string', 'max:80', Rule::notIn(['admin', 'api', 'login', 'superadmin']), 'unique:hospitals,slug'],
             'email' => ['nullable', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:40'],
             'emergency_phone' => ['nullable', 'string', 'max:40'],
@@ -81,7 +86,6 @@ class HospitalController extends Controller
             'admin_password' => ['required', 'string', 'min:12', 'confirmed'],
         ]);
 
-        $data['slug'] = Str::slug($data['slug']);
         $this->removeBlankSecrets($data);
         $hospital = $hospitals->createWithAdmin($data);
 
@@ -109,9 +113,14 @@ class HospitalController extends Controller
 
     public function update(Request $request, Hospital $hospital): RedirectResponse
     {
+        $slug = $request->input('slug');
+        if (is_string($slug)) {
+            $request->merge(['slug' => Str::slug($slug)]);
+        }
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'slug' => ['required', 'string', 'alpha_dash', 'max:80', Rule::unique('hospitals', 'slug')->ignore($hospital->id)],
+            'slug' => ['required', 'string', 'max:80', Rule::notIn(['admin', 'api', 'login', 'superadmin']), Rule::unique('hospitals', 'slug')->ignore($hospital->id)],
             'email' => ['nullable', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:40'],
             'emergency_phone' => ['nullable', 'string', 'max:40'],

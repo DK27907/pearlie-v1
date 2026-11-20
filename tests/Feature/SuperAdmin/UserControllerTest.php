@@ -106,15 +106,19 @@ class UserControllerTest extends TestCase
             'role' => 'patient',
             'is_active' => true,
         ]);
+        $user->syncRolesFromFlags();
 
         $this->actingAs($superAdmin)
             ->patch(route('superadmin.users.activation', $user), ['is_active' => '0'])
-            ->assertRedirect(route('superadmin.users.index'));
+            ->assertRedirect(route('superadmin.users.index'))
+            ->assertSessionHas('status', 'User deactivated successfully.');
         $this->assertDatabaseHas('users', ['id' => $user->id, 'is_active' => false]);
 
         $this->patch(route('superadmin.users.activation', $user), ['is_active' => '1'])
-            ->assertRedirect(route('superadmin.users.index'));
+            ->assertRedirect(route('superadmin.users.index'))
+            ->assertSessionHas('status', 'User activated successfully.');
         $this->assertDatabaseHas('users', ['id' => $user->id, 'is_active' => true]);
+        $this->assertTrue($user->fresh()->hasRole('patient'));
     }
 
     public function test_super_admin_cannot_deactivate_themselves(): void
@@ -123,8 +127,12 @@ class UserControllerTest extends TestCase
         $superAdmin = $this->createSuperAdmin($hospital);
 
         $this->actingAs($superAdmin)
+            ->from(route('superadmin.users.index'))
             ->patch(route('superadmin.users.activation', $superAdmin), ['is_active' => '0'])
-            ->assertUnprocessable();
+            ->assertRedirect(route('superadmin.users.index'))
+            ->assertSessionHasErrors([
+                'user' => 'You cannot deactivate your own account.',
+            ]);
 
         $this->assertDatabaseHas('users', ['id' => $superAdmin->id, 'is_active' => true]);
     }
@@ -142,8 +150,12 @@ class UserControllerTest extends TestCase
         ]);
 
         $this->actingAs($superAdmin)
+            ->from(route('superadmin.users.index'))
             ->patch(route('superadmin.users.activation', $hospitalAdmin), ['is_active' => '0'])
-            ->assertUnprocessable();
+            ->assertRedirect(route('superadmin.users.index'))
+            ->assertSessionHasErrors([
+                'user' => 'The hospital must retain at least one active hospital administrator.',
+            ]);
 
         $this->assertDatabaseHas('users', ['id' => $hospitalAdmin->id, 'is_active' => true]);
     }

@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use RuntimeException;
 
@@ -69,7 +70,6 @@ class UserController extends Controller
             'emptyMessage' => 'No users match these filters.',
         ]);
     }
-
 
     public function edit(int $user): View
     {
@@ -192,7 +192,9 @@ class UserController extends Controller
             $lockedUser->forceFill(['is_active' => $isActive])->save();
         });
 
-        return redirect()->route('superadmin.users.index')->with('status', 'User account status updated.');
+        return redirect()
+            ->route('superadmin.users.index')
+            ->with('status', $isActive ? 'User activated successfully.' : 'User deactivated successfully.');
     }
 
     private function findManagedUser(int $id): User
@@ -226,8 +228,16 @@ class UserController extends Controller
                 ->where('is_active', true)
                 ->count();
 
-            if (! $isActive && ($user->id === $actor->id || $activeSuperAdminCount <= 1)) {
-                abort(422, 'The platform must retain an active super administrator, and you cannot deactivate your own account.');
+            if (! $isActive && (int) $user->id === (int) $actor->id) {
+                throw ValidationException::withMessages([
+                    'user' => 'You cannot deactivate your own account.',
+                ]);
+            }
+
+            if (! $isActive && $activeSuperAdminCount <= 1) {
+                throw ValidationException::withMessages([
+                    'user' => 'The platform must retain at least one active super administrator.',
+                ]);
             }
 
             return;
@@ -241,7 +251,9 @@ class UserController extends Controller
             && (! $isActive || ($role !== null && $role !== 'hospital_admin'))
             && $this->activeHospitalAdminCount((int) $user->hospital_id) <= 1
         ) {
-            abort(422, 'The hospital must retain at least one active hospital administrator.');
+            throw ValidationException::withMessages([
+                'user' => 'The hospital must retain at least one active hospital administrator.',
+            ]);
         }
     }
 

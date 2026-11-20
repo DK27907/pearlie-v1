@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use RuntimeException;
 
@@ -91,7 +92,9 @@ class UserController extends Controller
                 && (! $isActive || $role !== 'hospital_admin')
                 && $this->activeHospitalAdminCount($hospitalId) <= 1
             ) {
-                abort(422, 'The hospital must retain at least one active hospital administrator.');
+                throw ValidationException::withMessages([
+                    'user' => 'The hospital must retain at least one active hospital administrator.',
+                ]);
             }
 
             $lockedUser->forceFill([
@@ -136,7 +139,7 @@ class UserController extends Controller
         Gate::authorize('delete', $record);
         $hospitalId = (int) $request->user()->hospital_id;
 
-        DB::transaction(function () use ($hospitalId, $record): void {
+        DB::transaction(function () use ($hospitalId, $record, $request): void {
             Hospital::query()->whereKey($hospitalId)->lockForUpdate()->firstOrFail();
             $lockedUser = User::query()
                 ->where('hospital_id', $hospitalId)
@@ -144,14 +147,22 @@ class UserController extends Controller
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            if ((int) $lockedUser->id === (int) $request->user()->id) {
+                throw ValidationException::withMessages([
+                    'user' => 'You cannot deactivate your own account.',
+                ]);
+            }
+
             if ($this->isActiveHospitalAdmin($lockedUser) && $this->activeHospitalAdminCount($hospitalId) <= 1) {
-                abort(422, 'The hospital must retain at least one active hospital administrator.');
+                throw ValidationException::withMessages([
+                    'user' => 'The hospital must retain at least one active hospital administrator.',
+                ]);
             }
 
             $lockedUser->forceFill(['is_active' => false])->save();
         });
 
-        return redirect()->route('admin.users.index')->with('status', 'User account deactivated.');
+        return redirect()->route('admin.users.index')->with('status', 'User deactivated successfully.');
     }
 
     private function scopedUser(Request $request, int $id): User

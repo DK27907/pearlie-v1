@@ -347,7 +347,7 @@ class AuthenticationTest extends TestCase
         $this->assertGuest();
     }
 
-    public function test_user_cannot_log_in_to_a_suspended_hospital(): void
+    public function test_suspended_hospital_returns_a_friendly_not_found_response(): void
     {
         $hospital = Hospital::query()->create([
             'name' => 'Suspended Clinic',
@@ -365,7 +365,8 @@ class AuthenticationTest extends TestCase
         $this->post("/h/{$hospital->slug}/login", [
             'email' => $admin->email,
             'password' => 'password',
-        ])->assertSessionHasErrors(['email' => trans('auth.failed')]);
+        ])->assertNotFound()
+            ->assertSeeText('This hospital is not available yet. Please contact the platform administrator.');
 
         $this->assertGuest();
     }

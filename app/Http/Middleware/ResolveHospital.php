@@ -51,16 +51,19 @@ class ResolveHospital
             }
         }
 
-        if (! $hospital && $user?->isSuperAdmin()) {
+        $slug = $impersonating ? null : $this->tenantSlugFromRequest($request);
+
+        if (! $hospital && $user?->isSuperAdmin() && ! $slug) {
             app()->instance('currentHospital', null);
 
             return $next($request);
         }
 
-        $slug = $impersonating ? null : $this->tenantSlugFromRequest($request);
         if ($slug) {
             $hospital = Hospital::query()->where('slug', $slug)->first();
-            abort_unless($hospital, 404, 'Hospital not found.');
+            if (! $hospital) {
+                return response('This hospital is not available yet. Please contact the platform administrator.', 404);
+            }
         }
 
         if (! $hospital && $user && ! $user->isSuperAdmin() && $user->hospital_id) {
@@ -86,9 +89,16 @@ class ResolveHospital
         }
 
         abort_unless($hospital, 404, 'No hospital is configured.');
+        if (
+            ! $this->isPaymentCallback($request)
+            && (! $hospital->is_active || $hospital->subscription_status === 'suspended')
+        ) {
+            return response('This hospital is not available yet. Please contact the platform administrator.', 404);
+        }
+
         if (! $this->isAuthenticationRoute($request) && ! $this->isPaymentCallback($request)) {
             abort_unless(
-                $hospital->is_active && in_array($hospital->subscription_status, ['active', 'trial'], true),
+                in_array($hospital->subscription_status, ['active', 'trial'], true),
                 403,
                 'This hospital account is currently unavailable.',
             );

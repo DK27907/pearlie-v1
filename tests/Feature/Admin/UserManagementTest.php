@@ -39,6 +39,48 @@ class UserManagementTest extends TestCase
             ->assertSee('User management');
     }
 
+    public function test_admin_can_deactivate_a_user_without_removing_their_role(): void
+    {
+        $admin = $this->createHospitalAdmin();
+        $user = User::factory()->create([
+            'hospital_id' => $this->hospital->id,
+            'role' => 'doctor',
+            'is_doctor' => true,
+        ]);
+        $user->syncRolesFromFlags();
+
+        $this->actingAs($admin)
+            ->from(route('admin.users.index'))
+            ->delete(route('admin.users.destroy', $user))
+            ->assertRedirect(route('admin.users.index'))
+            ->assertSessionHas('status', 'User deactivated successfully.');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'is_active' => false,
+        ]);
+        $this->assertTrue($user->fresh()->hasRole('doctor'));
+    }
+
+    public function test_admin_cannot_deactivate_themselves(): void
+    {
+        $admin = $this->createHospitalAdmin();
+        $this->createHospitalAdmin();
+
+        $this->actingAs($admin)
+            ->from(route('admin.users.index'))
+            ->delete(route('admin.users.destroy', $admin))
+            ->assertRedirect(route('admin.users.index'))
+            ->assertSessionHasErrors([
+                'user' => 'You cannot deactivate your own account.',
+            ]);
+
+        $this->assertDatabaseHas('users', [
+            'id' => $admin->id,
+            'is_active' => true,
+        ]);
+    }
+
     public function test_admin_cannot_view_users_from_other_hospital(): void
     {
         $admin = $this->createHospitalAdmin();
@@ -201,10 +243,14 @@ class UserManagementTest extends TestCase
         $admin = $this->createHospitalAdmin();
         $this->actingAs($admin)
             ->put(route('admin.users.update', $admin), $this->validUpdate(['role' => 'patient']))
-            ->assertStatus(422);
+            ->assertSessionHasErrors([
+                'user' => 'The hospital must retain at least one active hospital administrator.',
+            ]);
 
-        $this->delete(route('admin.users.destroy', $admin))
-            ->assertStatus(422);
+        $this->from(route('admin.users.index'))
+            ->delete(route('admin.users.destroy', $admin))
+            ->assertRedirect(route('admin.users.index'))
+            ->assertSessionHasErrors('user');
 
         $this->assertDatabaseHas('users', [
             'id' => $admin->id,
