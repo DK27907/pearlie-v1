@@ -33,6 +33,10 @@ use App\Http\Controllers\SuperAdmin\UserController as SuperAdminUserController;
 use App\Http\Controllers\TenantHomeController;
 use Illuminate\Support\Facades\Route;
 
+Route::view('/privacy', 'legal.privacy')->name('legal.privacy');
+Route::view('/terms', 'legal.terms')->name('legal.terms');
+Route::view('/data-deletion', 'legal.data-deletion')->name('legal.data-deletion');
+
 Route::get('/', [MarketingHomeController::class, 'index'])->name('home');
 Route::post('/demo-requests', [MarketingDemoController::class, 'store'])
     ->middleware('throttle:5,1')

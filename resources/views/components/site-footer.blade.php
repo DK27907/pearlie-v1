@@ -90,8 +90,9 @@
         <section>
             <h2 class="text-sm font-bold uppercase tracking-wider text-white">Patient information</h2>
             <ul class="mt-4 space-y-2 text-sm text-slate-300">
-                <li><a class="hover:text-white" href="#">Privacy Policy</a></li>
-                <li><a class="hover:text-white" href="#">Terms of Service</a></li>
+                <li><a class="hover:text-white" href="/privacy">Privacy Policy</a></li>
+                <li><a class="hover:text-white" href="/terms">Terms of Service</a></li>
+                <li><a class="hover:text-white" href="/data-deletion">Data Deletion</a></li>
                 <li><a class="hover:text-white" href="#">Patient Rights</a></li>
                 @if (pearlie_config('hospital.hours_emergency') || pearlie_config('hospital.emergency_phone'))
                     <li class="pt-2 font-semibold text-white">Emergency @if (pearlie_config('hospital.hours_emergency')) ({{ pearlie_config('hospital.hours_emergency') }}) @endif: @if (pearlie_config('hospital.emergency_phone')) <a href="tel:{{ pearlie_config('hospital.emergency_phone') }}" class="hover:text-cyan-200">{{ pearlie_config('hospital.emergency_phone') }}</a> @endif</li>

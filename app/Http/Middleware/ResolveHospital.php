@@ -22,6 +22,12 @@ class ResolveHospital
             return $next($request);
         }
 
+        if ($request->routeIs('legal.*')) {
+            app()->instance('currentHospital', null);
+
+            return $next($request);
+        }
+
         if ($request->routeIs('patient-portal.*', 'intake.*')) {
             app()->instance('currentHospital', null);
 
