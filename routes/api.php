@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\BookingLookupController;
 use App\Http\Controllers\MpesaCallbackController;
 use App\Http\Controllers\WhatsAppWebhookController;
+use App\Http\Middleware\ResolveHospital;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')
@@ -22,17 +23,17 @@ Route::get('/bookings/lookup/{bookingReference}', [BookingLookupController::clas
     ->name('bookings.lookup');
 
 Route::get('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify'])
-    ->name('webhooks.whatsapp.verify');
+    ->name('webhooks.whatsapp.verify')
+    ->withoutMiddleware(ResolveHospital::class);
 Route::post('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'receive'])
     ->name('webhooks.whatsapp.receive')
     ->middleware('throttle:60,1');
 Route::get('/whatsapp/webhook', [WhatsAppWebhookController::class, 'verify'])
     ->name('whatsapp.webhook.verify')
-    ->middleware('throttle:60,1');
-Route::post('/whatsapp/webhook', [WhatsAppWebhookController::class, 'handle'])
-    ->name('whatsapp.webhook.handle')
-    ->middleware('throttle:60,1');
-Route::get('/whatsapp/webhook/{hospitalSlug}', [WhatsAppWebhookController::class, 'verify'])
+    ->withoutMiddleware(ResolveHospital::class);
+Route::post('/whatsapp/webhook', [WhatsAppWebhookController::class, 'receive'])
+    ->name('whatsapp.webhook.receive');
+Route::get('/whatsapp/webhook/{hospitalSlug}', [WhatsAppWebhookController::class, 'verifyTenant'])
     ->name('tenant.whatsapp.webhook.verify')
     ->middleware('throttle:60,1');
 Route::post('/whatsapp/webhook/{hospitalSlug}', [WhatsAppWebhookController::class, 'handle'])

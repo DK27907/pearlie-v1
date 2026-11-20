@@ -398,7 +398,7 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
             'whatsapp.verify_token' => 'global-verify-token',
         ]);
 
-        $response = app(WhatsAppWebhookController::class)->verify(
+        $response = app(WhatsAppWebhookController::class)->verifyTenant(
             Request::create('/webhooks/whatsapp?hub.verify_token=global-verify-token&hub.mode=subscribe'),
         );
 
@@ -423,7 +423,7 @@ class PerHospitalIntegrationCredentialsTest extends TestCase
             'whatsapp.verify_token' => 'global-verify-token',
         ]);
 
-        $response = app(WhatsAppWebhookController::class)->verify(
+        $response = app(WhatsAppWebhookController::class)->verifyTenant(
             Request::create('/webhooks/whatsapp?hub.verify_token=global-verify-token&hub.mode=subscribe'),
         );
 

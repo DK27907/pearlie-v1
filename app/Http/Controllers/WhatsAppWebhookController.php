@@ -19,6 +19,14 @@ class WhatsAppWebhookController extends Controller
 
     public function verify(Request $request): Response
     {
+        return $this->verificationResponse(
+            $request,
+            [(string) config('whatsapp.verify_token', '')],
+        );
+    }
+
+    public function verifyTenant(Request $request): Response
+    {
         try {
             $token = (string) $this->whatsappCredential('whatsapp_verify_token', 'verify_token');
         } catch (MissingProviderCredentialsException $exception) {
@@ -29,17 +37,31 @@ class WhatsAppWebhookController extends Controller
             return response($exception->getMessage(), 503);
         }
 
-        $providedToken = (string) ($request->query('hub.verify_token') ?: $request->query('hub_verify_token'));
-        $mode = (string) ($request->query('hub.mode') ?: $request->query('hub_mode'));
-        if ($token === '' || ! hash_equals($token, $providedToken)) {
-            return response('Forbidden', 403);
+        return $this->verificationResponse($request, [$token]);
+    }
+
+    /**
+     * @param  array<int, string>  $expectedTokens
+     */
+    private function verificationResponse(Request $request, array $expectedTokens): Response
+    {
+        $mode = (string) $request->query('hub_mode', '');
+        $token = (string) $request->query('hub_verify_token', '');
+        $challenge = (string) $request->query('hub_challenge', '');
+
+        $matched = false;
+        foreach ($expectedTokens as $expectedToken) {
+            if ($expectedToken !== '' && hash_equals($expectedToken, $token)) {
+                $matched = true;
+                break;
+            }
         }
 
-        if ($mode !== 'subscribe') {
-            return response('Bad Request', 400);
+        if ($mode !== 'subscribe' || ! $matched) {
+            return response('Forbidden', 403)->header('Content-Type', 'text/plain; charset=UTF-8');
         }
 
-        return response((string) $request->query('hub_challenge'), 200);
+        return response($challenge, 200)->header('Content-Type', 'text/plain; charset=UTF-8');
     }
 
     public function receive(Request $request): Response
